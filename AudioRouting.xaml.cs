@@ -1256,10 +1256,27 @@ namespace SoncaAudioInspector
                 if (System.IO.File.Exists(feqPath)) finalTwoGraphPaths.Add(feqPath);
                 if (System.IO.File.Exists(thdPath)) finalTwoGraphPaths.Add(thdPath);
 
-                var uploadedSteps = _autoTestCases.Select(test => new ServerEngine.AudioQaStepResult(
-                    test.Name,
-                    test.Status,
-                    $"FRA: {test.FreqStatus}{Environment.NewLine}THD: {test.ThdStatus}"));
+                var uploadedSteps = _autoTestCases.Select(test =>
+                {
+                    string pbOut = !string.IsNullOrEmpty(test.Config?.PlaybackOut) ? test.Config.PlaybackOut : "Line In 3.5mm";
+                    string recIn = !string.IsNullOrEmpty(test.Config?.RecordingIn) ? test.Config.RecordingIn : "Measurement Mic";
+                    double vol = test.Config?.PlaybackVolume ?? 100;
+                    double gain = test.Config?.RecordingGain ?? 130;
+                    double thdLim = test.Config?.ThdLimit ?? 0.5;
+
+                    string detailStr = $"FRA: {test.FreqStatus}{Environment.NewLine}" +
+                                       $"THD: {test.ThdStatus}{Environment.NewLine}" +
+                                       $"Playback Out: {pbOut}{Environment.NewLine}" +
+                                       $"Recording In: {recIn}{Environment.NewLine}" +
+                                       $"Volume: {vol:F0}{Environment.NewLine}" +
+                                       $"Gain: {gain:F0}{Environment.NewLine}" +
+                                       $"THD Limit: {thdLim:F1}";
+
+                    return new ServerEngine.AudioQaStepResult(
+                        test.Name,
+                        test.Status,
+                        detailStr);
+                });
 
                 bool uploaded = await ServerEngine.UploadAudioQaResultAsync(
                     ServerEngine.CurrentProduct,
