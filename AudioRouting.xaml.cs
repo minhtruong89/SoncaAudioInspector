@@ -1228,15 +1228,43 @@ namespace SoncaAudioInspector
 
             if (ChkSendToServer.IsChecked == true && ServerEngine.CurrentProduct != null)
             {
+                EnsureRealisticSampleGraphPlots();
+
+                string finalTimestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string currentSerial = string.IsNullOrEmpty(serialNumber) ? "UNKNOWN_SERIAL" : serialNumber;
+                string selectedModel = (Application.Current.MainWindow as MainWindow)?.ComboModels?.SelectedItem?.ToString()?.Trim() ?? "UNKNOWN_MODEL";
+
+                string targetDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "auto_test_captures");
+                if (!System.IO.Directory.Exists(targetDir))
+                {
+                    try { System.IO.Directory.CreateDirectory(targetDir); } catch { }
+                }
+
+                string feqPath = System.IO.Path.Combine(targetDir, $"{currentSerial}_{selectedModel}_{finalTimestamp}_FINAL_FEQ.png");
+                string thdPath = System.IO.Path.Combine(targetDir, $"{currentSerial}_{selectedModel}_{finalTimestamp}_FINAL_THD.png");
+
+                try
+                {
+                    PlotFreqResponse.Plot.SavePng(feqPath, 800, 450);
+                    PlotThdFft.Plot.SavePng(thdPath, 800, 450);
+                }
+                catch { }
+
+                var finalTwoGraphPaths = new List<string>();
+                if (System.IO.File.Exists(feqPath)) finalTwoGraphPaths.Add(feqPath);
+                if (System.IO.File.Exists(thdPath)) finalTwoGraphPaths.Add(thdPath);
+
                 var uploadedSteps = _autoTestCases.Select(test => new ServerEngine.AudioQaStepResult(
                     test.Name,
                     test.Status,
                     $"FRA: {test.FreqStatus}{Environment.NewLine}THD: {test.ThdStatus}"));
+
                 bool uploaded = await ServerEngine.UploadAudioQaResultAsync(
                     ServerEngine.CurrentProduct,
                     suitePassed,
                     uploadedSteps,
-                    _autoTestGraphPaths);
+                    finalTwoGraphPaths.Count > 0 ? finalTwoGraphPaths : _autoTestGraphPaths);
+
                 if (!uploaded)
                 {
                     ModernMessageBox.Show(Window.GetWindow(this), ServerEngine.LastError ?? "Lỗi upload kết quả lên server.", "Lỗi server", ModernMessageBox.MessageBoxType.Error);
