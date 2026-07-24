@@ -1230,6 +1230,32 @@ namespace SoncaAudioInspector
             {
                 EnsureRealisticSampleGraphPlots();
 
+                string finalTimestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string serialNum = (Application.Current.MainWindow as MainWindow)?.TxtSerialNumber?.Text?.Trim() ?? "UNKNOWN_SERIAL";
+                if (string.IsNullOrEmpty(serialNum)) serialNum = "UNKNOWN_SERIAL";
+                string selectedModel = (Application.Current.MainWindow as MainWindow)?.ComboModels?.SelectedItem?.ToString()?.Trim() ?? "UNKNOWN_MODEL";
+                if (string.IsNullOrEmpty(selectedModel)) selectedModel = "UNKNOWN_MODEL";
+
+                string targetDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "auto_test_captures");
+                if (!System.IO.Directory.Exists(targetDir))
+                {
+                    try { System.IO.Directory.CreateDirectory(targetDir); } catch { }
+                }
+
+                string feqPath = System.IO.Path.Combine(targetDir, $"{serialNum}_{selectedModel}_{finalTimestamp}_FINAL_FEQ.png");
+                string thdPath = System.IO.Path.Combine(targetDir, $"{serialNum}_{selectedModel}_{finalTimestamp}_FINAL_THD.png");
+
+                try
+                {
+                    PlotFreqResponse.Plot.SavePng(feqPath, 800, 450);
+                    PlotThdFft.Plot.SavePng(thdPath, 800, 450);
+                }
+                catch { }
+
+                var finalTwoGraphPaths = new List<string>();
+                if (System.IO.File.Exists(feqPath)) finalTwoGraphPaths.Add(feqPath);
+                if (System.IO.File.Exists(thdPath)) finalTwoGraphPaths.Add(thdPath);
+
                 var uploadedSteps = _autoTestCases.Select(test => new ServerEngine.AudioQaStepResult(
                     test.Name,
                     test.Status,
@@ -1239,7 +1265,7 @@ namespace SoncaAudioInspector
                     ServerEngine.CurrentProduct,
                     suitePassed,
                     uploadedSteps,
-                    _autoTestGraphPaths);
+                    finalTwoGraphPaths);
 
                 if (!uploaded)
                 {
