@@ -723,11 +723,27 @@ namespace SoncaAudioInspector
                 }
                 else
                 {
-                    var text = PlotThdFft.Plot.Add.Text($"THD: {thdPercent:F3}%", 5000, -15);
+                    string labelText = _testRunner != null && _testRunner.IsRubBuzzTest ? $"Rub & Buzz: {thdPercent:F3}%" : $"THD: {thdPercent:F3}%";
+                    var text = PlotThdFft.Plot.Add.Text(labelText, 5000, -15);
                     text.LabelFontColor = ScottPlot.Color.FromHex("#F4F4F5");
                     text.LabelFontSize = 14;
                     text.LabelBold = true;
                 }
+            }
+
+            if (_testRunner != null && _testRunner.IsRubBuzzTest)
+            {
+                // Highlight Rub & Buzz band (1000Hz - 8000Hz) with red vertical span
+                var span = PlotThdFft.Plot.Add.HorizontalSpan(1000, 8000);
+                span.LineStyle.Width = 0;
+                span.FillStyle.Color = ScottPlot.Color.FromHex("#EF4444").WithAlpha(0.08f);
+                
+                // Add a text label inside the zone
+                var zoneText = PlotThdFft.Plot.Add.Text("Rub & Buzz Zone (1kHz - 8kHz)", 4500, -75);
+                zoneText.LabelFontColor = ScottPlot.Color.FromHex("#EF4444").WithAlpha(0.6f);
+                zoneText.LabelFontSize = 11;
+                zoneText.LabelBold = true;
+                zoneText.LabelAlignment = Alignment.MiddleCenter;
             }
 
             PlotThdFft.Plot.Axes.SetLimits(0, 10000, -90, 0);
@@ -790,6 +806,7 @@ namespace SoncaAudioInspector
             // Update limits in runner
             _testRunner.FreqResponseToleranceDb = ParseDoubleSafe(TxtFreqTolerance.Text, 3.0);
             _testRunner.ThdLimitPercent = ParseDoubleSafe(TxtThdLimit.Text, 0.5);
+            _testRunner.IsRubBuzzTest = false;
 
             CheckAndLoadStandardDevice();
             _testRunner.StandardCurve = _standardCurve;
@@ -983,16 +1000,17 @@ namespace SoncaAudioInspector
 
             SaveConfig();
 
-            // Create a specific folder for this Auto Test session: [Serial Number]_timestamp
+            // Create a specific folder for this Auto Test session: fail data/[yyyyMMdd]/[Serial Number]_timestamp
             string serialNumber = (Application.Current.MainWindow as MainWindow)?.TxtSerialNumber?.Text?.Trim() ?? "UNKNOWN_SERIAL";
             if (string.IsNullOrEmpty(serialNumber))
             {
                 serialNumber = "UNKNOWN_SERIAL";
             }
+            string dateFolder = DateTime.Now.ToString("yyyyMMdd");
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
             string sessionFolderName = $"{serialNumber}_{timestamp}";
             string failDataPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fail data");
-            _autoTestSessionFolder = System.IO.Path.Combine(failDataPath, sessionFolderName);
+            _autoTestSessionFolder = System.IO.Path.Combine(failDataPath, dateFolder, sessionFolderName);
 
             try
             {
@@ -1162,6 +1180,13 @@ namespace SoncaAudioInspector
                 _testRunner.FreqResponseToleranceDb = ParseDoubleSafe(TxtFreqTolerance.Text, 3.0);
                 _testRunner.ThdLimitPercent = ParseDoubleSafe(TxtThdLimit.Text, 0.5);
 
+                _testRunner.IsRubBuzzTest = test.Config.RubBuzzTestFreq.HasValue;
+                if (_testRunner.IsRubBuzzTest)
+                {
+                    _testRunner.RubBuzzTestFreq = test.Config.RubBuzzTestFreq.Value;
+                    _testRunner.RubBuzzLimit = test.Config.RubBuzzLimit ?? 1.5;
+                }
+
                 CheckAndLoadStandardDevice();
                 _testRunner.StandardCurve = _standardCurve;
 
@@ -1211,20 +1236,34 @@ namespace SoncaAudioInspector
 
         private string GetStandardsDirectory()
         {
-            string dir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "save standards");
-            if (!System.IO.Directory.Exists(dir))
+            string rootDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "save standards");
+            
+            // Get selected model from MainWindow combo box
+            string selectedModel = (Application.Current.MainWindow as MainWindow)?.ComboModels?.SelectedItem?.ToString()?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(selectedModel))
+            {
+                foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+                {
+                    selectedModel = selectedModel.Replace(c, '_');
+                }
+                selectedModel = selectedModel.Replace(' ', '_');
+                rootDir = System.IO.Path.Combine(rootDir, selectedModel);
+            }
+
+            if (!System.IO.Directory.Exists(rootDir))
             {
                 try
                 {
-                    System.IO.Directory.CreateDirectory(dir);
+                    System.IO.Directory.CreateDirectory(rootDir);
                 }
                 catch { }
             }
 
-            // Migrate old files from BaseDirectory to "save standards" folder
+            // Migrate old files from BaseDirectory to "save standards" folder (root folder)
             try
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string destDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "save standards");
                 if (System.IO.Directory.Exists(baseDir))
                 {
                     foreach (var file in System.IO.Directory.GetFiles(baseDir, "standard_*.csv"))
@@ -1232,7 +1271,7 @@ namespace SoncaAudioInspector
                         try
                         {
                             string fileName = System.IO.Path.GetFileName(file);
-                            string destFile = System.IO.Path.Combine(dir, fileName);
+                            string destFile = System.IO.Path.Combine(destDir, fileName);
                             if (!System.IO.File.Exists(destFile))
                             {
                                 System.IO.File.Move(file, destFile);
@@ -1248,7 +1287,7 @@ namespace SoncaAudioInspector
             }
             catch { }
 
-            return dir;
+            return rootDir;
         }
 
         private string GetStandardDeviceKey()
@@ -1327,8 +1366,8 @@ namespace SoncaAudioInspector
 
             string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
 
-            // Check for FEQ failure or force always
-            if (forceAlways || !_testRunner.BassPassed || !_testRunner.MidPassed || !_testRunner.TreblePassed)
+            // Check for FEQ failure or force always (skip if it's a Rub & Buzz test)
+            if (!_testRunner.IsRubBuzzTest && (forceAlways || !_testRunner.BassPassed || !_testRunner.MidPassed || !_testRunner.TreblePassed))
             {
                 string label = (forceAlways && _testRunner.BassPassed && _testRunner.MidPassed && _testRunner.TreblePassed) ? "AUTO" : "FEQ";
                 string filename = $"{serialNumber}_{selectedModel}_{timestamp}_{label}_{stepName}.png";
@@ -1348,12 +1387,16 @@ namespace SoncaAudioInspector
             if (forceAlways || !_testRunner.ThdPassed)
             {
                 string label = (forceAlways && _testRunner.ThdPassed) ? "AUTO_THD" : "THD";
+                if (_testRunner.IsRubBuzzTest)
+                {
+                    label = (forceAlways && _testRunner.ThdPassed) ? "AUTO_RUBBUZZ" : "RUBBUZZ";
+                }
                 string filename = $"{serialNumber}_{selectedModel}_{timestamp}_{label}_{stepName}.png";
                 string fullPath = System.IO.Path.Combine(targetDir, filename);
                 try
                 {
                     PlotThdFft.Plot.SavePng(fullPath, 800, 450);
-                    AppendLog("Export", $"Saved THD screenshot: {filename}");
+                    AppendLog("Export", $"Saved THD/RubBuzz screenshot: {filename}");
                 }
                 catch (Exception ex)
                 {
@@ -1462,6 +1505,7 @@ namespace SoncaAudioInspector
             _testRunner.FreqResponseToleranceDb = ParseDoubleSafe(TxtFreqTolerance.Text, 3.0);
             _testRunner.ThdLimitPercent = ParseDoubleSafe(TxtThdLimit.Text, 0.5);
             _testRunner.StandardCurve = null; 
+            _testRunner.IsRubBuzzTest = false; 
 
             for (int run = 1; run <= totalRuns; run++)
             {

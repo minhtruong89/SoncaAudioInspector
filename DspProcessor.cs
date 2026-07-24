@@ -99,8 +99,8 @@ namespace SoncaAudioInspector
                 double mag = fftBuffer[i].Magnitude * scalingFactor;
                 magnitudes[i] = mag;
 
-                // Find fundamental peak frequency (exclude DC and very low frequencies under 100Hz)
-                if (frequencies[i] >= 100 && mag > maxMag)
+                // Find fundamental peak frequency (exclude DC and very low frequencies under 30Hz)
+                if (frequencies[i] >= 30 && mag > maxMag)
                 {
                     maxMag = mag;
                     fundBin = i;
@@ -236,6 +236,93 @@ namespace SoncaAudioInspector
             }
 
             return results;
+        }
+
+        public static (double rubBuzzPercent, double[] magnitudes, double fundamentalFreq) CalculateRubBuzz(
+            float[] samples, int sampleRate, double targetFundamental, out double[] frequencies)
+        {
+            int fftSize = 1;
+            while (fftSize < samples.Length)
+            {
+                fftSize *= 2;
+            }
+            fftSize = Math.Min(fftSize, 32768);
+            if (fftSize > samples.Length)
+            {
+                fftSize /= 2;
+            }
+
+            if (fftSize < 512)
+            {
+                frequencies = new double[0];
+                return (0, new double[0], 0);
+            }
+
+            float[] windowedInput = new float[fftSize];
+            Array.Copy(samples, samples.Length - fftSize, windowedInput, 0, fftSize);
+
+            Complex[] fftBuffer = new Complex[fftSize];
+            ApplyHannWindow(windowedInput, fftBuffer);
+            PerformFft(fftBuffer);
+
+            int halfSize = fftSize / 2;
+            double[] magnitudes = new double[halfSize];
+            frequencies = new double[halfSize];
+
+            double binWidth = (double)sampleRate / fftSize;
+            double maxMag = 0;
+            int fundBin = -1;
+
+            double scalingFactor = 2.0 / fftSize;
+            for (int i = 0; i < halfSize; i++)
+            {
+                frequencies[i] = i * binWidth;
+                double mag = fftBuffer[i].Magnitude * scalingFactor;
+                magnitudes[i] = mag;
+            }
+
+            // Find actual fundamental near targetFundamental
+            int targetCenterBin = (int)Math.Round(targetFundamental / binWidth);
+            int binSearchRange = (int)Math.Ceiling(10.0 / binWidth); // search within 10Hz
+            int startBin = Math.Max(0, targetCenterBin - binSearchRange);
+            int endBin = Math.Min(halfSize - 1, targetCenterBin + binSearchRange);
+
+            for (int i = startBin; i <= endBin; i++)
+            {
+                if (magnitudes[i] > maxMag)
+                {
+                    maxMag = magnitudes[i];
+                    fundBin = i;
+                }
+            }
+
+            if (fundBin == -1 || maxMag <= 1e-6)
+            {
+                return (0, magnitudes, targetFundamental);
+            }
+
+            double fundamentalFreq = fundBin * binWidth;
+            double fundEnergy = SumBinEnergy(magnitudes, fundBin, 4);
+
+            // Calculate high-frequency energy (1000 Hz to 8000 Hz)
+            double highFreqEnergySum = 0;
+            for (int i = 0; i < halfSize; i++)
+            {
+                if (frequencies[i] >= 1000.0 && frequencies[i] <= 8000.0)
+                {
+                    highFreqEnergySum += magnitudes[i] * magnitudes[i];
+                }
+            }
+
+            if (fundEnergy <= 1e-12)
+            {
+                return (0, magnitudes, fundamentalFreq);
+            }
+
+            double rubBuzz = Math.Sqrt(highFreqEnergySum) / Math.Sqrt(fundEnergy);
+            double rubBuzzPercent = rubBuzz * 100.0;
+
+            return (rubBuzzPercent, magnitudes, fundamentalFreq);
         }
     }
 }

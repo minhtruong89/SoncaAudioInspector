@@ -58,6 +58,12 @@ namespace SoncaAudioInspector
         [System.Text.Json.Serialization.JsonPropertyName("THD Limit")]
         public double? ThdLimit { get; set; }
 
+        [System.Text.Json.Serialization.JsonPropertyName("RubBuzz Test Freq")]
+        public double? RubBuzzTestFreq { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("RubBuzz Limit")]
+        public double? RubBuzzLimit { get; set; }
+
         [System.Text.Json.Serialization.JsonPropertyName("enable")]
         public bool? Enable { get; set; }
 
