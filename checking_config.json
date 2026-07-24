@@ -182,6 +182,59 @@
               "Playback Out": "Line In 3.5mm",
               "Recording In": "Measurement Mic",
 			  "Playback Volume": 80,
+              "Recording Gain": 130,
+              "THD Limit": 0.7
+            },
+            {
+              "id": "AC002",
+              "name": "Line In 3.5mm -> Line out 3.5mm",
+              "Playback Out": "Line In 3.5mm",
+              "Recording In": "Line out 3.5mm",
+			  "Playback Volume": 80,
+              "Recording Gain": 130,
+              "THD Limit": 0.5
+            },
+			{
+              "id": "AC003",
+              "name": "Line In 3.5mm -> Type C Rec Out",
+              "Playback Out": "Line In 3.5mm",
+              "Recording In": "Type C Rec Out",
+			  "Playback Volume": 80,
+              "Recording Gain": 130,
+              "THD Limit": 0.5
+            }
+          ]
+        }
+      }
+    },
+	
+	
+	
+	{
+      "model": "KBEATBOX CHILL",
+      "testItems": {
+        "InOut": {
+          "Description": "Test FEQ and THD for CHILL",
+          "Description 2": "Kiem tra tat ca cac ngo vao va ngo ra",
+          "Devices": {
+            "Input": {
+              "USB Soundcard": "CS3600",
+              "Line In 3.5mm": "LINE IN Fast",
+              "Bluetooth": "KBEATBOX CHILL"
+            },
+            "Output": {
+              "Measurement Mic": "KT USB",
+              "Line out 3.5mm": "LINE OUT",
+              "Type C Rec Out": "MI_LCD"
+            }
+          },
+          "Tests": [
+			{
+              "id": "AC001",
+              "name": "Line In 3.5mm -> Physical Speaker",
+              "Playback Out": "Line In 3.5mm",
+              "Recording In": "Measurement Mic",
+			  "Playback Volume": 80,
               "Recording Gain": 100,
               "THD Limit": 0.7
             },
@@ -194,14 +247,59 @@
               "Recording Gain": 100,
               "THD Limit": 0.5
             },
-			{
+            {
               "id": "AC003",
-              "name": "Line In 3.5mm -> Type C Rec Out",
+              "name": "Check loi xi hoi",
+			  "Playback Out": "Line In 3.5mm",
+              "Recording In": "Measurement Mic",
+              "Playback Volume": 90,
+              "Recording Gain": 100, 
+			  "RubBuzz Test Freq": 70,
+			  "RubBuzz Limit": 0.4
+            }
+          ]
+        }
+      }
+    },
+	
+	
+	
+	{
+      "model": "CARRY ON",
+      "testItems": {
+        "InOut": {
+          "Description": "Test FEQ and THD for CARRY ON",
+          "Description 2": "Kiem tra tat ca cac ngo vao va ngo ra",
+          "Devices": {
+            "Input": {
+              "USB Soundcard": "CS3600",
+              "Line In 3.5mm": "LINE IN Fast",
+              "Bluetooth": "CARRY ON"
+            },
+            "Output": {
+              "Measurement Mic": "KT USB",
+              "Line out 3.5mm": "LINE OUT",
+              "Type C Rec Out": "MI_LCD"
+            }
+          },
+          "Tests": [
+			{
+              "id": "AC001",
+              "name": "Line In 3.5mm -> Physical Speaker",
               "Playback Out": "Line In 3.5mm",
-              "Recording In": "Type C Rec Out",
+              "Recording In": "Measurement Mic",
 			  "Playback Volume": 80,
               "Recording Gain": 100,
-              "THD Limit": 0.5
+              "THD Limit": 0.7
+            },
+			{
+              "id": "AC002",
+              "name": "Line In 3.5mm -> Physical Speaker",
+              "Playback Out": "Line In 3.5mm",
+              "Recording In": "Measurement Mic",
+			  "Playback Volume": 100,
+              "Recording Gain": 130,
+              "THD Limit": 0.7
             }
           ]
         }

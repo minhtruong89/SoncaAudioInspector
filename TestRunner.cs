@@ -70,6 +70,11 @@ namespace SoncaAudioInspector
         public double LastAvgDevPercent { get; private set; } = 0;
         public bool HasComparedToStandard { get; private set; } = false;
 
+        public bool IsRubBuzzTest { get; set; } = false;
+        public double RubBuzzTestFreq { get; set; } = 70.0;
+        public double RubBuzzLimit { get; set; } = 1.5;
+        public double LastRubBuzzValue { get; private set; } = 0.0;
+
         public bool BassPassed { get; private set; } = true;
         public bool MidPassed { get; private set; } = true;
         public bool TreblePassed { get; private set; } = true;
@@ -94,13 +99,26 @@ namespace SoncaAudioInspector
 
         public void InitializeSteps()
         {
-            _steps = new List<TestStep>
+            if (IsRubBuzzTest)
             {
-                new TestStep { Name = "1. Device Connection & Check" },
-                new TestStep { Name = "2. Frequency Response Analysis (20Hz - 20kHz)" },
-                new TestStep { Name = "3. Total Harmonic Distortion (THD) Measurement" },
-                new TestStep { Name = "4. Compile Final Verdict" }
-            };
+                _steps = new List<TestStep>
+                {
+                    new TestStep { Name = "1. Device Connection & Check" },
+                    new TestStep { Name = "2. Rub & Buzz Analysis (Air Leak Check)" },
+                    new TestStep { Name = "3. THD Measurement (N/A)" },
+                    new TestStep { Name = "4. Compile Final Verdict" }
+                };
+            }
+            else
+            {
+                _steps = new List<TestStep>
+                {
+                    new TestStep { Name = "1. Device Connection & Check" },
+                    new TestStep { Name = "2. Frequency Response Analysis (20Hz - 20kHz)" },
+                    new TestStep { Name = "3. Total Harmonic Distortion (THD) Measurement" },
+                    new TestStep { Name = "4. Compile Final Verdict" }
+                };
+            }
             OnStepsChanged?.Invoke(_steps);
         }
 
@@ -149,6 +167,12 @@ namespace SoncaAudioInspector
             OnLogMessage?.Invoke("Step 1", $"Connected In: {recordingDevice.FriendlyName}");
 
             if (_isCancelled) return;
+
+            if (IsRubBuzzTest)
+            {
+                await RunRubBuzzTestInternalAsync(playbackDevice, recordingDevice);
+                return;
+            }
 
             // ----------------------------------------------------
             // Step 2: Frequency Response
@@ -614,6 +638,73 @@ namespace SoncaAudioInspector
                 OnLogMessage?.Invoke("Noise Test", "Noise level is excellent. Signal routing is clean.");
             }
             OnTestSubstatusChanged?.Invoke("THD", "Finished");
+        }
+
+        private async Task RunRubBuzzTestInternalAsync(MMDevice playbackDevice, MMDevice recordingDevice)
+        {
+            _steps[1].Status = "Running";
+            OnStepsChanged?.Invoke(_steps);
+            OnLogMessage?.Invoke("Step 2", $"Starting Rub & Buzz analysis at {RubBuzzTestFreq} Hz...");
+            OnTestSubstatusChanged?.Invoke("Freq", $"Testing Rub & Buzz ({RubBuzzTestFreq} Hz)...");
+
+            float[] recorded = await _audioEngine.PlayAndRecordAsync(
+                playbackDevice, recordingDevice, SignalType.Sine, RubBuzzTestFreq, 1.5);
+
+            if (_isCancelled) return;
+
+            OnTestSubstatusChanged?.Invoke("Freq", "Analyzing Rub & Buzz FFT...");
+
+            float maxSample = recorded.Length > 0 ? recorded.Select(Math.Abs).Max() : 0f;
+            if (maxSample > 0.95f)
+            {
+                OnLogMessage?.Invoke("Warning", "CRITICAL: Input clipping detected during Rub & Buzz! Lower Playback Volume or Recording Gain.");
+            }
+
+            // Calculate Rub & Buzz on the last 500ms
+            int sampleRate = _audioEngine.RecordingSampleRate;
+            int analyzeCount = (int)(sampleRate * 0.5);
+            int startOffset = Math.Max(0, recorded.Length - analyzeCount);
+            float[] buffer = recorded.Skip(startOffset).ToArray();
+
+            double[] frequencies;
+            var rubBuzzCalc = DspProcessor.CalculateRubBuzz(buffer, sampleRate, RubBuzzTestFreq, out frequencies);
+            
+            // Trigger spectrum ready event to draw the FFT (reuse THD spectrum UI event)
+            OnThdSpectrumReady?.Invoke(frequencies, rubBuzzCalc.magnitudes, rubBuzzCalc.rubBuzzPercent);
+
+            double rms = DspProcessor.CalculateRms(buffer, 0, buffer.Length);
+            double dbFS = 20 * Math.Log10(rms + 1e-9);
+            bool isSilent = dbFS < -70.0;
+
+            bool rubBuzzPass = !isSilent && rubBuzzCalc.rubBuzzPercent <= RubBuzzLimit;
+            LastRubBuzzValue = rubBuzzCalc.rubBuzzPercent;
+            ThdPassed = rubBuzzPass; // map to ThdPassed so existing status logic works
+            BassPassed = true;
+            MidPassed = true;
+            TreblePassed = true;
+
+            if (rubBuzzPass)
+            {
+                _steps[1].Status = "Pass";
+                _steps[1].Details = $"Rub&Buzz: {rubBuzzCalc.rubBuzzPercent:F3}% (Limit: < {RubBuzzLimit}%)";
+                OnLogMessage?.Invoke("Step 2", $"Rub & Buzz PASSED. Rub&Buzz: {rubBuzzCalc.rubBuzzPercent:F3}%");
+            }
+            else
+            {
+                _steps[1].Status = "Fail";
+                _steps[1].Details = isSilent ? "No signal detected (silent)." : $"Rub&Buzz: {rubBuzzCalc.rubBuzzPercent:F3}% (Limit: < {RubBuzzLimit}%)";
+                OnLogMessage?.Invoke("Step 2", isSilent ? "Rub & Buzz FAILED: Silent input." : $"Rub & Buzz FAILED. Rub&Buzz: {rubBuzzCalc.rubBuzzPercent:F3}%");
+            }
+
+            _steps[2].Status = "Pass";
+            _steps[2].Details = "Skipped";
+
+            _steps[3].Status = rubBuzzPass ? "Pass" : "Fail";
+            _steps[3].Details = rubBuzzPass ? "Device matches Rub & Buzz criteria." : "Device out of Rub & Buzz spec bounds.";
+            OnLogMessage?.Invoke("Verdict", rubBuzzPass ? "TEST PASSED. Rub & Buzz is within specs." : "TEST FAILED. Excess Rub & Buzz / Air Leak detected.");
+
+            OnStepsChanged?.Invoke(_steps);
+            OnTestCompleted?.Invoke(rubBuzzPass);
         }
     }
 }
