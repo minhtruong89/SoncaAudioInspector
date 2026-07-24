@@ -16,6 +16,8 @@
 [Dd]ebug/
 [Rr]elease/
 [Aa]rtifacts/
+artifacts-*/
+[Aa]rtifacts*/
 x64/
 x86/
 

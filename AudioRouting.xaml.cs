@@ -27,6 +27,7 @@ namespace SoncaAudioInspector
         private List<AutoTestCaseItem> _autoTestCases = new List<AutoTestCaseItem>();
         private bool _isExecutingAutoSuite = false;
         private string _autoTestSessionFolder = null;
+        private readonly List<string> _autoTestGraphPaths = new List<string>();
         private AutoTestCaseItem _currentRunningTestCase = null;
         private bool? _currentTestSuccess = null;
         private Dictionary<double, double> _standardCurve = null;
@@ -1011,6 +1012,7 @@ namespace SoncaAudioInspector
             string sessionFolderName = $"{serialNumber}_{timestamp}";
             string failDataPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fail data");
             _autoTestSessionFolder = System.IO.Path.Combine(failDataPath, dateFolder, sessionFolderName);
+            _autoTestGraphPaths.Clear();
 
             try
             {
@@ -1226,7 +1228,15 @@ namespace SoncaAudioInspector
 
             if (ChkSendToServer.IsChecked == true && ServerEngine.CurrentProduct != null)
             {
-                bool uploaded = await ServerEngine.UploadAudioQaResultAsync(ServerEngine.CurrentProduct, suitePassed, _testRunner?.Steps);
+                var uploadedSteps = _autoTestCases.Select(test => new ServerEngine.AudioQaStepResult(
+                    test.Name,
+                    test.Status,
+                    $"FRA: {test.FreqStatus}{Environment.NewLine}THD: {test.ThdStatus}"));
+                bool uploaded = await ServerEngine.UploadAudioQaResultAsync(
+                    ServerEngine.CurrentProduct,
+                    suitePassed,
+                    uploadedSteps,
+                    _autoTestGraphPaths);
                 if (!uploaded)
                 {
                     ModernMessageBox.Show(Window.GetWindow(this), ServerEngine.LastError ?? "Lỗi upload kết quả lên server.", "Lỗi server", ModernMessageBox.MessageBoxType.Error);
@@ -1375,6 +1385,10 @@ namespace SoncaAudioInspector
                 try
                 {
                     PlotFreqResponse.Plot.SavePng(fullPath, 800, 450);
+                    if (_isExecutingAutoSuite)
+                    {
+                        _autoTestGraphPaths.Add(fullPath);
+                    }
                     AppendLog("Export", $"Saved FEQ screenshot: {filename}");
                 }
                 catch (Exception ex)
@@ -1396,6 +1410,10 @@ namespace SoncaAudioInspector
                 try
                 {
                     PlotThdFft.Plot.SavePng(fullPath, 800, 450);
+                    if (_isExecutingAutoSuite)
+                    {
+                        _autoTestGraphPaths.Add(fullPath);
+                    }
                     AppendLog("Export", $"Saved THD/RubBuzz screenshot: {filename}");
                 }
                 catch (Exception ex)

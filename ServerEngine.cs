@@ -426,7 +426,11 @@ namespace SoncaAudioInspector
             return result;
         }
 
-        public static async Task<bool> UploadAudioQaResultAsync(ProductInfo product, bool passed, IEnumerable<TestStep>? steps = null)
+        public static async Task<bool> UploadAudioQaResultAsync(
+            ProductInfo product,
+            bool passed,
+            IEnumerable<AudioQaStepResult>? steps = null,
+            IEnumerable<string>? graphImagePaths = null)
         {
             if (product is null || string.IsNullOrWhiteSpace(product.Id))
             {
@@ -444,15 +448,34 @@ namespace SoncaAudioInspector
                     details = s.Details
                 }).ToList();
 
-                var body = new
+                using var form = new MultipartFormDataContent();
+                form.Add(new StringContent(product.Id), "productId");
+                form.Add(new StringContent(passed ? "PASS" : "FAIL"), "status");
+                form.Add(new StringContent(passed ? "Audio auto test passed" : "Audio auto test failed"), "note");
+                if (stepList is not null)
                 {
-                    productId = product.Id,
-                    status = passed ? "PASS" : "FAIL",
-                    note = passed ? "Audio auto test passed" : "Audio auto test failed",
-                    steps = stepList
-                };
+                    form.Add(new StringContent(JsonSerializer.Serialize(stepList, JsonOptions), Encoding.UTF8, "application/json"), "steps");
+                }
 
-                JsonElement data = await SendAuthorizedForDataAsync(HttpMethod.Post, "api/app/qa-audio", body);
+                foreach (string imagePath in graphImagePaths ?? Array.Empty<string>())
+                {
+                    if (!File.Exists(imagePath)) continue;
+
+                    var imageContent = new StreamContent(File.OpenRead(imagePath));
+                    imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+                    form.Add(imageContent, "file", Path.GetFileName(imagePath));
+                }
+
+                using HttpResponseMessage response = await SendAuthorizedAsync(HttpMethod.Post, "api/app/qa-audio", form);
+                string responseJson = await response.Content.ReadAsStringAsync();
+                if (!response.IsSuccessStatusCode)
+                {
+                    ApiError error = ReadApiError(responseJson);
+                    LastError = ToApiMessage(response.StatusCode, error);
+                    return false;
+                }
+
+                LastError = null;
                 return true;
             }
             catch (Exception ex)
@@ -1169,6 +1192,8 @@ namespace SoncaAudioInspector
         private sealed record ApiError(string Code, string Message);
 
         public sealed record RememberedLogin(string Account, string Password, DateTimeOffset SavedAtUtc);
+
+        public sealed record AudioQaStepResult(string Name, string Status, string Details);
 
         public sealed record VisualQaUploadResult(
             string? LogId,
