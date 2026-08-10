@@ -30,7 +30,22 @@
             }
           ]
         }
-      }
+      },
+	  "assemblyCount": 3,
+      "assemblyItems": [
+        {
+          "slot": 1,
+          "name": "Item 1"
+        },
+        {
+          "slot": 2,
+          "name": "Item 2"
+        },
+        {
+          "slot": 3,
+          "name": "Item 3"
+        }
+      ]
     },
 	
 	{
@@ -99,7 +114,26 @@
             }
           ]
         }
-      }
+      },
+	  "assemblyCount": 4,
+      "assemblyItems": [
+        {
+          "slot": 1,
+          "name": "Item 1"
+        },
+        {
+          "slot": 2,
+          "name": "Item 2"
+        },
+        {
+          "slot": 3,
+          "name": "Item 3"
+        },
+		{
+          "slot": 4,
+          "name": "Item 4"
+        }
+      ]
     },
 	
 	

@@ -21,12 +21,19 @@ namespace SoncaAudioInspector
 {
     public static class ServerEngine
     {
-        private const string DefaultApiBaseUrl = "https://speaker-inventory-system.vercel.app";
+        private const string DefaultApiBaseUrl = "https://inventory.acnos.store";
         private const string RegistryPath = @"Software\SoncaAudioInspector\Auth";
         private const string AppSessionValueName = "AppSession";
         private const string RememberedLoginValueName = "RememberedLogin";
 
-        private static readonly HttpClient Client = new()
+        private static readonly HttpClient Client = new(new SocketsHttpHandler
+        {
+            // DNS can change during a VPS cutover. Recycle pooled connections
+            // so a long-running desktop app does not keep talking to the old
+            // Vercel origin indefinitely.
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2)
+        })
         {
             Timeout = TimeSpan.FromSeconds(20)
         };
@@ -115,7 +122,7 @@ namespace SoncaAudioInspector
                     };
                     request.Headers.Add("X-App-Api-Key", AppToken);
                     
-                    string? location = await GetLocationAsync();
+                    string? location = await TryGetLocationQuickAsync();
                     if (!string.IsNullOrEmpty(location))
                     {
                         request.Headers.Add("X-App-Location", location);
@@ -208,18 +215,21 @@ namespace SoncaAudioInspector
             }
         }
 
-        private static async Task<string?> GetLocationAsync()
+        private static async Task<string?> TryGetLocationQuickAsync()
         {
             try
             {
-                var accessStatus = await Geolocator.RequestAccessAsync();
-                if (accessStatus == GeolocationAccessStatus.Allowed)
-                {
-                    Geolocator geolocator = new Geolocator { DesiredAccuracyInMeters = 50 };
-                    Geoposition pos = await geolocator.GetGeopositionAsync(TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(5));
-                    return $"{pos.Coordinate.Point.Position.Latitude.ToString(CultureInfo.InvariantCulture)}, {pos.Coordinate.Point.Position.Longitude.ToString(CultureInfo.InvariantCulture)}";
-                }
-                return null;
+                Task<GeolocationAccessStatus> accessTask = Task.Run(async () => await Geolocator.RequestAccessAsync());
+                Task completedAccessTask = await Task.WhenAny(accessTask, Task.Delay(300));
+                if (completedAccessTask != accessTask || accessTask.Result != GeolocationAccessStatus.Allowed) return null;
+
+                Geolocator geolocator = new Geolocator { DesiredAccuracyInMeters = 50 };
+                Task<Geoposition> positionTask = Task.Run(async () => await geolocator.GetGeopositionAsync(TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(2)));
+                Task completedPositionTask = await Task.WhenAny(positionTask, Task.Delay(700));
+                if (completedPositionTask != positionTask) return null;
+
+                Geoposition pos = positionTask.Result;
+                return $"{pos.Coordinate.Point.Position.Latitude.ToString(CultureInfo.InvariantCulture)}, {pos.Coordinate.Point.Position.Longitude.ToString(CultureInfo.InvariantCulture)}";
             }
             catch
             {
@@ -336,6 +346,30 @@ namespace SoncaAudioInspector
             }
         }
 
+        public static async Task<ProductInfo?> GetProductByQrCodeAsync(string qrCode)
+        {
+            if (string.IsNullOrWhiteSpace(qrCode))
+            {
+                LastError = "Mã QR không được để trống.";
+                return null;
+            }
+
+            try
+            {
+                string endpoint = $"api/app/products/scan?qrCode={Uri.EscapeDataString(qrCode.Trim())}";
+                JsonElement data = await SendAuthorizedForDataAsync(HttpMethod.Get, endpoint);
+                ProductInfo? product = ProductInfo.FromApiData(data).FirstOrDefault();
+                CurrentProduct = product;
+                LastError = product is null ? "Không tìm thấy mã QR trên server." : null;
+                return product;
+            }
+            catch (Exception ex)
+            {
+                LastError = ToUserMessage(ex);
+                return null;
+            }
+        }
+
         public static async Task<ProductInfo?> CheckProductStatusAsync(string serialNumber, string model)
         {
             if (string.IsNullOrWhiteSpace(serialNumber))
@@ -351,7 +385,7 @@ namespace SoncaAudioInspector
                 
                 ProductInfo? product = ProductInfo.FromApiData(data).FirstOrDefault();
                 CurrentProduct = product;
-                LastError = null;
+                LastError = product is null ? "Không tìm thấy thông tin sản phẩm từ server." : null;
                 return product;
             }
             catch (Exception ex)
@@ -378,6 +412,120 @@ namespace SoncaAudioInspector
                 CurrentProduct = product;
                 LastError = null;
                 return product;
+            }
+            catch (Exception ex)
+            {
+                LastError = ToUserMessage(ex);
+                return null;
+            }
+        }
+
+        public static async Task<ProductInfo?> LinkProductItemAsync(
+            ProductInfo product,
+            string itemCode,
+            string itemName,
+            int slotIndex)
+        {
+            if (product is null || string.IsNullOrWhiteSpace(product.Id))
+            {
+                LastError = "Chưa có sản phẩm hợp lệ để gắn item.";
+                return null;
+            }
+            if (string.IsNullOrWhiteSpace(itemCode) || string.IsNullOrWhiteSpace(itemName))
+            {
+                LastError = "Mã và tên item không được để trống.";
+                return null;
+            }
+            if (slotIndex < 1)
+            {
+                LastError = "Vị trí item không hợp lệ.";
+                return null;
+            }
+
+            try
+            {
+                var body = new
+                {
+                    itemCode = itemCode.Trim(),
+                    name = itemName.Trim(),
+                    slotIndex
+                };
+                string endpoint = $"api/app/products/{Uri.EscapeDataString(product.Id)}/items";
+                JsonElement data = await SendAuthorizedForDataAsync(HttpMethod.Post, endpoint, body);
+                ProductInfo? updated = ProductInfo.FromApiData(data).FirstOrDefault();
+                CurrentProduct = updated ?? product;
+                LastError = null;
+                return updated ?? product;
+            }
+            catch (Exception ex)
+            {
+                LastError = ToUserMessage(ex);
+                return null;
+            }
+        }
+
+        public static async Task<ProductInfo?> LinkProductItemsAsync(
+            ProductInfo product,
+            IEnumerable<ProductItemLinkInput> items)
+        {
+            if (product is null || string.IsNullOrWhiteSpace(product.Id))
+            {
+                LastError = "Chưa có sản phẩm hợp lệ để gắn item.";
+                return null;
+            }
+
+            var itemList = items?.Select(item => new
+            {
+                itemCode = item.ItemCode.Trim(),
+                name = item.Name.Trim(),
+                slotIndex = item.SlotIndex
+            }).ToList();
+            if (itemList is null || itemList.Count == 0
+                || itemList.Any(item => string.IsNullOrWhiteSpace(item.itemCode)
+                    || string.IsNullOrWhiteSpace(item.name)
+                    || item.slotIndex < 1))
+            {
+                LastError = "Danh sách item không hợp lệ.";
+                return null;
+            }
+
+            try
+            {
+                var body = new { items = itemList };
+                string endpoint = $"api/app/products/{Uri.EscapeDataString(product.Id)}/items/batch";
+                JsonElement data = await SendAuthorizedForDataAsync(HttpMethod.Post, endpoint, body);
+                ProductInfo? updated = ProductInfo.FromApiData(data).FirstOrDefault();
+                CurrentProduct = updated ?? product;
+                LastError = null;
+                return updated ?? product;
+            }
+            catch (Exception ex)
+            {
+                LastError = ToUserMessage(ex);
+                return null;
+            }
+        }
+
+        public static async Task<ProductInfo?> UpdateProductItemStatusAsync(
+            string productId,
+            string itemCode,
+            string status)
+        {
+            if (string.IsNullOrWhiteSpace(productId) || string.IsNullOrWhiteSpace(itemCode))
+            {
+                LastError = "Product ID và Item Code không được để trống.";
+                return null;
+            }
+
+            try
+            {
+                var body = new { status = status };
+                string endpoint = $"api/app/products/{Uri.EscapeDataString(productId)}/items/{Uri.EscapeDataString(itemCode)}";
+                JsonElement data = await SendAuthorizedForDataAsync(HttpMethod.Put, endpoint, body);
+                ProductInfo? updated = ProductInfo.FromApiData(data).FirstOrDefault();
+                CurrentProduct = updated ?? CurrentProduct;
+                LastError = null;
+                return updated;
             }
             catch (Exception ex)
             {
@@ -430,11 +578,19 @@ namespace SoncaAudioInspector
             ProductInfo product,
             bool passed,
             IEnumerable<AudioQaStepResult>? steps = null,
-            IEnumerable<string>? graphImagePaths = null)
+            IEnumerable<string>? graphImagePaths = null,
+            bool deviceReady = false,
+            string? uploadSessionId = null)
         {
             if (product is null || string.IsNullOrWhiteSpace(product.Id))
             {
                 LastError = "Chưa có sản phẩm để lưu kết quả QA âm thanh.";
+                return false;
+            }
+
+            if (!passed && !deviceReady)
+            {
+                LastError = "Không upload FAIL lên server vì chưa xác nhận đủ thiết bị audio theo cấu hình.";
                 return false;
             }
 
@@ -452,6 +608,11 @@ namespace SoncaAudioInspector
                 form.Add(new StringContent(product.Id), "productId");
                 form.Add(new StringContent(passed ? "PASS" : "FAIL"), "status");
                 form.Add(new StringContent(passed ? "Audio auto test passed" : "Audio auto test failed"), "note");
+                form.Add(new StringContent(deviceReady ? "true" : "false"), "deviceReady");
+                if (!string.IsNullOrWhiteSpace(uploadSessionId))
+                {
+                    form.Add(new StringContent(uploadSessionId.Trim()), "uploadSessionId");
+                }
                 if (stepList is not null)
                 {
                     form.Add(new StringContent(JsonSerializer.Serialize(stepList, JsonOptions), Encoding.UTF8, "application/json"), "steps");
@@ -463,7 +624,8 @@ namespace SoncaAudioInspector
 
                     var imageContent = new StreamContent(File.OpenRead(imagePath));
                     imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-                    form.Add(imageContent, "file", Path.GetFileName(imagePath));
+                    string fileName = Path.GetFileName(imagePath);
+                    form.Add(imageContent, "file", string.IsNullOrWhiteSpace(fileName) ? "audio-qa-graph.png" : fileName);
                 }
 
                 using HttpResponseMessage response = await SendAuthorizedAsync(HttpMethod.Post, "api/app/qa-audio", form);
@@ -577,9 +739,13 @@ namespace SoncaAudioInspector
                 ApiError error = ReadApiError(responseJson);
 
                 if (response.StatusCode == HttpStatusCode.Unauthorized
-                    && error.Code == "ACCESS_TOKEN_EXPIRED"
-                    && !authRetried)
+                    && !authRetried
+                    && HasValidRefreshToken)
                 {
+                    // App routes may return a generic 401 when an opaque
+                    // access-token row has expired. The refresh token is the
+                    // authoritative recovery path, so do not depend on a
+                    // particular error code from every route.
                     authRetried = true;
                     await RefreshAccessTokenOrThrowAsync(tokenUsed);
                     continue;
@@ -684,7 +850,8 @@ namespace SoncaAudioInspector
                 if (!response.IsSuccessStatusCode)
                 {
                     ApiError error = ReadApiError(responseJson);
-                    if (error.Code is "REFRESH_TOKEN_EXPIRED" or "REFRESH_TOKEN_REVOKED" or "REFRESH_TOKEN_REUSED")
+                    if (response.StatusCode == HttpStatusCode.Unauthorized
+                        || error.Code is "REFRESH_TOKEN_INVALID" or "REFRESH_TOKEN_EXPIRED" or "REFRESH_TOKEN_REVOKED" or "REFRESH_TOKEN_REUSED")
                     {
                         ClearStaffSession(keepError: true);
                     }
@@ -789,6 +956,20 @@ namespace SoncaAudioInspector
             }
             catch (JsonException)
             {
+                // Reverse proxies and framework error pages may return HTML or
+                // plain text instead of the API's JSON envelope. Keep a short,
+                // sanitized preview so the operator can distinguish a 502/404
+                // proxy response from an expired API session.
+                string preview = System.Text.RegularExpressions.Regex.Replace(responseJson, "<[^>]+>", " ");
+                preview = System.Net.WebUtility.HtmlDecode(preview)
+                    .Replace('\r', ' ')
+                    .Replace('\n', ' ')
+                    .Trim();
+                if (preview.Length > 180) preview = preview[..180] + "…";
+                return new ApiError("NON_JSON_RESPONSE",
+                    string.IsNullOrWhiteSpace(preview)
+                        ? "Server trả phản hồi không phải JSON."
+                        : $"Server trả phản hồi không phải JSON: {preview}");
             }
 
             return new ApiError("", "Server trả lỗi không đúng JSON.");
@@ -1249,6 +1430,7 @@ namespace SoncaAudioInspector
         public string? Status { get; set; }
         public string? QaStatus { get; set; }
         public string? QcStatus { get; set; }
+        public List<ProductItemInfo> Items { get; set; } = new();
         public JsonElement Raw { get; set; }
 
         public string DisplayName =>
@@ -1293,8 +1475,29 @@ namespace SoncaAudioInspector
                 Status = GetString(item, "status"),
                 QaStatus = GetString(item, "qaStatus"),
                 QcStatus = GetString(item, "qcStatus"),
+                Items = GetItems(item),
                 Raw = item.Clone()
             };
+        }
+
+        private static List<ProductItemInfo> GetItems(JsonElement product)
+        {
+            if (!TryGetProperty(product, "items", out JsonElement items)
+                || items.ValueKind != JsonValueKind.Array)
+            {
+                return new List<ProductItemInfo>();
+            }
+
+            return items.EnumerateArray()
+                .Where(value => value.ValueKind == JsonValueKind.Object)
+                .Select(value => new ProductItemInfo
+                {
+                    Id = GetString(value, "itemId") ?? GetString(value, "id"),
+                    Code = GetString(value, "itemCode") ?? GetString(value, "code"),
+                    Name = GetString(value, "name"),
+                    SlotIndex = GetInt(value, "slotIndex")
+                })
+                .ToList();
         }
 
         private static string? FirstNonEmpty(params string?[] values)
@@ -1319,6 +1522,14 @@ namespace SoncaAudioInspector
             };
         }
 
+        private static int? GetInt(JsonElement element, string propertyName)
+        {
+            if (!TryGetProperty(element, propertyName, out JsonElement value)) return null;
+            if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out int number)) return number;
+            if (value.ValueKind == JsonValueKind.String && int.TryParse(value.GetString(), out number)) return number;
+            return null;
+        }
+
         private static bool TryGetProperty(JsonElement element, string propertyName, out JsonElement value)
         {
             if (element.ValueKind == JsonValueKind.Object)
@@ -1337,4 +1548,14 @@ namespace SoncaAudioInspector
             return false;
         }
     }
+
+    public sealed class ProductItemInfo
+    {
+        public string? Id { get; set; }
+        public string? Code { get; set; }
+        public string? Name { get; set; }
+        public int? SlotIndex { get; set; }
+    }
+
+    public sealed record ProductItemLinkInput(string ItemCode, string Name, int SlotIndex);
 }

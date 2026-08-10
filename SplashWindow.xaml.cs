@@ -133,14 +133,30 @@ namespace SoncaAudioInspector
             }
             else
             {
-                sys002Error = "Bỏ qua do kiểm tra internet không đạt.";
+                sys002Error = "Bỏ qua tải do kiểm tra internet không đạt.";
+            }
+
+            // Fallback to local file if it exists
+            string configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
+            if (!sys002Pass && System.IO.File.Exists(configPath))
+            {
+                sys002Pass = true;
+                sys002Error = $"Đang sử dụng cấu hình cục bộ (cảnh báo: {sys002Error})";
             }
 
             if (sys002Pass)
             {
                 IconSys002.Text = "✔";
                 IconSys002.Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129)); // Neon green
-                TxtSys002.Text = "SYS002 - Kiểm tra và tải cấu hình hệ thống (Đạt)";
+                if (sys002Error.Contains("cục bộ")) 
+                {
+                    TxtSys002.Text = "SYS002 - Kiểm tra và tải cấu hình hệ thống (Dùng bản lưu)";
+                    IconSys002.Foreground = new SolidColorBrush(Color.FromRgb(245, 158, 11)); // Warning orange
+                }
+                else 
+                {
+                    TxtSys002.Text = "SYS002 - Kiểm tra và tải cấu hình hệ thống (Đạt)";
+                }
             }
             else
             {

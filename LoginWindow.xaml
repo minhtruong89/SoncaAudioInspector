@@ -10,7 +10,8 @@
         Background="#0F0F11"
         AllowsTransparency="True"
         BorderThickness="1"
-        BorderBrush="#27272A">
+        BorderBrush="#27272A"
+        Icon="pack://application:,,,/Assets/app_icon.ico">
     
     <Window.Resources>
         <!-- Custom text box style -->
@@ -211,3 +212,4 @@
         </Grid>
     </Border>
 </Window>
+

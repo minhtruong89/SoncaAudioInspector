@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Input;
 using NAudio.CoreAudioApi;
 using ScottPlot;
 
@@ -16,12 +17,23 @@ namespace SoncaAudioInspector
 {
     public class CheckingConfig
     {
-        public List<ModelConfig> models { get; set; }
+        public List<ModelConfig> models { get; set; } = new List<ModelConfig>();
     }
     public class ModelConfig
     {
-        public string model { get; set; }
-        public TestItems testItems { get; set; }
+        public string model { get; set; } = "";
+        public TestItems testItems { get; set; } = new TestItems();
+        
+        [System.Text.Json.Serialization.JsonPropertyName("assemblyCount")]
+        public int itemCount { get; set; }
+        
+        [System.Text.Json.Serialization.JsonPropertyName("assemblyItems")]
+        public List<ItemSlotConfig> items { get; set; } = new List<ItemSlotConfig>();
+    }
+    public class ItemSlotConfig
+    {
+        public int slot { get; set; }
+        public string name { get; set; } = "";
     }
     public class TestItems
     {
@@ -94,6 +106,7 @@ namespace SoncaAudioInspector
         public override string ToString() => DisplayName;
     }
 
+
     public partial class MainWindow : Window
     {
         private AudioEngine _audioEngine;
@@ -101,8 +114,10 @@ namespace SoncaAudioInspector
 
         private AudioRouting _audioRoutingView;
         private VisualAI _visualAIView;
+        private QrScanWindow? _qrScanView;
         private CheckingConfig _checkingConfig;
         private List<ProductInfo> _serverProducts = new List<ProductInfo>();
+        private string? _lastQrCode;
 
         public MainWindow()
         {
@@ -133,7 +148,7 @@ namespace SoncaAudioInspector
             // Load configurations for models selection
             LoadCheckingConfig();
             LoadLastSerialNumber();
-            //_ = LoadServerModelsAsync();
+            _ = LoadServerModelsAsync();
         }
 
         private void LoadLastSerialNumber()
@@ -152,9 +167,10 @@ namespace SoncaAudioInspector
                 }
             }
             catch { }
+            UpdateQrBarcode();
         }
 
-        private void LoadCheckingConfig()
+    private void LoadCheckingConfig()
         {
             try
             {
@@ -162,22 +178,89 @@ namespace SoncaAudioInspector
                 if (File.Exists(configPath))
                 {
                     string json = File.ReadAllText(configPath);
-                    _checkingConfig = JsonSerializer.Deserialize<CheckingConfig>(json);
+                    _checkingConfig = JsonSerializer.Deserialize<CheckingConfig>(json) ?? new CheckingConfig();
                     
                     if (_checkingConfig != null && _checkingConfig.models != null)
                     {
                         ComboModels.Items.Clear();
                         foreach (var m in _checkingConfig.models)
                         {
+                            EnsureItemSlots(m);
                             ComboModels.Items.Add(m.model);
                         }
                     }
                 }
+                else
+                {
+                    _checkingConfig = new CheckingConfig();
+                }
             }
-            catch (Exception ex)
+            catch
             {
-                // Silence config load issues or log if needed
+                _checkingConfig ??= new CheckingConfig();
             }
+        }
+
+        private void EnsureAllModelsHaveItemSlots()
+        {
+            if (_checkingConfig?.models != null)
+            {
+                foreach (ModelConfig model in _checkingConfig.models)
+                {
+                    EnsureItemSlots(model);
+                }
+            }
+        }
+
+        private static List<ItemSlotConfig> EnsureItemSlots(ModelConfig model)
+        {
+            model.items ??= new List<ItemSlotConfig>();
+            int count = Math.Max(model.itemCount, model.items.Count);
+            count = Math.Max(1, Math.Min(20, count == 0 ? 3 : count));
+            model.itemCount = count;
+            
+            for (int i = 1; i <= count; i++)
+            {
+                if (!model.items.Any(value => value.slot == i))
+                {
+                    model.items.Add(new ItemSlotConfig
+                    {
+                        slot = i,
+                        name = $"Item {i}"
+                    });
+                }
+            }
+            
+            model.items = model.items
+                .Where(value => value.slot >= 1 && value.slot <= count)
+                .OrderBy(value => value.slot)
+                .ToList();
+            return model.items;
+        }
+
+        private void SaveCheckingConfig()
+        {
+            try
+            {
+                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
+                string json = JsonSerializer.Serialize(_checkingConfig ?? new CheckingConfig(), new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+                File.WriteAllText(configPath, json);
+            }
+            catch
+            {
+                // Config sync is best-effort; the app can keep the in-memory defaults.
+            }
+        }
+
+        private IReadOnlyList<ItemSlotConfig> GetItemSlotsForModel(string? modelName)
+        {
+            if (string.IsNullOrWhiteSpace(modelName)) return new List<ItemSlotConfig>();
+            ModelConfig? modelConfig = _checkingConfig?.models.FirstOrDefault(value =>
+                string.Equals(value.model, modelName, StringComparison.OrdinalIgnoreCase));
+            return modelConfig?.items ?? new List<ItemSlotConfig>();
         }
 
         private async Task LoadServerModelsAsync()
@@ -201,6 +284,7 @@ namespace SoncaAudioInspector
 
                 Dispatcher.Invoke(() =>
                 {
+                    _checkingConfig ??= new CheckingConfig();
                     foreach (string model in serverModels)
                     {
                         bool exists = ComboModels.Items.Cast<object>().Any(item =>
@@ -210,7 +294,17 @@ namespace SoncaAudioInspector
                         {
                             ComboModels.Items.Add(model);
                         }
+
+                        ModelConfig? modelConfig = _checkingConfig.models.FirstOrDefault(value =>
+                            string.Equals(value.model, model, StringComparison.OrdinalIgnoreCase));
+                        if (modelConfig == null)
+                        {
+                            modelConfig = new ModelConfig { model = model, itemCount = 3 };
+                            _checkingConfig.models.Add(modelConfig);
+                        }
+                        EnsureItemSlots(modelConfig);
                     }
+                    SaveCheckingConfig();
                 });
             }
             catch
@@ -224,6 +318,24 @@ namespace SoncaAudioInspector
             if (ComboModels.SelectedItem == null || _checkingConfig == null) return;
             
             string selectedModelName = ComboModels.SelectedItem.ToString();
+            // Reload the dedicated item file so edits saved while the app is open
+            // take effect immediately when a model is selected.
+            try
+            {
+                string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
+                if (File.Exists(configPath))
+                {
+                    string json = File.ReadAllText(configPath);
+                    var newConfig = JsonSerializer.Deserialize<CheckingConfig>(json) ?? new CheckingConfig();
+                    // Merge new values into existing object to not break references or replace entirely
+                    _checkingConfig = newConfig;
+                }
+            }
+            catch { }
+            
+            EnsureAllModelsHaveItemSlots();
+            _qrScanView?.SetItemSlots(GetItemSlotsForModel(selectedModelName));
+            UpdateQrBarcode();
             var modelConfig = _checkingConfig.models.FirstOrDefault(m => m.model == selectedModelName);
             if (modelConfig == null || modelConfig.testItems?.InOut == null) return;
 
@@ -234,6 +346,24 @@ namespace SoncaAudioInspector
                     $"Chưa đủ các ngõ vào và ra đã định nghĩa\n\nThiếu ngõ:\n{missingMessage}", 
                     "Không Đạt Cấu Hình Thiết Bị", 
                     ModernMessageBox.MessageBoxType.Warning);
+            }
+        }
+
+        private void TxtSerialNumber_LostFocus(object sender, RoutedEventArgs e)
+        {
+            UpdateQrBarcode();
+        }
+
+        private void UpdateQrBarcode()
+        {
+            if (_qrScanView != null)
+            {
+                string modelName = ComboModels.SelectedItem?.ToString()?.Trim() ?? "";
+                string serial = TxtSerialNumber.Text?.Trim() ?? "";
+                if (!string.IsNullOrEmpty(modelName) && !string.IsNullOrEmpty(serial) && serial != "DEFAULT-00001")
+                {
+                    _qrScanView.SetDefaultProductCode($"{modelName} - {serial}");
+                }
             }
         }
 
@@ -254,13 +384,208 @@ namespace SoncaAudioInspector
             this.Close();
         }
 
-        private void BtnScan_Click(object sender, RoutedEventArgs e)
+        private void BtnScanQr_Click(object sender, RoutedEventArgs e)
         {
-            // Placeholder: simulate barcode / QR code scanning by generating a random serial number
-            Random rnd = new Random();
-            string mockSerial = "SN-" + rnd.Next(100000, 999999).ToString();
-            TxtSerialNumber.Text = mockSerial;
-            ModernMessageBox.Show(this, $"Đã quét được mã Serial Number: {mockSerial}", "Quét mã thành công", ModernMessageBox.MessageBoxType.Info);
+            string modelName = ComboModels.SelectedItem?.ToString()?.Trim() ?? "";
+            IReadOnlyList<ItemSlotConfig> itemSlots = GetItemSlotsForModel(modelName);
+            _qrScanView = new QrScanWindow(itemSlots);
+            _qrScanView.ScanCompleted += QrScanView_ScanCompleted;
+            
+            string serial = TxtSerialNumber.Text?.Trim() ?? "";
+            if (!string.IsNullOrEmpty(modelName) && !string.IsNullOrEmpty(serial))
+            {
+                _qrScanView.SetDefaultProductCode($"{modelName} - {serial}");
+            }
+            
+            _qrScanView.ShowProductDetails(ServerEngine.CurrentProduct, ServerEngine.CurrentProduct?.ProductCode);
+            MainContentArea.Content = _qrScanView;
+            SwitchToTab("QrScan");
+        }
+
+        private async void QrScanView_ScanCompleted(object? sender, QrScanCompletedEventArgs e)
+        {
+            if (_qrScanView != null)
+            {
+                _qrScanView.IsEnabled = false;
+            }
+
+            try
+            {
+                await ProcessQrScanAsync(e.ProductQrCode, e.ScannedItems);
+            }
+            finally
+            {
+                if (_qrScanView != null)
+                {
+                    _qrScanView.IsEnabled = true;
+                }
+            }
+        }
+
+        private void QrScanView_AddItemRequested(object? sender, EventArgs e)
+        {
+            string modelName = ComboModels.SelectedItem?.ToString()?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(modelName))
+            {
+                ModernMessageBox.Show(this, "Hãy chọn model trước khi thêm item.", "Chưa chọn model", ModernMessageBox.MessageBoxType.Warning);
+                return;
+            }
+
+            ModelConfig? modelConfig = _checkingConfig.models.FirstOrDefault(value =>
+                string.Equals(value.model, modelName, StringComparison.OrdinalIgnoreCase));
+            if (modelConfig == null)
+            {
+                modelConfig = new ModelConfig { model = modelName, itemCount = 1 };
+                _checkingConfig.models.Add(modelConfig);
+            }
+
+            int currentCount = modelConfig.itemCount > 0 ? modelConfig.itemCount : modelConfig.items?.Count ?? 0;
+            if (currentCount >= 20)
+            {
+                ModernMessageBox.Show(this, "Giao diện hiện hỗ trợ tối đa 20 item cho một model.", "Đủ số item", ModernMessageBox.MessageBoxType.Info);
+                return;
+            }
+
+            modelConfig.itemCount = currentCount + 1;
+            EnsureItemSlots(modelConfig);
+            SaveCheckingConfig();
+            _qrScanView?.SetItemSlots(modelConfig.items);
+            ModernMessageBox.Show(this,
+                $"Đã thêm Item {modelConfig.itemCount} cho model {modelName} và lưu vào checking_config.json.",
+                "Đã cập nhật cấu hình item",
+                ModernMessageBox.MessageBoxType.Info);
+        }
+
+        private async Task ProcessQrScanAsync(string qrCode, IReadOnlyList<QrItemScan> scannedItems)
+        {
+            qrCode = qrCode.Trim();
+            if (string.IsNullOrWhiteSpace(qrCode))
+            {
+                ModernMessageBox.Show(this, "Chưa nhận được mã từ máy quét QR.", "Chưa có mã QR", ModernMessageBox.MessageBoxType.Warning);
+                return;
+            }
+
+            _lastQrCode = qrCode;
+            BtnScanQr.IsEnabled = false;
+            try
+            {
+                string selectedModel = ComboModels.SelectedItem?.ToString()?.Trim() ?? "";
+                string selectedSerial = TxtSerialNumber.Text.Trim();
+                ProductInfo? product = await ServerEngine.GetProductByQrCodeAsync(qrCode);
+
+                // A printed QR may be different from the server barcode. If the
+                // operator has already selected the matching serial/model, use
+                // that authoritative server lookup instead of rejecting a valid
+                // product just because the QR payload is an alias.
+                bool usedSerialFallback = false;
+                if (product is null
+                    && !string.IsNullOrWhiteSpace(selectedSerial)
+                    && !string.Equals(selectedSerial, "DEFAULT-00001", StringComparison.OrdinalIgnoreCase))
+                {
+                    ProductInfo? bySerial = await RequestProductStatusAsync(selectedSerial, selectedModel);
+                    if (bySerial is not null)
+                    {
+                        product = bySerial;
+                        usedSerialFallback = true;
+                    }
+                }
+
+                if (product is null)
+                {
+                    string detail = ServerEngine.LastError ?? "Mã này chưa được đăng ký trên server.";
+                    ModernMessageBox.Show(this,
+                        $"Đã nhận mã QR: {qrCode}\n\n{detail}\n\nNếu đây là sản phẩm mới, hãy chọn model rồi nhấn Add Product.",
+                        "Không tìm thấy sản phẩm",
+                        ModernMessageBox.MessageBoxType.Warning);
+                    return;
+                }
+                if (!string.IsNullOrWhiteSpace(selectedModel)
+                    && !string.IsNullOrWhiteSpace(product.Model)
+                    && !string.Equals(selectedModel, product.Model.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    ModernMessageBox.Show(this,
+                        $"Model đang chọn ({selectedModel}) không khớp model của sản phẩm ({product.Model}).\n\nChỉ đồng bộ khi chọn đúng model.",
+                        "Sai model",
+                        ModernMessageBox.MessageBoxType.Warning);
+                    return;
+                }
+
+                bool placeholderSerial = string.IsNullOrWhiteSpace(selectedSerial)
+                    || string.Equals(selectedSerial, "DEFAULT-00001", StringComparison.OrdinalIgnoreCase);
+                if (!placeholderSerial
+                    && !string.IsNullOrWhiteSpace(product.SerialNumber)
+                    && !string.Equals(selectedSerial, product.SerialNumber.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    ModernMessageBox.Show(this,
+                        $"Serial đang nhập ({selectedSerial}) không khớp serial của sản phẩm ({product.SerialNumber}).\n\nChỉ đồng bộ khi chọn đúng serial.",
+                        "Sai serial number",
+                        ModernMessageBox.MessageBoxType.Warning);
+                    return;
+                }
+
+                TxtSerialNumber.Text = product.SerialNumber ?? qrCode;
+                SelectModel(product.Model);
+                IReadOnlyList<ItemSlotConfig> itemSlots = GetItemSlotsForModel(product.Model);
+                var itemsToLink = scannedItems
+                    .Select(scannedItem => new
+                    {
+                        Scan = scannedItem,
+                        Slot = itemSlots.FirstOrDefault(value => value.slot == scannedItem.SlotIndex)
+                    })
+                    .Where(value => value.Slot != null)
+                    .Select(value => new ProductItemLinkInput(
+                        value.Scan.Code,
+                        value.Slot!.name,
+                        value.Scan.SlotIndex))
+                    .ToList();
+
+                int linkedCount = itemsToLink.Count;
+                if (linkedCount > 0)
+                {
+                    ProductInfo? updated = await ServerEngine.LinkProductItemsAsync(product, itemsToLink);
+                    if (updated == null)
+                    {
+                        ModernMessageBox.Show(this,
+                            ServerEngine.LastError ?? "Không thể đồng bộ danh sách item.",
+                            "Lỗi đồng bộ item",
+                            ModernMessageBox.MessageBoxType.Error);
+                        return;
+                    }
+                    product = updated;
+                }
+                _visualAIView.SetCurrentProduct(product);
+                _audioRoutingView.SetCurrentProduct(product);
+                _qrScanView?.ShowProductDetails(product, qrCode);
+                
+                ModernMessageBox.Show(this,
+                    $"Đã quét QR: {qrCode}\nSerial: {product.SerialNumber ?? "-"}\nModel: {product.Model ?? "-"}\n"
+                    + (usedSerialFallback ? "Đã đối chiếu theo Serial/Model.\n" : "")
+                    + $"Đã đồng bộ item: {linkedCount}/{itemSlots.Count}",
+                    "Đồng bộ QR thành công",
+                    ModernMessageBox.MessageBoxType.Info);
+                    
+                _qrScanView?.AddToHistoryAndReset(product, scannedItems, itemSlots);
+            }
+            finally
+            {
+                BtnScanQr.IsEnabled = true;
+            }
+        }
+
+        private void SelectModel(string? model)
+        {
+            if (string.IsNullOrWhiteSpace(model)) return;
+            foreach (object item in ComboModels.Items)
+            {
+                if (string.Equals(item?.ToString(), model, StringComparison.OrdinalIgnoreCase))
+                {
+                    ComboModels.SelectedItem = item;
+                    return;
+                }
+            }
+
+            ComboModels.Items.Add(model);
+            ComboModels.SelectedItem = model;
         }
 
         private async void BtnAddProduct_Click(object sender, RoutedEventArgs e)
@@ -277,8 +602,8 @@ namespace SoncaAudioInspector
             BtnAddProduct.IsEnabled = false;
             try
             {
-                // We assume barcode is same as serial if no separate input is present.
-                ProductInfo? product = await ServerEngine.AddProductAsync(serial, serial, model);
+                string barcodeOrQr = $"{model} - {serial}";
+                ProductInfo? product = await ServerEngine.AddProductAsync(barcodeOrQr, serial, model);
                 if (product != null)
                 {
                     ModernMessageBox.Show(this, $"Sản phẩm {serial} (Model: {model}) đã được thêm thành công lên server!", "Thêm thành công", ModernMessageBox.MessageBoxType.Info);
@@ -286,6 +611,10 @@ namespace SoncaAudioInspector
                     // Optionally, update the visual AI view product if the user adds it while testing
                     _visualAIView.SetCurrentProduct(product);
                     _audioRoutingView.SetCurrentProduct(product);
+                    
+                    SwitchToTab("QrScan");
+                    _qrScanView?.ShowProductDetails(product, barcodeOrQr);
+                    _qrScanView?.FocusItem(1);
                 }
                 else
                 {
@@ -315,6 +644,7 @@ namespace SoncaAudioInspector
             {
                 _visualAIView.SetCurrentProduct(product);
                 _audioRoutingView.SetCurrentProduct(product);
+                _qrScanView?.ShowProductDetails(product, product.ProductCode ?? serial);
                 string details = $"Thiết bị (Serial: {serial}) đã được kiểm tra trạng thái thành công!";
                 if (!string.IsNullOrWhiteSpace(product?.Model))
                 {
@@ -348,7 +678,12 @@ namespace SoncaAudioInspector
 
         private async Task<ProductInfo?> RequestProductStatusAsync(string serialNumber, string model)
         {
-            return await ServerEngine.CheckProductStatusAsync(serialNumber, model);
+            var product = await ServerEngine.CheckProductStatusAsync(serialNumber, model);
+            if (product == null && ServerEngine.LastError != null && ServerEngine.LastError.Contains("Không tìm thấy"))
+            {
+                product = await ServerEngine.GetProductBySerialAsync(serialNumber);
+            }
+            return product;
         }
 
         private void SwitchToTab(string tabName)
@@ -366,6 +701,9 @@ namespace SoncaAudioInspector
                 BtnTabVisualAI.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122)); // muted zinc-500
                 BtnTabVisualAI.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42)); // zinc-800
                 BtnTabVisualAI.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17)); // Darker
+                BtnScanQr.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
+                BtnScanQr.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
+                BtnScanQr.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
             }
             else if (tabName == "VisualAI")
             {
@@ -380,6 +718,31 @@ namespace SoncaAudioInspector
                 BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122)); // muted zinc-500
                 BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42)); // zinc-800
                 BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
+                BtnScanQr.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
+                BtnScanQr.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
+                BtnScanQr.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
+            }
+            else if (tabName == "QrScan")
+            {
+                if (_qrScanView == null)
+                {
+                    _qrScanView = new QrScanWindow(GetItemSlotsForModel(ComboModels.SelectedItem?.ToString()));
+                    _qrScanView.ScanCompleted += QrScanView_ScanCompleted;
+                    _qrScanView.AddItemRequested += QrScanView_AddItemRequested;
+                    _qrScanView.ShowProductDetails(ServerEngine.CurrentProduct, ServerEngine.CurrentProduct?.ProductCode);
+                    UpdateQrBarcode();
+                }
+                MainContentArea.Content = _qrScanView;
+
+                BtnScanQr.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(167, 139, 250));
+                BtnScanQr.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(139, 92, 246));
+                BtnScanQr.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
+                BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
+                BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
+                BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
+                BtnTabVisualAI.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
+                BtnTabVisualAI.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
+                BtnTabVisualAI.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
             }
         }
 
@@ -428,6 +791,32 @@ namespace SoncaAudioInspector
         private void BtnCloseApp_Click(object sender, RoutedEventArgs e)
         {
             this.Close();
+        }
+
+        private void Window_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton == MouseButton.Left)
+            {
+                DependencyObject dep = (DependencyObject)e.OriginalSource;
+                while (dep != null)
+                {
+                    if (dep is System.Windows.Controls.Primitives.ButtonBase || 
+                        dep is System.Windows.Controls.TextBox || 
+                        dep is System.Windows.Controls.ComboBox)
+                    {
+                        return;
+                    }
+                    if (dep is System.Windows.Media.Visual)
+                    {
+                        dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+                    }
+                    else
+                    {
+                        dep = System.Windows.LogicalTreeHelper.GetParent(dep);
+                    }
+                }
+                this.DragMove();
+            }
         }
 
         protected override void OnClosing(System.ComponentModel.CancelEventArgs e)

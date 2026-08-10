@@ -8,7 +8,8 @@
         WindowStyle="None"
         ResizeMode="NoResize"
         Background="Transparent"
-        AllowsTransparency="True">
+        AllowsTransparency="True"
+        Icon="pack://application:,,,/Assets/app_icon.ico">
     
     <Border Background="#0F0F11" 
             CornerRadius="10" 
@@ -83,3 +84,4 @@
         </Grid>
     </Border>
 </Window>
+
