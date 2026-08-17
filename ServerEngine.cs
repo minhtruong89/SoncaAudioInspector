@@ -25,6 +25,7 @@ namespace SoncaAudioInspector
         private const string RegistryPath = @"Software\SoncaAudioInspector\Auth";
         private const string AppSessionValueName = "AppSession";
         private const string RememberedLoginValueName = "RememberedLogin";
+        private const string DeviceIdValueName = "DeviceId";
 
         private static readonly HttpClient Client = new(new SocketsHttpHandler
         {
@@ -109,7 +110,11 @@ namespace SoncaAudioInspector
 
             try
             {
-                LoginRequest requestBody = new(account.Trim(), password);
+                LoginRequest requestBody = new(
+                    account.Trim(),
+                    password,
+                    GetOrCreateDeviceId(),
+                    GetStableDeviceName());
                 bool appRetried = false;
 
                 while (true)
@@ -1280,6 +1285,25 @@ namespace SoncaAudioInspector
             }
         }
 
+        private static string GetOrCreateDeviceId()
+        {
+            string? stored = ReadProtectedRegistryValue<string>(DeviceIdValueName);
+            if (Guid.TryParse(stored, out Guid existing))
+            {
+                return existing.ToString("D").ToLowerInvariant();
+            }
+
+            string created = Guid.NewGuid().ToString("D").ToLowerInvariant();
+            WriteProtectedRegistryValue(DeviceIdValueName, created);
+            return created;
+        }
+
+        private static string GetStableDeviceName()
+        {
+            string name = Environment.MachineName?.Trim() ?? string.Empty;
+            return string.IsNullOrWhiteSpace(name) ? "Windows PC" : name[..Math.Min(name.Length, 160)];
+        }
+
         public static void WriteVisualQaClientLog(string message)
         {
             WriteVisualQaLogLine($"{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)} | server={CurrentApiBaseUrl} | event={message}");
@@ -1367,7 +1391,7 @@ namespace SoncaAudioInspector
         private sealed record AppSessionData(string AppApiKey, DateTimeOffset ExpiresAtUtc);
         private sealed record VerifyAppRequest(string Email, string Password);
         private sealed record VerifyAppData(string AppApiKey, int ExpiresIn);
-        private sealed record LoginRequest(string Email, string Password);
+        private sealed record LoginRequest(string Email, string Password, string DeviceId, string DeviceName);
         private sealed record RefreshRequest(string RefreshToken);
         private sealed record RefreshData(string AccessToken, string? RefreshToken);
         private sealed record ApiError(string Code, string Message);
