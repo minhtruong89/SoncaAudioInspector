@@ -10,7 +10,8 @@
         Background="#0F0F11"
         AllowsTransparency="True"
         BorderThickness="1"
-        BorderBrush="#27272A">
+        BorderBrush="#27272A"
+        Icon="pack://application:,,,/Assets/app_icon.ico">
     
     <Window.Resources>
         <!-- Custom text box style -->
@@ -156,7 +157,7 @@
                             Visibility="Collapsed"/>
 
                 <CheckBox x:Name="ChkRememberLogin"
-                          Content="Ghi nhớ đăng nhập trên máy này"
+                          Content="Ghi nhớ mật khẩu trên máy này"
                           Foreground="#A1A1AA"
                           FontSize="12"
                           Margin="0,0,0,4"/>
@@ -211,3 +212,4 @@
         </Grid>
     </Border>
 </Window>
+

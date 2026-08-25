@@ -4,9 +4,9 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="System Pre-check" Height="460" Width="520"
+        Title="System Pre-check"  Height="460" Width="520"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen" Icon="pack://application:,,,/Assets/app_icon.ico">
 
     <Border Background="#0E0E10" CornerRadius="12" BorderBrush="#27272A" BorderThickness="1.5">
         <Grid Margin="30">
@@ -155,3 +155,4 @@
         </Grid>
     </Border>
 </Window>
+

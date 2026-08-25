@@ -1,0 +1,25 @@
+{
+  "driveOwnerEmail": "hain1974211@gmail.com",
+  "items": [
+    {
+      "componentType": "POWER_AMPLIFIER",
+      "name": "Bo công suất",
+      "sourceFile": "shopping (1).webp"
+    },
+    {
+      "componentType": "POWER_SUPPLY",
+      "name": "Bo nguồn",
+      "sourceFile": "shopping.webp"
+    },
+    {
+      "componentType": "BASS_SPEAKER",
+      "name": "Loa bass",
+      "sourceFile": "shopping (2).webp"
+    },
+    {
+      "componentType": "MID_SPEAKER",
+      "name": "Loa mid",
+      "sourceFile": "shopping (3).webp"
+    }
+  ]
+}

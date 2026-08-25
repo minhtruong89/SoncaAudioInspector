@@ -87,8 +87,6 @@ namespace SoncaAudioInspector
                 LblStatus.Text = $"Đăng nhập thành công! {ServerEngine.UserName} ({ServerEngine.UserRole})";
                 LblStatus.Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129)); // emerald-500
 
-                await Task.Delay(1000); // Visual delay for success confirmation
-
                 // Instantiate and open MainWindow
                 MainWindow main = new MainWindow();
                 App.Current.MainWindow = main;

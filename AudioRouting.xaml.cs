@@ -17,20 +17,20 @@ namespace SoncaAudioInspector
 {
     public partial class AudioRouting : UserControl
     {
-        private AudioEngine _audioEngine;
-        private TestRunner _testRunner;
+        private AudioEngine _audioEngine = null!;
+        private TestRunner _testRunner = null!;
 
         private List<double> _freqs = new List<double>();
         private List<double> _dbValues = new List<double>();
 
-        private InOutConfig _activeInOutConfig;
+        private InOutConfig _activeInOutConfig = null!;
         private List<AutoTestCaseItem> _autoTestCases = new List<AutoTestCaseItem>();
         private bool _isExecutingAutoSuite = false;
-        private string _autoTestSessionFolder = null;
+        private string? _autoTestSessionFolder;
         private readonly List<string> _autoTestGraphPaths = new List<string>();
-        private AutoTestCaseItem _currentRunningTestCase = null;
+        private AutoTestCaseItem? _currentRunningTestCase;
         private bool? _currentTestSuccess = null;
-        private Dictionary<double, double> _standardCurve = null;
+        private Dictionary<double, double>? _standardCurve;
 
         public AudioRouting()
         {
@@ -357,7 +357,7 @@ namespace SoncaAudioInspector
             }
         }
 
-        public bool ApplyModelDevices(InOutConfig inOutConfig, out string missingMessage)
+        public bool ApplyModelDevices(InOutConfig inOutConfig, out string? missingMessage)
         {
             _activeInOutConfig = inOutConfig;
             var inputs = inOutConfig?.Devices?.Input ?? new Dictionary<string, string>();
@@ -817,6 +817,15 @@ namespace SoncaAudioInspector
             var playbackDevice = RadioUsbPlayback.IsChecked == true ? usbDevice : btDevice;
             var recordingDevice = (ComboRecording.SelectedItem as DeviceItem)?.Device;
 
+            if (playbackDevice is null || recordingDevice is null)
+            {
+                ModernMessageBox.Show(Window.GetWindow(this)!, "Chưa chọn đủ thiết bị phát và thu âm.", "Thiếu thiết bị", ModernMessageBox.MessageBoxType.Warning);
+                BtnStart.IsEnabled = true;
+                BtnSaveStandardReference.IsEnabled = true;
+                BtnNoiseTest.IsEnabled = true;
+                return;
+            }
+
             await _testRunner.RunTestAsync(playbackDevice, recordingDevice);
         }
 
@@ -847,6 +856,15 @@ namespace SoncaAudioInspector
             var btDevice = (ComboBluetooth.SelectedItem as DeviceItem)?.Device;
             var playbackDevice = RadioUsbPlayback.IsChecked == true ? usbDevice : btDevice;
             var recordingDevice = (ComboRecording.SelectedItem as DeviceItem)?.Device;
+
+            if (playbackDevice is null || recordingDevice is null)
+            {
+                ModernMessageBox.Show(Window.GetWindow(this)!, "Chưa chọn đủ thiết bị phát và thu âm.", "Thiếu thiết bị", ModernMessageBox.MessageBoxType.Warning);
+                BtnStart.IsEnabled = true;
+                BtnSaveStandardReference.IsEnabled = true;
+                BtnNoiseTest.IsEnabled = true;
+                return;
+            }
 
             await _testRunner.RunNoiseTestAsync(playbackDevice, recordingDevice);
 
@@ -1035,6 +1053,7 @@ namespace SoncaAudioInspector
 
             _isExecutingAutoSuite = true;
             bool suitePassed = true;
+            bool devicesReadyForServerUpload = true;
 
             foreach (var test in _autoTestCases)
             {
@@ -1046,9 +1065,11 @@ namespace SoncaAudioInspector
                 test.ThdBrush = new WpfSolidColorBrush(WpfColor.FromRgb(113, 113, 122));
             }
 
-            foreach (var test in _autoTestCases)
+            for (int testIndex = 0; testIndex < _autoTestCases.Count; testIndex++)
             {
+                var test = _autoTestCases[testIndex];
                 if (!_isExecutingAutoSuite) break;
+                string autoTestId = BuildAutoTestId(testIndex);
 
                 _currentRunningTestCase = test;
                 _currentTestSuccess = null;
@@ -1077,11 +1098,11 @@ namespace SoncaAudioInspector
                     if (!_isExecutingAutoSuite) break;
 
                     string playbackConfigKey = test.Config.PlaybackOut; // e.g. "SoundCard"
-                    string playbackDeviceName = "";
+                    string? playbackDeviceName = "";
                     _activeInOutConfig.Devices.Input?.TryGetValue(playbackConfigKey, out playbackDeviceName);
 
                     string recordingConfigKey = test.Config.RecordingIn; // e.g. "6.5 Jack"
-                    string recordingDeviceName = "";
+                    string? recordingDeviceName = "";
                     _activeInOutConfig.Devices.Output?.TryGetValue(recordingConfigKey, out recordingDeviceName);
 
                     var currentPlaybacks = _audioEngine.GetPlaybackDevices();
@@ -1150,6 +1171,7 @@ namespace SoncaAudioInspector
                         bool retry = ModernMessageBox.ShowRetryCancelWithAutoPoll(Window.GetWindow(this), msg, title, checkDevices, out cancelPressed);
                         if (cancelPressed)
                         {
+                            devicesReadyForServerUpload = false;
                             _isExecutingAutoSuite = false;
                             break;
                         }
@@ -1175,17 +1197,18 @@ namespace SoncaAudioInspector
                 TxtThdStatus.Text = "";
                 BorderVerdict.Background = new WpfSolidColorBrush(WpfColor.FromRgb(24, 24, 27));
                 BorderVerdict.BorderBrush = new WpfSolidColorBrush(WpfColor.FromRgb(39, 39, 42));
-                LblVerdict.Text = $"TESTING {test.Id}...";
+                LblVerdict.Text = $"TESTING {autoTestId}...";
                 LblVerdict.Foreground = new WpfSolidColorBrush(WpfColor.FromRgb(250, 204, 21));
 
                 // Update limits in runner
                 _testRunner.FreqResponseToleranceDb = ParseDoubleSafe(TxtFreqTolerance.Text, 3.0);
                 _testRunner.ThdLimitPercent = ParseDoubleSafe(TxtThdLimit.Text, 0.5);
 
-                _testRunner.IsRubBuzzTest = test.Config.RubBuzzTestFreq.HasValue;
-                if (_testRunner.IsRubBuzzTest)
+                double? rubBuzzTestFrequency = test.Config.RubBuzzTestFreq;
+                _testRunner.IsRubBuzzTest = rubBuzzTestFrequency.HasValue;
+                if (rubBuzzTestFrequency.HasValue)
                 {
-                    _testRunner.RubBuzzTestFreq = test.Config.RubBuzzTestFreq.Value;
+                    _testRunner.RubBuzzTestFreq = rubBuzzTestFrequency.Value;
                     _testRunner.RubBuzzLimit = test.Config.RubBuzzLimit ?? 1.5;
                 }
 
@@ -1196,6 +1219,14 @@ namespace SoncaAudioInspector
                 var btDev = (ComboBluetooth.SelectedItem as DeviceItem)?.Device;
                 var playbackDevice = RadioUsbPlayback.IsChecked == true ? usbDev : btDev;
                 var recordingDevice = (ComboRecording.SelectedItem as DeviceItem)?.Device;
+                if (playbackDevice == null || recordingDevice == null)
+                {
+                    devicesReadyForServerUpload = false;
+                    suitePassed = false;
+                    test.Status = "FAIL";
+                    test.StatusBrush = new WpfSolidColorBrush(WpfColor.FromRgb(248, 113, 113));
+                    continue;
+                }
 
                 await _testRunner.RunTestAsync(playbackDevice, recordingDevice, runFeqThreeTimes: true);
 
@@ -1208,13 +1239,14 @@ namespace SoncaAudioInspector
 
                 if (!testPassed || AudioEngine.flagExportImageAutoLine)
                 {
-                    SaveFailureScreenshots(test.Name ?? "UNKNOWN_STEP", forceAlways: AudioEngine.flagExportImageAutoLine);
+                    SaveFailureScreenshots(autoTestId, forceAlways: AudioEngine.flagExportImageAutoLine);
                 }
 
                 test.Status = testPassed ? "PASS" : "FAIL";
                 test.StatusBrush = testPassed ? new WpfSolidColorBrush(WpfColor.FromRgb(52, 211, 153)) : new WpfSolidColorBrush(WpfColor.FromRgb(248, 113, 113));
             }
 
+            string? completedAutoTestSessionFolder = _autoTestSessionFolder;
             _isExecutingAutoSuite = false;
             _autoTestSessionFolder = null;
             _currentRunningTestCase = null;
@@ -1228,6 +1260,13 @@ namespace SoncaAudioInspector
 
             if (ChkSendToServer.IsChecked == true && ServerEngine.CurrentProduct != null)
             {
+                if (!suitePassed && !devicesReadyForServerUpload)
+                {
+                    AppendLog("Server", "Skipped FAIL upload because not all configured audio devices were connected.");
+                    ModernMessageBox.Show(Window.GetWindow(this), "Không upload FAIL lên server vì chưa kết nối đủ thiết bị audio theo cấu hình.", "Bỏ qua upload", ModernMessageBox.MessageBoxType.Warning);
+                    return;
+                }
+
                 EnsureRealisticSampleGraphPlots();
 
                 string finalTimestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
@@ -1255,9 +1294,24 @@ namespace SoncaAudioInspector
                 var finalTwoGraphPaths = new List<string>();
                 if (System.IO.File.Exists(feqPath)) finalTwoGraphPaths.Add(feqPath);
                 if (System.IO.File.Exists(thdPath)) finalTwoGraphPaths.Add(thdPath);
-
-                var uploadedSteps = _autoTestCases.Select(test =>
+                var uploadGraphPaths = _autoTestGraphPaths
+                    .Where(System.IO.File.Exists)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (uploadGraphPaths.Count == 0)
                 {
+                    foreach (string finalGraphPath in finalTwoGraphPaths)
+                    {
+                        if (!uploadGraphPaths.Contains(finalGraphPath, StringComparer.OrdinalIgnoreCase))
+                        {
+                            uploadGraphPaths.Add(finalGraphPath);
+                        }
+                    }
+                }
+
+                var uploadedSteps = _autoTestCases.Select((test, index) =>
+                {
+                    string autoTestId = BuildAutoTestId(index);
                     string pbOut = !string.IsNullOrEmpty(test.Config?.PlaybackOut) ? test.Config.PlaybackOut : "Line In 3.5mm";
                     string recIn = !string.IsNullOrEmpty(test.Config?.RecordingIn) ? test.Config.RecordingIn : "Measurement Mic";
                     double vol = test.Config?.PlaybackVolume ?? 100;
@@ -1273,7 +1327,7 @@ namespace SoncaAudioInspector
                                        $"THD Limit: {thdLim:F1}";
 
                     return new ServerEngine.AudioQaStepResult(
-                        test.Name,
+                        $"{autoTestId} - {test.Name}",
                         test.Status,
                         detailStr);
                 });
@@ -1282,7 +1336,9 @@ namespace SoncaAudioInspector
                     ServerEngine.CurrentProduct,
                     suitePassed,
                     uploadedSteps,
-                    finalTwoGraphPaths);
+                    uploadGraphPaths,
+                    devicesReadyForServerUpload,
+                    System.IO.Path.GetFileName(completedAutoTestSessionFolder ?? targetDir));
 
                 if (!uploaded)
                 {
@@ -1438,6 +1494,27 @@ namespace SoncaAudioInspector
             return System.IO.Path.Combine(GetStandardsDirectory(), $"standard_{key}.csv");
         }
 
+        private static string MakeSafeFileToken(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return "UNKNOWN";
+            }
+
+            string safe = value.Trim();
+            foreach (char c in System.IO.Path.GetInvalidFileNameChars())
+            {
+                safe = safe.Replace(c, '_');
+            }
+            safe = safe.Replace(' ', '_');
+            return safe;
+        }
+
+        private static string BuildAutoTestId(int zeroBasedIndex)
+        {
+            return $"AC{zeroBasedIndex + 1:000}";
+        }
+
         private void SaveFailureScreenshots(string stepName, bool forceAlways = false)
         {
             string serialNumber = (Application.Current.MainWindow as MainWindow)?.TxtSerialNumber?.Text?.Trim() ?? "UNKNOWN_SERIAL";
@@ -1452,11 +1529,7 @@ namespace SoncaAudioInspector
                 selectedModel = "UNKNOWN_MODEL";
             }
 
-            foreach (char c in System.IO.Path.GetInvalidFileNameChars())
-            {
-                stepName = stepName.Replace(c, '_');
-            }
-            stepName = stepName.Replace(' ', '_');
+            stepName = MakeSafeFileToken(stepName);
 
             string targetDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "fail data");
             if (_isExecutingAutoSuite && !string.IsNullOrEmpty(_autoTestSessionFolder))
@@ -1483,8 +1556,8 @@ namespace SoncaAudioInspector
             // Check for FEQ failure or force always (skip if it's a Rub & Buzz test)
             if (!_testRunner.IsRubBuzzTest && (forceAlways || !_testRunner.BassPassed || !_testRunner.MidPassed || !_testRunner.TreblePassed))
             {
-                string label = (forceAlways && _testRunner.BassPassed && _testRunner.MidPassed && _testRunner.TreblePassed) ? "AUTO" : "FEQ";
-                string filename = $"{serialNumber}_{selectedModel}_{timestamp}_{label}_{stepName}.png";
+                string label = "FRA";
+                string filename = $"{label}-{stepName}.png";
                 string fullPath = System.IO.Path.Combine(targetDir, filename);
                 try
                 {
@@ -1504,12 +1577,12 @@ namespace SoncaAudioInspector
             // Check for THD failure or force always
             if (forceAlways || !_testRunner.ThdPassed)
             {
-                string label = (forceAlways && _testRunner.ThdPassed) ? "AUTO_THD" : "THD";
+                string label = "THD";
                 if (_testRunner.IsRubBuzzTest)
                 {
-                    label = (forceAlways && _testRunner.ThdPassed) ? "AUTO_RUBBUZZ" : "RUBBUZZ";
+                    label = "RUBBUZZ";
                 }
-                string filename = $"{serialNumber}_{selectedModel}_{timestamp}_{label}_{stepName}.png";
+                string filename = $"{label}-{stepName}.png";
                 string fullPath = System.IO.Path.Combine(targetDir, filename);
                 try
                 {
@@ -1536,7 +1609,7 @@ namespace SoncaAudioInspector
                 if (!string.IsNullOrEmpty(key))
                 {
                     string standardsDir = GetStandardsDirectory();
-                    string filePath = null;
+                    string? filePath = null;
 
                     if (System.IO.Directory.Exists(standardsDir))
                     {
@@ -1755,7 +1828,7 @@ namespace SoncaAudioInspector
 
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
-        public TestConfig Config { get; set; }
+        public TestConfig Config { get; set; } = new TestConfig();
 
         public string Status
         {
@@ -1817,7 +1890,7 @@ namespace SoncaAudioInspector
             }
         }
 
-        public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged(string name)
         {
             PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));

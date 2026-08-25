@@ -5,8 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SoncaAudioInspector"
         mc:Ignorable="d"
-        Title="Sonca Audio Inspector" Height="780" Width="1200"
-        Background="#0E0E10" Foreground="#E4E4E7" WindowStartupLocation="CenterScreen">
+        Title="Sonca Audio Inspector"  Height="780" Width="1200"
+        Background="#0E0E10" Foreground="#E4E4E7" WindowStartupLocation="CenterScreen"
+        WindowStyle="None" AllowsTransparency="True" Icon="pack://application:,,,/Assets/app_icon.ico"
+        MouseDown="Window_MouseDown">
     
     <Grid>
         <Grid.RowDefinitions>
@@ -87,6 +89,7 @@
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Name="BtnTabAudioRouting" Content="Audio Routing" Style="{StaticResource TabButtonStyle}" Click="BtnTabAudioRouting_Click"/>
                         <Button Name="BtnTabVisualAI" Content="Ngoại Quan AI" Style="{StaticResource TabButtonStyle}" Margin="10,0,0,0" Click="BtnTabVisualAI_Click"/>
+                        <Button Name="BtnScanQr" Content="Quét Barcode" Style="{StaticResource TabButtonStyle}" Click="BtnScanQr_Click" Margin="10,0,0,0" ToolTip="Mở khu vực quét barcode và đồng bộ item lên server"/>
                     </StackPanel>
 
                     <!-- Serial Number & Model Inputs (Right side) -->
@@ -95,17 +98,9 @@
                         <ComboBox Name="ComboModels" Width="130" Height="28" Style="{StaticResource DarkComboBoxStyle}" VerticalAlignment="Center" Margin="0,0,20,0" SelectionChanged="ComboModels_SelectionChanged"/>
 
                         <TextBlock Text="Serial Number:" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <TextBox Name="TxtSerialNumber" Width="180" Height="28" Background="#18181B" BorderBrush="#3F3F46" Foreground="White" Padding="6,2" VerticalAlignment="Center" Text="DEFAULT-00001"/>
-                        
-                        <Button Name="BtnScan" Content="Scan" Click="BtnScan_Click" Background="#27272A" Foreground="White" BorderThickness="0" FontSize="12" Padding="12,4" Height="28" Cursor="Hand" Margin="6,0,0,0">
-                            <Button.Resources>
-                                <Style TargetType="Border">
-                                    <Setter Property="CornerRadius" Value="4"/>
-                                </Style>
-                            </Button.Resources>
-                        </Button>
+                        <TextBox Name="TxtSerialNumber" Width="180" Height="28" Background="#18181B" BorderBrush="#3F3F46" Foreground="White" Padding="6,2" VerticalAlignment="Center" Text="" LostFocus="TxtSerialNumber_LostFocus" TextChanged="TxtSerialNumber_TextChanged" KeyDown="TxtSerialNumber_KeyDown"/>
 
-                        <Button Name="BtnAddProduct" Content="Add Product" Click="BtnAddProduct_Click" Background="#10B981" Foreground="White" BorderThickness="0" FontSize="12" Padding="12,4" Height="28" Cursor="Hand" Margin="6,0,0,0">
+                        <Button Name="BtnAddProduct" Content="Add Product" Click="BtnAddProduct_Click" Background="#10B981" Foreground="Black" BorderThickness="0" FontSize="12" Padding="12,4" Height="28" Cursor="Hand" Margin="6,0,0,0">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="4"/>
@@ -129,3 +124,4 @@
         <ContentControl Name="MainContentArea" Grid.Row="1"/>
     </Grid>
 </Window>
+

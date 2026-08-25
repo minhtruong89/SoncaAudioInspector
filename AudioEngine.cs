@@ -20,9 +20,9 @@ namespace SoncaAudioInspector
         public static bool flagExportImageAutoLine = true; // // TODO TEST
 
         private MMDeviceEnumerator _enumerator;
-        private WasapiOut _wasapiOut;
-        private WasapiCapture _wasapiCapture;
-        private SignalSampleProvider _signalProvider;
+        private WasapiOut? _wasapiOut;
+        private WasapiCapture? _wasapiCapture;
+        private SignalSampleProvider? _signalProvider;
         private List<float> _recordedSamples;
         private object _lock = new object();    
 
@@ -47,7 +47,7 @@ namespace SoncaAudioInspector
             return _enumerator.EnumerateAudioEndPoints(DataFlow.Capture, DeviceState.Active).ToList();
         }
 
-        public MMDevice AutoDetectPlaybackDevice()
+        public MMDevice? AutoDetectPlaybackDevice()
         {
             var devices = GetPlaybackDevices();
             return devices.FirstOrDefault(d => 
@@ -55,7 +55,7 @@ namespace SoncaAudioInspector
                 d.FriendlyName.IndexOf("MI_SAM", StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
-        public MMDevice AutoDetectRecordingDevice()
+        public MMDevice? AutoDetectRecordingDevice()
         {
             var devices = GetRecordingDevices();
             return devices.FirstOrDefault(d => 
@@ -71,7 +71,7 @@ namespace SoncaAudioInspector
             SignalType signalType, 
             double frequency, 
             double durationSeconds,
-            Action<float[]> realTimeRecordedCallback = null,
+            Action<float[]>? realTimeRecordedCallback = null,
             bool forceSaveFiles = false)
         {
             Stop();
@@ -80,8 +80,6 @@ namespace SoncaAudioInspector
             _recordedSamples.Clear();
 
             int sampleRate = 48000; // Standard professional audio sample rate
-            int channels = 1;
-
             // Setup recording (using event sync with 150ms latency buffer)
             _wasapiCapture = new WasapiCapture(recordingDevice, true, 150);
             // Use the actual device format (usually 2 channels, 48000Hz) to prevent Windows shared mode resampler bugs
@@ -149,7 +147,7 @@ namespace SoncaAudioInspector
             };
 
             // Setup playback and played audio tracking for testing
-            List<float> playedSamplesList = flagSaveFile ? new List<float>() : null;
+            List<float>? playedSamplesList = flagSaveFile ? new List<float>() : null;
             
             _signalProvider = new SignalSampleProvider(sampleRate, signalType, frequency, PlaybackVolume, samples =>
             {
@@ -223,9 +221,6 @@ namespace SoncaAudioInspector
             Stop();
 
             _recordedSamples.Clear();
-
-            int sampleRate = 48000;
-            int channels = 1;
 
             // Setup recording (using event sync with 150ms latency buffer)
             _wasapiCapture = new WasapiCapture(recordingDevice, true, 150);
@@ -379,7 +374,7 @@ namespace SoncaAudioInspector
         private double _frequency;
         private double _phase;
         private readonly double _volume;
-        private readonly Action<float[]> _onSamplesGenerated;
+        private readonly Action<float[]>? _onSamplesGenerated;
         private readonly WaveFormat _waveFormat;
         private Random _random = new Random();
 
@@ -390,7 +385,7 @@ namespace SoncaAudioInspector
         private readonly double[] _multitoneFrequencies;
         private readonly double[] _multitonePhases;
 
-        public SignalSampleProvider(int sampleRate, SignalType type, double frequency, double volume, Action<float[]> onSamplesGenerated = null)
+        public SignalSampleProvider(int sampleRate, SignalType type, double frequency, double volume, Action<float[]>? onSamplesGenerated = null)
         {
             _sampleRate = sampleRate;
             _type = type;
@@ -412,7 +407,7 @@ namespace SoncaAudioInspector
         public int Read(float[] buffer, int offset, int count)
         {
             double samplePeriod = 1.0 / _sampleRate;
-            float[] tempTrack = _onSamplesGenerated != null ? new float[count] : null;
+            float[]? tempTrack = _onSamplesGenerated != null ? new float[count] : null;
 
             for (int i = 0; i < count; i++)
             {

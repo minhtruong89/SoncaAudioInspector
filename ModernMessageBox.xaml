@@ -8,7 +8,8 @@
         WindowStyle="None"
         ResizeMode="NoResize"
         Background="Transparent"
-        AllowsTransparency="True">
+        AllowsTransparency="True"
+        Icon="pack://application:,,,/Assets/app_icon.ico">
     
     <Border Background="#0F0F11" 
             CornerRadius="10" 
@@ -67,6 +68,7 @@
                 <Button Name="BtnYes" 
                         Content="Đồng ý" 
                         Click="BtnYes_Click"
+                        IsDefault="True"
                         Background="#10B981"
                         Foreground="Black"
                         BorderThickness="0"
@@ -83,3 +85,4 @@
         </Grid>
     </Border>
 </Window>
+

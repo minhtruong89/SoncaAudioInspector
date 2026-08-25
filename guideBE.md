@@ -149,7 +149,7 @@ Body: account/password của staff
 Test remembered password:
 
 1. Login bằng tài khoản staff.
-2. Tick `Ghi nhớ đăng nhập trên máy này`.
+2. Tick `Ghi nhớ mật khẩu trên máy này`.
 3. Đăng nhập thành công.
 4. Đóng app, mở lại.
 5. LoginWindow phải tự điền account/password và tick checkbox.
@@ -171,9 +171,11 @@ Kết quả đúng:
 Test clear remembered password:
 
 1. Mở app.
-2. Bỏ tick `Ghi nhớ đăng nhập trên máy này`.
+2. Bỏ tick `Ghi nhớ mật khẩu trên máy này`.
 3. Login thành công.
 4. App xóa `RememberedLogin`.
+
+Nút `Đăng xuất` cũng xóa `RememberedLogin`. Đóng ứng dụng bằng nút thoát chỉ thu hồi phiên đăng nhập và giữ thông tin đã ghi nhớ để lần mở sau tự điền lại.
 
 Kiểm tra:
 
@@ -671,3 +673,7 @@ if (Test-Path "HKCU:\Software\SoncaAudioInspector\Auth") {
 }
 dotnet run
 ```
+# BOM theo model và danh mục Items
+
+Quy ước import mới, tiền tố barcode, hai file Excel và link ảnh Google Drive được mô tả tại `BOM_ITEMS_GUIDE.md`.
+BOM không còn đăng ký từng `BOM_00x`; App tạo sản phẩm khi quét barcode thực tế và áp dụng BOM theo model.
