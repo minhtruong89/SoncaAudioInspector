@@ -76,6 +76,16 @@ function Publish-Portable {
         }
     }
 
+    $forbiddenPublishFiles = Get-ChildItem -LiteralPath $publishPath -Recurse -File | Where-Object {
+        $_.Extension -in @(".cs", ".pdb", ".sln", ".csproj", ".user") -or
+        $_.Name -in @("verify.txt", ".env", "scratch_transcript.txt") -or
+        $_.FullName -match "[\\/]\.git([\\/]|$)"
+    }
+    if ($forbiddenPublishFiles) {
+        $forbiddenList = ($forbiddenPublishFiles.FullName -join [Environment]::NewLine)
+        throw "Publish $rid chứa file không được phép phát hành:`n$forbiddenList"
+    }
+
     if ($TargetArchitecture -eq "x86") {
         $x64OnlyFiles = @(
             (Join-Path $publishPath "onnxruntime.dll"),
@@ -91,8 +101,12 @@ function Publish-Portable {
 
     Compress-Archive -Path (Join-Path $publishPath "*") -DestinationPath $archivePath -CompressionLevel Optimal
     $archive = Get-Item -LiteralPath $archivePath
+    $archiveHash = Get-FileHash -LiteralPath $archivePath -Algorithm SHA256
+    $checksumPath = "$archivePath.sha256"
+    "$($archiveHash.Hash.ToLowerInvariant())  $($archive.Name)" | Set-Content -LiteralPath $checksumPath -Encoding ascii
     Write-Host "Portable package: $($archive.FullName)"
     Write-Host "Archive size: $([Math]::Round($archive.Length / 1MB, 1)) MB"
+    Write-Host "SHA-256: $($archiveHash.Hash.ToLowerInvariant())"
 }
 
 $targets = if ($Architecture -eq "all") { @("x64", "x86") } else { @($Architecture) }

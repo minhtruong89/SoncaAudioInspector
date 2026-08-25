@@ -157,7 +157,7 @@
                             Visibility="Collapsed"/>
 
                 <CheckBox x:Name="ChkRememberLogin"
-                          Content="Ghi nhớ đăng nhập trên máy này"
+                          Content="Ghi nhớ mật khẩu trên máy này"
                           Foreground="#A1A1AA"
                           FontSize="12"
                           Margin="0,0,0,4"/>

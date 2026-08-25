@@ -15,7 +15,6 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32;
-using Windows.Devices.Geolocation;
 
 namespace SoncaAudioInspector
 {
@@ -25,6 +24,7 @@ namespace SoncaAudioInspector
         private const string RegistryPath = @"Software\SoncaAudioInspector\Auth";
         private const string AppSessionValueName = "AppSession";
         private const string RememberedLoginValueName = "RememberedLogin";
+        private const string DeviceIdValueName = "DeviceId";
 
         private static readonly HttpClient Client = new(new SocketsHttpHandler
         {
@@ -35,7 +35,9 @@ namespace SoncaAudioInspector
             PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2)
         })
         {
-            Timeout = TimeSpan.FromSeconds(20)
+            Timeout = TimeSpan.FromSeconds(20),
+            DefaultRequestVersion = HttpVersion.Version20,
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher
         };
 
         private static readonly SemaphoreSlim VerifyLock = new(1, 1);
@@ -109,7 +111,11 @@ namespace SoncaAudioInspector
 
             try
             {
-                LoginRequest requestBody = new(account.Trim(), password);
+                LoginRequest requestBody = new(
+                    account.Trim(),
+                    password,
+                    GetOrCreateDeviceId(),
+                    GetStableDeviceName());
                 bool appRetried = false;
 
                 while (true)
@@ -122,12 +128,6 @@ namespace SoncaAudioInspector
                     };
                     request.Headers.Add("X-App-Api-Key", AppToken);
                     
-                    string? location = await TryGetLocationQuickAsync();
-                    if (!string.IsNullOrEmpty(location))
-                    {
-                        request.Headers.Add("X-App-Location", location);
-                    }
-
                     using HttpResponseMessage response = await Client.SendAsync(request);
                     string responseJson = await response.Content.ReadAsStringAsync();
 
@@ -215,28 +215,6 @@ namespace SoncaAudioInspector
             }
         }
 
-        private static async Task<string?> TryGetLocationQuickAsync()
-        {
-            try
-            {
-                Task<GeolocationAccessStatus> accessTask = Task.Run(async () => await Geolocator.RequestAccessAsync());
-                Task completedAccessTask = await Task.WhenAny(accessTask, Task.Delay(300));
-                if (completedAccessTask != accessTask || accessTask.Result != GeolocationAccessStatus.Allowed) return null;
-
-                Geolocator geolocator = new Geolocator { DesiredAccuracyInMeters = 50 };
-                Task<Geoposition> positionTask = Task.Run(async () => await geolocator.GetGeopositionAsync(TimeSpan.FromMinutes(5), TimeSpan.FromSeconds(2)));
-                Task completedPositionTask = await Task.WhenAny(positionTask, Task.Delay(700));
-                if (completedPositionTask != positionTask) return null;
-
-                Geoposition pos = positionTask.Result;
-                return $"{pos.Coordinate.Point.Position.Latitude.ToString(CultureInfo.InvariantCulture)}, {pos.Coordinate.Point.Position.Longitude.ToString(CultureInfo.InvariantCulture)}";
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
         public static async Task<bool> RefreshAccessTokenAsync()
         {
             try
@@ -252,16 +230,17 @@ namespace SoncaAudioInspector
             }
         }
 
-        public static async Task LogoutAsync()
+        public static async Task LogoutAsync(
+            CancellationToken cancellationToken = default,
+            bool clearRememberedLogin = false)
         {
             if (!string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(RefreshToken))
             {
                 try
                 {
-                    await EnsureAppApiKeyAsync(forceBootstrap: false);
                     using var request = CreateAuthorizedRequest(HttpMethod.Post, "api/auth/logout");
                     request.Content = JsonContent(new { refreshToken = RefreshToken, sessionId = SessionId });
-                    await Client.SendAsync(request);
+                    using var response = await Client.SendAsync(request, cancellationToken);
                 }
                 catch
                 {
@@ -269,6 +248,10 @@ namespace SoncaAudioInspector
                 }
             }
 
+            if (clearRememberedLogin)
+            {
+                ClearRememberedLogin();
+            }
             ClearStaffSession();
         }
 
@@ -284,7 +267,7 @@ namespace SoncaAudioInspector
 
         public static void SaveRememberedLogin(string account, string password)
         {
-            if (string.IsNullOrWhiteSpace(account) || string.IsNullOrWhiteSpace(password))
+            if (string.IsNullOrWhiteSpace(account) || string.IsNullOrEmpty(password))
             {
                 return;
             }
@@ -334,7 +317,6 @@ namespace SoncaAudioInspector
                     EqualsIgnoreCase(p.ProductCode, serialNumber) ||
                     EqualsIgnoreCase(p.Id, serialNumber));
 
-                product ??= products.FirstOrDefault();
                 CurrentProduct = product;
                 LastError = product is null ? "Không tìm thấy thông tin sản phẩm từ server." : null;
                 return product;
@@ -350,7 +332,7 @@ namespace SoncaAudioInspector
         {
             if (string.IsNullOrWhiteSpace(qrCode))
             {
-                LastError = "Mã QR không được để trống.";
+                LastError = "Barcode không được để trống.";
                 return null;
             }
 
@@ -360,7 +342,7 @@ namespace SoncaAudioInspector
                 JsonElement data = await SendAuthorizedForDataAsync(HttpMethod.Get, endpoint);
                 ProductInfo? product = ProductInfo.FromApiData(data).FirstOrDefault();
                 CurrentProduct = product;
-                LastError = product is null ? "Không tìm thấy mã QR trên server." : null;
+                LastError = product is null ? "Không tìm thấy barcode trên server." : null;
                 return product;
             }
             catch (Exception ex)
@@ -412,6 +394,208 @@ namespace SoncaAudioInspector
                 CurrentProduct = product;
                 LastError = null;
                 return product;
+            }
+            catch (Exception ex)
+            {
+                LastError = ToUserMessage(ex);
+                return null;
+            }
+        }
+
+        public static async Task<ProductResolveResult?> ResolveProductAsync(string barcode, string serialNumber, string speakerModel)
+        {
+            if (string.IsNullOrWhiteSpace(barcode) || string.IsNullOrWhiteSpace(serialNumber) || string.IsNullOrWhiteSpace(speakerModel))
+            {
+                LastError = "Vui lòng nhập đầy đủ thông tin ID, serial number và model.";
+                return null;
+            }
+
+            try
+            {
+                var body = new
+                {
+                    barcode = barcode.Trim(),
+                    serialNumber = serialNumber.Trim(),
+                    speakerModel = speakerModel.Trim(),
+                    resolve = true
+                };
+                JsonElement data = await SendAuthorizedForDataAsync(HttpMethod.Post, "api/app/products", body);
+                bool isResolveResponse = TryGetProperty(data, "product", out JsonElement productData);
+                if (!isResolveResponse) productData = data;
+
+                ProductInfo? product = ProductInfo.FromApiData(productData).FirstOrDefault();
+                if (product is null)
+                {
+                    throw new InvalidOperationException("Server không trả thông tin sản phẩm hợp lệ.");
+                }
+
+                // Older servers ignore the extra `resolve` field and return the
+                // newly-created product directly. Treat that legacy response as
+                // Created=true so item synchronization can continue normally.
+                bool created = !isResolveResponse
+                    || (TryGetProperty(data, "created", out JsonElement createdData)
+                        && createdData.ValueKind == JsonValueKind.True);
+                BomDefinitionInfo? bom = TryGetProperty(data, "bom", out JsonElement bomData)
+                    && bomData.ValueKind == JsonValueKind.Object
+                    ? JsonSerializer.Deserialize<BomDefinitionInfo>(bomData.GetRawText(), JsonOptions)
+                    : null;
+                CurrentProduct = product;
+                LastError = null;
+                return new ProductResolveResult(product, created, bom);
+            }
+            catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.Conflict
+                && (ex.Message.Contains("đã tồn tại", StringComparison.OrdinalIgnoreCase)
+                    || ex.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase)))
+            {
+                // Older servers answer 409 when the ID already exists instead
+                // of returning the existing product in the resolve response.
+                ProductInfo? existing = await GetProductByQrCodeAsync(barcode);
+                if (existing is not null)
+                {
+                    LastError = null;
+                    return new ProductResolveResult(existing, false, null);
+                }
+
+                LastError = ToUserMessage(ex);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                LastError = ToUserMessage(ex);
+                return null;
+            }
+        }
+
+        public static async Task<bool> RollbackNewProductAsync(ProductInfo product, IEnumerable<string> itemCodes)
+        {
+            if (product is null || string.IsNullOrWhiteSpace(product.Id))
+            {
+                LastError = "Chưa có sản phẩm mới để hủy.";
+                return false;
+            }
+
+            try
+            {
+                var body = new
+                {
+                    productId = product.Id,
+                    itemCodes = itemCodes
+                        .Where(code => !string.IsNullOrWhiteSpace(code))
+                        .Select(code => code.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList(),
+                };
+                await SendAuthorizedForDataAsync(HttpMethod.Delete, "api/app/products", body);
+                if (CurrentProduct?.Id == product.Id) CurrentProduct = null;
+                LastError = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastError = ToUserMessage(ex);
+                return false;
+            }
+        }
+
+        public static async Task<ModelScanLayoutInfo?> GetModelScanLayoutAsync(string speakerModel)
+        {
+            if (string.IsNullOrWhiteSpace(speakerModel)) return null;
+            try
+            {
+                string endpoint = $"api/app/model-layout?speakerModel={Uri.EscapeDataString(speakerModel.Trim())}";
+                JsonElement data = await SendAuthorizedForDataAsync(HttpMethod.Get, endpoint);
+                if (data.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) return null;
+                LastError = null;
+                return JsonSerializer.Deserialize<ModelScanLayoutInfo>(data.GetRawText(), JsonOptions);
+            }
+            catch (Exception ex)
+            {
+                LastError = ToUserMessage(ex);
+                return null;
+            }
+        }
+
+        public static async Task<bool> SaveModelScanLayoutAsync(
+            string speakerModel,
+            IReadOnlyList<ItemSlotConfig> items,
+            bool locked)
+        {
+            if (string.IsNullOrWhiteSpace(speakerModel) || items.Count == 0) return false;
+            try
+            {
+                var body = new
+                {
+                    speakerModel = speakerModel.Trim(),
+                    locked,
+                    items = items.Select(item => new
+                    {
+                        slot = item.slot,
+                        name = item.name,
+                        layoutX = item.layoutX ?? 0,
+                        layoutY = item.layoutY ?? 0,
+                        layoutXRatio = item.layoutXRatio,
+                        layoutYRatio = item.layoutYRatio,
+                        scale = item.scale,
+                        rotation = item.rotation,
+                    }).ToList(),
+                };
+                await SendAuthorizedForDataAsync(HttpMethod.Put, "api/app/model-layout", body);
+                LastError = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastError = ToUserMessage(ex);
+                return false;
+            }
+        }
+
+        public static async Task<BomImportResult?> ImportBomAsync(
+            IReadOnlyList<BomImportRow> bomRows,
+            IReadOnlyList<ItemImportRow> itemRows)
+        {
+            if (bomRows is null || bomRows.Count == 0 || itemRows is null || itemRows.Count == 0)
+            {
+                LastError = "Cần đủ dữ liệu từ cả file BOM_MODELS và file ITEMS.";
+                return null;
+            }
+
+            try
+            {
+                var body = new
+                {
+                    bomRows,
+                    itemRows,
+                    driveOwnerEmail = BomCsvParser.DriveOwnerEmail
+                };
+                JsonElement data = await SendAuthorizedForDataAsync(HttpMethod.Post, "api/app/bom", body);
+                BomImportResult? result = JsonSerializer.Deserialize<BomImportResult>(data.GetRawText(), JsonOptions);
+                LastError = result is null ? "Server không trả kết quả import BOM hợp lệ." : null;
+                return result;
+            }
+            catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+                LastError = "Server production chưa có API import BOM (/api/app/bom). "
+                    + "Cần deploy backend và migration BOM trước khi import.";
+                return null;
+            }
+            catch (Exception ex)
+            {
+                LastError = ToUserMessage(ex);
+                return null;
+            }
+        }
+
+        public static async Task<BomDefinitionInfo?> GetBomDefinitionAsync(string speakerModel)
+        {
+            if (string.IsNullOrWhiteSpace(speakerModel)) return null;
+            try
+            {
+                string endpoint = "api/app/bom?speakerModel=" + Uri.EscapeDataString(speakerModel.Trim());
+                JsonElement data = await SendAuthorizedForDataAsync(HttpMethod.Get, endpoint);
+                BomDefinitionInfo? result = JsonSerializer.Deserialize<BomDefinitionInfo>(data.GetRawText(), JsonOptions);
+                LastError = result is null ? "Không tìm thấy BOM của model." : null;
+                return result;
             }
             catch (Exception ex)
             {
@@ -1280,6 +1464,25 @@ namespace SoncaAudioInspector
             }
         }
 
+        private static string GetOrCreateDeviceId()
+        {
+            string? stored = ReadProtectedRegistryValue<string>(DeviceIdValueName);
+            if (Guid.TryParse(stored, out Guid existing))
+            {
+                return existing.ToString("D").ToLowerInvariant();
+            }
+
+            string created = Guid.NewGuid().ToString("D").ToLowerInvariant();
+            WriteProtectedRegistryValue(DeviceIdValueName, created);
+            return created;
+        }
+
+        private static string GetStableDeviceName()
+        {
+            string name = Environment.MachineName?.Trim() ?? string.Empty;
+            return string.IsNullOrWhiteSpace(name) ? "Windows PC" : name[..Math.Min(name.Length, 160)];
+        }
+
         public static void WriteVisualQaClientLog(string message)
         {
             WriteVisualQaLogLine($"{DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)} | server={CurrentApiBaseUrl} | event={message}");
@@ -1367,7 +1570,7 @@ namespace SoncaAudioInspector
         private sealed record AppSessionData(string AppApiKey, DateTimeOffset ExpiresAtUtc);
         private sealed record VerifyAppRequest(string Email, string Password);
         private sealed record VerifyAppData(string AppApiKey, int ExpiresIn);
-        private sealed record LoginRequest(string Email, string Password);
+        private sealed record LoginRequest(string Email, string Password, string DeviceId, string DeviceName);
         private sealed record RefreshRequest(string RefreshToken);
         private sealed record RefreshData(string AccessToken, string? RefreshToken);
         private sealed record ApiError(string Code, string Message);
@@ -1495,6 +1698,8 @@ namespace SoncaAudioInspector
                     Id = GetString(value, "itemId") ?? GetString(value, "id"),
                     Code = GetString(value, "itemCode") ?? GetString(value, "code"),
                     Name = GetString(value, "name"),
+                    ImageLink = GetString(value, "imageUrl"),
+                    DriveOwnerEmail = GetString(value, "driveOwnerEmail"),
                     SlotIndex = GetInt(value, "slotIndex")
                 })
                 .ToList();
@@ -1549,13 +1754,28 @@ namespace SoncaAudioInspector
         }
     }
 
+    public sealed class ModelScanLayoutInfo
+    {
+        [JsonPropertyName("speakerModel")]
+        public string SpeakerModel { get; set; } = "";
+
+        [JsonPropertyName("assemblyItems")]
+        public List<ItemSlotConfig> Items { get; set; } = new();
+
+        [JsonPropertyName("locked")]
+        public bool Locked { get; set; }
+    }
+
     public sealed class ProductItemInfo
     {
         public string? Id { get; set; }
         public string? Code { get; set; }
         public string? Name { get; set; }
+        public string? ImageLink { get; set; }
+        public string? DriveOwnerEmail { get; set; }
         public int? SlotIndex { get; set; }
     }
 
     public sealed record ProductItemLinkInput(string ItemCode, string Name, int SlotIndex);
+    public sealed record ProductResolveResult(ProductInfo Product, bool Created, BomDefinitionInfo? Bom);
 }

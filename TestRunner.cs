@@ -8,7 +8,7 @@ namespace SoncaAudioInspector
 {
     public class TestStep
     {
-        public string Name { get; set; }
+        public string Name { get; set; } = "";
         public string Status { get; set; } = "Waiting"; // Waiting, Running, Pass, Fail
         public string Details { get; set; } = "";
     }
@@ -65,7 +65,7 @@ namespace SoncaAudioInspector
         // Target limits
         public double FreqResponseToleranceDb { get; set; } = 3.0; // +/- 3dB limit
         public double ThdLimitPercent { get; set; } = 0.5; // THD < 0.5% limit
-        public Dictionary<double, double> StandardCurve { get; set; } = null;
+        public Dictionary<double, double>? StandardCurve { get; set; }
         public double LastMaxDevPercent { get; private set; } = 0;
         public double LastAvgDevPercent { get; private set; } = 0;
         public bool HasComparedToStandard { get; private set; } = false;
@@ -81,14 +81,14 @@ namespace SoncaAudioInspector
         public bool ThdPassed { get; private set; } = true;
 
         // Events for UI notification
-        public event Action<List<TestStep>> OnStepsChanged;
-        public event Action<string, string> OnLogMessage;
-        public event Action<double, double> OnFrequencyResponsePoint; // frequency, dB
-        public event Action<double[], double[], double> OnThdSpectrumReady; // frequencies, magnitudes, thdPercent
-        public event Action<bool> OnTestCompleted;
-        public event Action<string, string> OnTestSubstatusChanged; // type (Freq/THD), details (e.g. "Playing Sweep...")
+        public event Action<List<TestStep>>? OnStepsChanged;
+        public event Action<string, string>? OnLogMessage;
+        public event Action<double, double>? OnFrequencyResponsePoint; // frequency, dB
+        public event Action<double[], double[], double>? OnThdSpectrumReady; // frequencies, magnitudes, thdPercent
+        public event Action<bool>? OnTestCompleted;
+        public event Action<string, string>? OnTestSubstatusChanged; // type (Freq/THD), details (e.g. "Playing Sweep...")
 
-        private List<TestStep> _steps;
+        private List<TestStep> _steps = new List<TestStep>();
         public IReadOnlyList<TestStep> Steps => _steps;
         private bool _isCancelled = false;
 
@@ -330,10 +330,11 @@ namespace SoncaAudioInspector
                     if (kvp.Key >= 50 && kvp.Key <= 15000)
                     {
                         double targetDb = 0;
-                        bool hasStandard = StandardCurve != null && StandardCurve.Count > 0;
-                        if (hasStandard && StandardCurve.ContainsKey(kvp.Key))
+                        Dictionary<double, double>? standardCurve = StandardCurve;
+                        bool hasStandard = standardCurve is { Count: > 0 };
+                        if (hasStandard && standardCurve!.ContainsKey(kvp.Key))
                         {
-                            targetDb = StandardCurve[kvp.Key];
+                            targetDb = standardCurve![kvp.Key];
                         }
 
                         double absoluteDev = Math.Abs(normDb - targetDb);
@@ -518,7 +519,7 @@ namespace SoncaAudioInspector
             OnTestSubstatusChanged?.Invoke("THD", "Testing 1 kHz Tone (1.5s)...");
 
             float[] thdRecord = await _audioEngine.PlayAndRecordAsync(
-                playbackDevice, recordingDevice, SignalType.Sine, 1000, 1.5, null, true); // 1.5 seconds, save files enabled
+                playbackDevice, recordingDevice, SignalType.Sine, 1000, 1.5, forceSaveFiles: true); // 1.5 seconds, save files enabled
 
             // Detect clipping
             float maxThdSample = thdRecord.Length > 0 ? thdRecord.Select(Math.Abs).Max() : 0f;

@@ -14,8 +14,9 @@ namespace SoncaAudioInspector
         }
 
         private bool _result = false;
-        private System.Windows.Threading.DispatcherTimer _autoRetryTimer;
-        private System.Func<bool> _pollFunc;
+        private System.Windows.Threading.DispatcherTimer? _autoRetryTimer;
+        private System.Windows.Threading.DispatcherTimer? _autoCloseTimer;
+        private System.Func<bool>? _pollFunc;
 
         public ModernMessageBox(string message, string title, MessageBoxType type)
         {
@@ -57,6 +58,22 @@ namespace SoncaAudioInspector
                     
                     BtnNo.Visibility = Visibility.Visible;
                     break;
+            }
+
+            if (type != MessageBoxType.Confirmation)
+            {
+                _autoCloseTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = System.TimeSpan.FromSeconds(1)
+                };
+                _autoCloseTimer.Tick += (_, _) =>
+                {
+                    _autoCloseTimer?.Stop();
+                    _autoCloseTimer = null;
+                    Close();
+                };
+                Loaded += (_, _) => _autoCloseTimer?.Start();
+                Closed += (_, _) => _autoCloseTimer?.Stop();
             }
         }
 

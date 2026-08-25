@@ -51,8 +51,6 @@ namespace SoncaAudioInspector
             ErrorSys003.Visibility = Visibility.Collapsed;
             ErrorSys003.Text = "";
 
-            await Task.Delay(1200); // Visual breathing room for user to read initial state
-
             // ---------------------------------------------------------
             // SYS001 - Internet Connection Check
             // ---------------------------------------------------------
@@ -93,8 +91,6 @@ namespace SoncaAudioInspector
                 ErrorSys001.Text = internetError;
                 ErrorSys001.Visibility = Visibility.Visible;
             }
-
-            await Task.Delay(1000); // Delay between checks so user can read result of SYS001
 
             // ---------------------------------------------------------
             // SYS002 - Download checking_config.json
@@ -167,8 +163,6 @@ namespace SoncaAudioInspector
                 ErrorSys002.Visibility = Visibility.Visible;
             }
 
-            await Task.Delay(1000);
-
             // ---------------------------------------------------------
             // SYS003 - Audio Hardware Detection Check (Formerly SYS002)
             // ---------------------------------------------------------
@@ -236,7 +230,6 @@ namespace SoncaAudioInspector
                 }
 
                 LblStatus.Text = "Ứng dụng đã được xác thực! Đang tải giao diện đăng nhập...";
-                await Task.Delay(1200); // Wait so they can see success state before loading login window
 
                 // Launch login window
                 LoginWindow login = new LoginWindow();

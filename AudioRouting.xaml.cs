@@ -17,20 +17,20 @@ namespace SoncaAudioInspector
 {
     public partial class AudioRouting : UserControl
     {
-        private AudioEngine _audioEngine;
-        private TestRunner _testRunner;
+        private AudioEngine _audioEngine = null!;
+        private TestRunner _testRunner = null!;
 
         private List<double> _freqs = new List<double>();
         private List<double> _dbValues = new List<double>();
 
-        private InOutConfig _activeInOutConfig;
+        private InOutConfig _activeInOutConfig = null!;
         private List<AutoTestCaseItem> _autoTestCases = new List<AutoTestCaseItem>();
         private bool _isExecutingAutoSuite = false;
-        private string _autoTestSessionFolder = null;
+        private string? _autoTestSessionFolder;
         private readonly List<string> _autoTestGraphPaths = new List<string>();
-        private AutoTestCaseItem _currentRunningTestCase = null;
+        private AutoTestCaseItem? _currentRunningTestCase;
         private bool? _currentTestSuccess = null;
-        private Dictionary<double, double> _standardCurve = null;
+        private Dictionary<double, double>? _standardCurve;
 
         public AudioRouting()
         {
@@ -357,7 +357,7 @@ namespace SoncaAudioInspector
             }
         }
 
-        public bool ApplyModelDevices(InOutConfig inOutConfig, out string missingMessage)
+        public bool ApplyModelDevices(InOutConfig inOutConfig, out string? missingMessage)
         {
             _activeInOutConfig = inOutConfig;
             var inputs = inOutConfig?.Devices?.Input ?? new Dictionary<string, string>();
@@ -817,6 +817,15 @@ namespace SoncaAudioInspector
             var playbackDevice = RadioUsbPlayback.IsChecked == true ? usbDevice : btDevice;
             var recordingDevice = (ComboRecording.SelectedItem as DeviceItem)?.Device;
 
+            if (playbackDevice is null || recordingDevice is null)
+            {
+                ModernMessageBox.Show(Window.GetWindow(this)!, "Chưa chọn đủ thiết bị phát và thu âm.", "Thiếu thiết bị", ModernMessageBox.MessageBoxType.Warning);
+                BtnStart.IsEnabled = true;
+                BtnSaveStandardReference.IsEnabled = true;
+                BtnNoiseTest.IsEnabled = true;
+                return;
+            }
+
             await _testRunner.RunTestAsync(playbackDevice, recordingDevice);
         }
 
@@ -847,6 +856,15 @@ namespace SoncaAudioInspector
             var btDevice = (ComboBluetooth.SelectedItem as DeviceItem)?.Device;
             var playbackDevice = RadioUsbPlayback.IsChecked == true ? usbDevice : btDevice;
             var recordingDevice = (ComboRecording.SelectedItem as DeviceItem)?.Device;
+
+            if (playbackDevice is null || recordingDevice is null)
+            {
+                ModernMessageBox.Show(Window.GetWindow(this)!, "Chưa chọn đủ thiết bị phát và thu âm.", "Thiếu thiết bị", ModernMessageBox.MessageBoxType.Warning);
+                BtnStart.IsEnabled = true;
+                BtnSaveStandardReference.IsEnabled = true;
+                BtnNoiseTest.IsEnabled = true;
+                return;
+            }
 
             await _testRunner.RunNoiseTestAsync(playbackDevice, recordingDevice);
 
@@ -1080,11 +1098,11 @@ namespace SoncaAudioInspector
                     if (!_isExecutingAutoSuite) break;
 
                     string playbackConfigKey = test.Config.PlaybackOut; // e.g. "SoundCard"
-                    string playbackDeviceName = "";
+                    string? playbackDeviceName = "";
                     _activeInOutConfig.Devices.Input?.TryGetValue(playbackConfigKey, out playbackDeviceName);
 
                     string recordingConfigKey = test.Config.RecordingIn; // e.g. "6.5 Jack"
-                    string recordingDeviceName = "";
+                    string? recordingDeviceName = "";
                     _activeInOutConfig.Devices.Output?.TryGetValue(recordingConfigKey, out recordingDeviceName);
 
                     var currentPlaybacks = _audioEngine.GetPlaybackDevices();
@@ -1186,10 +1204,11 @@ namespace SoncaAudioInspector
                 _testRunner.FreqResponseToleranceDb = ParseDoubleSafe(TxtFreqTolerance.Text, 3.0);
                 _testRunner.ThdLimitPercent = ParseDoubleSafe(TxtThdLimit.Text, 0.5);
 
-                _testRunner.IsRubBuzzTest = test.Config.RubBuzzTestFreq.HasValue;
-                if (_testRunner.IsRubBuzzTest)
+                double? rubBuzzTestFrequency = test.Config.RubBuzzTestFreq;
+                _testRunner.IsRubBuzzTest = rubBuzzTestFrequency.HasValue;
+                if (rubBuzzTestFrequency.HasValue)
                 {
-                    _testRunner.RubBuzzTestFreq = test.Config.RubBuzzTestFreq.Value;
+                    _testRunner.RubBuzzTestFreq = rubBuzzTestFrequency.Value;
                     _testRunner.RubBuzzLimit = test.Config.RubBuzzLimit ?? 1.5;
                 }
 
@@ -1203,6 +1222,10 @@ namespace SoncaAudioInspector
                 if (playbackDevice == null || recordingDevice == null)
                 {
                     devicesReadyForServerUpload = false;
+                    suitePassed = false;
+                    test.Status = "FAIL";
+                    test.StatusBrush = new WpfSolidColorBrush(WpfColor.FromRgb(248, 113, 113));
+                    continue;
                 }
 
                 await _testRunner.RunTestAsync(playbackDevice, recordingDevice, runFeqThreeTimes: true);
@@ -1586,7 +1609,7 @@ namespace SoncaAudioInspector
                 if (!string.IsNullOrEmpty(key))
                 {
                     string standardsDir = GetStandardsDirectory();
-                    string filePath = null;
+                    string? filePath = null;
 
                     if (System.IO.Directory.Exists(standardsDir))
                     {
@@ -1805,7 +1828,7 @@ namespace SoncaAudioInspector
 
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
-        public TestConfig Config { get; set; }
+        public TestConfig Config { get; set; } = new TestConfig();
 
         public string Status
         {
@@ -1867,7 +1890,7 @@ namespace SoncaAudioInspector
             }
         }
 
-        public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged(string name)
         {
             PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));

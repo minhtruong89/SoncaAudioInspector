@@ -68,6 +68,7 @@
                 <Button Name="BtnYes" 
                         Content="Đồng ý" 
                         Click="BtnYes_Click"
+                        IsDefault="True"
                         Background="#10B981"
                         Foreground="Black"
                         BorderThickness="0"
