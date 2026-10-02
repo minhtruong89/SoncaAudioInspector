@@ -41,6 +41,7 @@ function Publish-Portable {
         "--self-contained", "true",
         "--output", $publishPath,
         "-p:PlatformTarget=$TargetArchitecture",
+        "-p:BaseOutputPath=$(Join-Path $outputRootPath "build-$TargetArchitecture")/",
         "-p:BaseIntermediateOutputPath=$(Join-Path $outputRootPath "obj-$TargetArchitecture")/"
     )
     & dotnet @publishArguments
