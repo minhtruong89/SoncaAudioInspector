@@ -5,8 +5,11 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using NAudio.CoreAudioApi;
+using NAudio.CoreAudioApi.Interfaces;
 using ScottPlot;
 
 using WpfColor = System.Windows.Media.Color;
@@ -78,6 +81,29 @@ namespace SoncaAudioInspector
         public Dictionary<string, string> Input { get; set; } = new Dictionary<string, string>();
         public Dictionary<string, string> Output { get; set; } = new Dictionary<string, string>();
     }
+    public class FlexibleChannelJsonConverter : System.Text.Json.Serialization.JsonConverter<int?>
+    {
+        public override int? Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options)
+        {
+            if (reader.TokenType == System.Text.Json.JsonTokenType.Null) return null;
+            if (reader.TokenType == System.Text.Json.JsonTokenType.Number) return reader.GetInt32();
+            if (reader.TokenType == System.Text.Json.JsonTokenType.String)
+            {
+                string str = reader.GetString()?.Trim().ToUpperInvariant() ?? "";
+                if (string.IsNullOrEmpty(str) || str == "ALL" || str == "BOTH" || str == "STEREO" || str == "MIX" || str == "NONE") return null;
+                if (str == "L" || str == "LEFT" || str == "CH1" || str == "CHANNEL 1" || str == "MIC 1") return 1;
+                if (str == "R" || str == "RIGHT" || str == "CH2" || str == "CHANNEL 2" || str == "MIC 2") return 2;
+                if (int.TryParse(str, out int val)) return val;
+            }
+            return null;
+        }
+
+        public override void Write(System.Text.Json.Utf8JsonWriter writer, int? value, System.Text.Json.JsonSerializerOptions options)
+        {
+            if (value.HasValue) writer.WriteNumberValue(value.Value);
+            else writer.WriteNullValue();
+        }
+    }
     public class TestConfig
     {
         public string id { get; set; } = "";
@@ -91,6 +117,16 @@ namespace SoncaAudioInspector
 
         [System.Text.Json.Serialization.JsonPropertyName("Playback Volume")]
         public double? PlaybackVolume { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("Playback Level dBFS")]
+        public double? PlaybackLevelDbfs { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("Playback Level")]
+        public double? PlaybackLevel
+        {
+            get => PlaybackLevelDbfs;
+            set { if (value.HasValue) PlaybackLevelDbfs = value; }
+        }
 
         [System.Text.Json.Serialization.JsonPropertyName("Recording Gain")]
         public double? RecordingGain { get; set; }
@@ -108,16 +144,78 @@ namespace SoncaAudioInspector
         public bool? Enable { get; set; }
 
         public bool IsEnabled => Enable ?? true;
+
+        public string? FrequencyResponseMethod { get; set; }
+        public double? LogSweepDurationSeconds { get; set; }
+        public double? MultitoneDurationSeconds { get; set; }
+        public double? DutMicCalibrationOffsetDb { get; set; }
+        public double? AmbientMicCalibrationOffsetDb { get; set; }
+        public double? AmbientNoiseLimitDbSpl { get; set; }
+        public double? AmbientNoiseLimitDbFs { get; set; }
+        public int? AmbientNoiseRetries { get; set; }
+        public double? ThdNLimit { get; set; }
+        public double? BassThdLimit { get; set; }
+        public double? MidThdLimit { get; set; }
+        public double? TrebleThdLimit { get; set; }
+        public double? BassThdSampleScale { get; set; }
+        public double? BassThdFrequency { get; set; }
+        public double? MidThdFrequency { get; set; }
+        public double? TrebleThdFrequency { get; set; }
+        public int? LogSweepRuns { get; set; }
+        public bool? RequireLogSweepPhaseAlignment { get; set; }
+        public double? MinimumSinadDb { get; set; }
+        public double? MinimumSnrDb { get; set; }
+        public double? MaximumDcOffset { get; set; }
+        public double? MaximumToneFrequencyErrorHz { get; set; }
+        public double? MaximumClippedSamplesPercent { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("Recording Channel")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(FlexibleChannelJsonConverter))]
+        public int? RecordingChannel { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("Playback Channel")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(FlexibleChannelJsonConverter))]
+        public int? PlaybackChannel { get; set; }
+
+        public double? PlaybackFrequencyScale { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("Ambient Recording In")]
+        public string? AmbientRecordingIn { get; set; }
+        public bool? NoiseDiagnostics { get; set; }
+        public List<CriticalZoneConfig>? CriticalZones { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("Minimum Input Signal dBFS")]
+        public double? MinimumInputSignalDbFs { get; set; }
+    }
+
+    public class CriticalZoneConfig
+    {
+        public double MinHz { get; set; }
+        public double MaxHz { get; set; }
     }
 
     public class AppConfig
     {
-        public double PlaybackVolume { get; set; } = 80;
-        public double RecordingGain { get; set; } = 100;
+        public double PlaybackVolume { get; set; } = 60.0;
+        public double RecordingVolume { get; set; } = 50.0;
+        public double PlaybackLevelDbfs { get; set; } = 0.0;
+        public int PlaybackSampleRate { get; set; } = 44100;
+        public string PlaybackMode { get; set; } = "Shared";
         public double FreqTolerance { get; set; } = 3.0;
         public double ThdLimit { get; set; } = 0.5;
         public bool UseUsbPlayback { get; set; } = true;
         public string LastSerialNumber { get; set; } = "";
+        public bool SendToServer { get; set; } = true;
+        public bool UseLogSweepFrequencyResponse { get; set; }
+        public bool NormalizeFrequencyResponseToOneKilohertz { get; set; } = true;
+        public double LogSweepDurationSeconds { get; set; } = 65536.0 / 44100.0;
+        public double MultitoneDurationSeconds { get; set; } = 10.0;
+        public string AmbientRecordingDeviceId { get; set; } = "";
+        public string UsbPlaybackDeviceId { get; set; } = "";
+        public string BluetoothPlaybackDeviceId { get; set; } = "";
+        public string RecordingDeviceId { get; set; } = "";
+        public int? LastPlaybackChannel { get; set; } = null;
+        public int? LastRecordingChannel { get; set; } = null;
     }
 
     public class DeviceItem
@@ -137,12 +235,13 @@ namespace SoncaAudioInspector
 
     public partial class MainWindow : Window
     {
+        private const string SupportedModelName = "MI SAM";
         private AudioEngine _audioEngine;
         private TestRunner _testRunner;
 
         private AudioRouting _audioRoutingView;
-        private VisualAI _visualAIView;
         private QrScanWindow? _qrScanView;
+        private StandardMeasurementWindow? _standardMeasurementView;
         private CheckingConfig _checkingConfig = new CheckingConfig();
         private string? _lastBomDirectory;
         private List<ProductInfo> _serverProducts = new List<ProductInfo>();
@@ -151,19 +250,38 @@ namespace SoncaAudioInspector
         private Task<ProductInfo?>? _backgroundItemSyncTask;
         private string? _backgroundItemFingerprint;
         private string? _qrSessionModel;
+        private Window? _deviceConnectionWindow;
+        private TextBlock? _deviceConnectionStatus;
+        private DispatcherTimer? _selectedModelDeviceTimer;
+        private InOutConfig? _selectedModelDeviceConfig;
+        private string _selectedModelDeviceName = "";
+        private readonly HashSet<string> _selectedModelDeviceIds = new(StringComparer.OrdinalIgnoreCase);
+        private MMDeviceEnumerator? _deviceNotificationEnumerator;
+        private IMMNotificationClient? _deviceNotificationClient;
+        private bool _selectedModelDeviceCheckPending;
+        private InOutConfig? _pendingDeviceConfig;
+        private string _pendingDeviceModel = "";
+        private string? _pendingDeviceMissing;
+        private bool _deviceConnectionShowDeferred;
+        private bool _allowDeviceConnectionClose;
+
+        public bool IsAudioRoutingBusy => _audioRoutingView?.IsTestingBusy ?? false;
+        public bool IsStandardMeasurementBusy => _standardMeasurementView?.IsBusy ?? false;
 
         public MainWindow()
         {
             InitializeComponent();
+            StateChanged += (_, _) => ResizeHandles.Visibility = WindowState == WindowState.Normal
+                ? Visibility.Visible : Visibility.Collapsed;
+            Loaded += async (_, _) => await WarnAboutExternalAudioAsync();
             
             _audioEngine = new AudioEngine();
             _testRunner = new TestRunner(_audioEngine);
+            StartAudioDeviceNotifications();
 
             // Instantiate views
             _audioRoutingView = new AudioRouting();
             _audioRoutingView.InitializeRouting(_audioEngine, _testRunner);
-
-            _visualAIView = new VisualAI();
 
             // Set logged in staff ID information dynamically
             if (!string.IsNullOrEmpty(ServerEngine.UserName))
@@ -177,12 +295,30 @@ namespace SoncaAudioInspector
 
             // Default to Audio Routing tab
             SwitchToTab("AudioRouting");
+            _audioRoutingView.SetSetupVisibility(false);
+            UpdateSettingsToggleIcon(false);
 
             // Load configurations for models selection
             LoadCheckingConfig();
-            ComboModels.SelectedIndex = -1;
-            LoadLastSerialNumber();
-            _ = LoadServerModelsAsync();
+            ComboModels.SelectedIndex = ComboModels.Items.Count > 0 ? 0 : -1;
+            // Audio Routing only: do not restore serial/QR state or query product models.
+        }
+
+        private bool _audioUsageChecked;
+
+        private async Task WarnAboutExternalAudioAsync()
+        {
+            if (_audioUsageChecked) return;
+            _audioUsageChecked = true;
+            try
+            {
+                // Scan now: a report from before login may no longer describe active sessions.
+                AudioUsageReport report = await Task.Run(AudioSessionDiagnostics.Scan);
+                if (report.Sessions.Count > 0 && IsVisible)
+                    ModernMessageBox.ShowPersistentWarning(this, report.Details,
+                        "Ứng dụng khác đang dùng ngõ phát/thu âm thanh");
+            }
+            catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Kiểm tra phiên âm thanh: " + ex); }
         }
 
         private void LoadLastSerialNumber()
@@ -206,6 +342,10 @@ namespace SoncaAudioInspector
                     
                     if (_checkingConfig != null && _checkingConfig.models != null)
                     {
+                        _checkingConfig.models = _checkingConfig.models
+                            .Where(model => IsSupportedModel(model.model))
+                            .Take(1)
+                            .ToList();
                         ComboModels.Items.Clear();
                         foreach (var m in _checkingConfig.models)
                         {
@@ -298,17 +438,30 @@ namespace SoncaAudioInspector
 
         private static string GetCheckingConfigReadPath()
         {
+            string appDirConfig = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
             string userPath = GetUserCheckingConfigPath();
-            return File.Exists(userPath)
-                ? userPath
-                : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
+            if (File.Exists(appDirConfig))
+            {
+                try
+                {
+                    if (!File.Exists(userPath) || File.GetLastWriteTimeUtc(appDirConfig) > File.GetLastWriteTimeUtc(userPath))
+                    {
+                        Directory.CreateDirectory(Path.GetDirectoryName(userPath)!);
+                        File.Copy(appDirConfig, userPath, overwrite: true);
+                    }
+                }
+                catch { }
+            }
+            return File.Exists(userPath) ? userPath : appDirConfig;
         }
 
         private IReadOnlyList<ItemSlotConfig> GetItemSlotsForModel(string? modelName)
         {
             if (string.IsNullOrWhiteSpace(modelName)) return new List<ItemSlotConfig>();
+            string norm = BomCsvParser.NormalizeModelKey(modelName);
             ModelConfig? modelConfig = _checkingConfig?.models.FirstOrDefault(value =>
-                string.Equals(value.model, modelName, StringComparison.OrdinalIgnoreCase));
+                string.Equals(value.model, modelName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(BomCsvParser.NormalizeModelKey(value.model), norm, StringComparison.OrdinalIgnoreCase));
             return modelConfig?.items ?? new List<ItemSlotConfig>();
         }
 
@@ -317,14 +470,17 @@ namespace SoncaAudioInspector
             try
             {
                 var products = await ServerEngine.GetProductsAsync(1, 100);
-                _serverProducts = products.ToList();
+                _serverProducts = products
+                    .Where(product => IsSupportedModel(product.Model ?? product.ProductCode ?? product.Name))
+                    .ToList();
 
                 var serverModels = _serverProducts
                     .Select(p => p.Model ?? p.ProductCode ?? p.Name)
                     .OfType<string>()
                     .Where(v => !string.IsNullOrWhiteSpace(v))
+                    .Where(IsSupportedModel)
+                    .Select(_ => SupportedModelName)
                     .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(v => v)
                     .ToList();
 
                 if (serverModels.Count == 0)
@@ -363,12 +519,40 @@ namespace SoncaAudioInspector
             }
         }
 
-        private void ComboModels_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        private void ComboModels_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
-            if (ComboModels.SelectedItem == null || _checkingConfig == null) return;
+            if (ComboModels.SelectedItem == null) return;
+            var target = e.OriginalSource as DependencyObject;
+            while (target != null && target is not ComboBoxItem)
+                target = System.Windows.Media.VisualTreeHelper.GetParent(target);
+            if (target is not ComboBoxItem item ||
+                !string.Equals(item.Content?.ToString(), ComboModels.SelectedItem.ToString(), StringComparison.OrdinalIgnoreCase)) return;
+
+            ComboModels.SelectedIndex = -1;
+            ComboModels.IsDropDownOpen = false;
+            e.Handled = true;
+        }
+
+        private async void ComboModels_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+        {
+            StopSelectedModelDeviceMonitor();
+            CloseDeviceConnectionWindow();
+            string selectedModelName = ComboModels.SelectedItem?.ToString() ?? "";
+            if (_audioRoutingView == null) return;
+            if (_audioRoutingView.IsAutoTestRunning || _audioRoutingView.IsModelTransitionBusy)
+            {
+                _audioRoutingView.CancelAndDiscardCurrentMeasurement();
+                while (_audioRoutingView.IsModelTransitionBusy)
+                    await Task.Delay(50);
+            }
+            if (!string.Equals(ComboModels.SelectedItem?.ToString() ?? "", selectedModelName, StringComparison.Ordinal)) return;
+            if (string.IsNullOrWhiteSpace(selectedModelName))
+            {
+                _audioRoutingView.ClearModelSelection();
+                return;
+            }
+            if (_checkingConfig == null) return;
             
-            string selectedModelName = ComboModels.SelectedItem.ToString() ?? "";
-            if (string.IsNullOrWhiteSpace(selectedModelName)) return;
             // Reload the dedicated item file so edits saved while the app is open
             // take effect immediately when a model is selected.
             try
@@ -384,52 +568,235 @@ namespace SoncaAudioInspector
             }
             catch { }
             
-            EnsureAllModelsHaveItemSlots();
-            _qrScanView?.SetItemSlots(GetItemSlotsForModel(selectedModelName));
-            _qrScanView?.SetLayoutLocked(_checkingConfig.models.FirstOrDefault(value =>
-                string.Equals(value.model, selectedModelName, StringComparison.OrdinalIgnoreCase))?.itemLayoutLocked == true);
-            bool firstQrModelSelection = _qrScanView != null
-                && ReferenceEquals(MainContentArea.Content, _qrScanView)
-                && !string.Equals(_qrSessionModel, selectedModelName, StringComparison.OrdinalIgnoreCase);
-            if (firstQrModelSelection)
+            string normModel = BomCsvParser.NormalizeModelKey(selectedModelName);
+            var modelConfig = _checkingConfig.models.FirstOrDefault(m =>
+                string.Equals(m.model, selectedModelName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(BomCsvParser.NormalizeModelKey(m.model), normModel, StringComparison.OrdinalIgnoreCase));
+            if (modelConfig == null || modelConfig.testItems?.InOut == null)
             {
-                TxtSerialNumber.Clear();
-                _qrScanView?.SetDefaultProductCode("");
+                _audioRoutingView.ClearModelSelection();
+                return;
             }
-            else
-            {
-                UpdateQrBarcode();
-            }
-            _ = LoadModelLayoutFromServerAsync(selectedModelName, refreshQrView: true);
-            if (_qrScanView != null && ReferenceEquals(MainContentArea.Content, _qrScanView))
-            {
-                _qrSessionModel = selectedModelName;
-                _qrScanView.SetProductModel(selectedModelName, _checkingConfig.models.FirstOrDefault(value =>
-                    string.Equals(value.model, selectedModelName, StringComparison.OrdinalIgnoreCase))?.productIdLayout);
-                TxtSerialNumber.Focus();
-                TxtSerialNumber.SelectAll();
-            }
-            else
-            {
-                TxtSerialNumber.Focus();
-                TxtSerialNumber.SelectAll();
-            }
-            var modelConfig = _checkingConfig.models.FirstOrDefault(m => m.model == selectedModelName);
-            if (modelConfig == null || modelConfig.testItems?.InOut == null) return;
 
             bool success = _audioRoutingView.ApplyModelDevices(modelConfig.testItems.InOut, out string? missingMessage);
-            if (!success)
+            StartSelectedModelDeviceMonitor(selectedModelName, modelConfig.testItems.InOut);
+            if (!success) ShowDeviceConnectionWindow(selectedModelName, modelConfig.testItems.InOut, missingMessage);
+        }
+
+        private void StartSelectedModelDeviceMonitor(string model, InOutConfig config)
+        {
+            _selectedModelDeviceName = model;
+            _selectedModelDeviceConfig = config;
+            CaptureSelectedModelDeviceIds(config);
+            _selectedModelDeviceCheckPending = false;
+            _selectedModelDeviceTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            _selectedModelDeviceTimer.Tick -= SelectedModelDeviceTimer_Tick;
+            _selectedModelDeviceTimer.Tick += SelectedModelDeviceTimer_Tick;
+            _selectedModelDeviceTimer.Start();
+        }
+
+        private void StopSelectedModelDeviceMonitor()
+        {
+            _selectedModelDeviceTimer?.Stop();
+            _selectedModelDeviceConfig = null;
+            _selectedModelDeviceName = "";
+            _selectedModelDeviceIds.Clear();
+            _selectedModelDeviceCheckPending = false;
+        }
+
+        private void SelectedModelDeviceTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_selectedModelDeviceConfig == null ||
+                !string.Equals(ComboModels.SelectedItem?.ToString(), _selectedModelDeviceName, StringComparison.Ordinal)) return;
+            if (!_selectedModelDeviceCheckPending || _audioRoutingView.IsModelTransitionBusy) return;
+            _selectedModelDeviceCheckPending = false;
+            try
             {
-                ModernMessageBox.Show(this, 
-                    $"Chưa đủ các ngõ vào và ra đã định nghĩa\n\nThiếu ngõ:\n{missingMessage}", 
-                    "Không Đạt Cấu Hình Thiết Bị", 
-                    ModernMessageBox.MessageBoxType.Warning);
+                if (_audioRoutingView.CheckModelDevices(_selectedModelDeviceConfig, out string? missing))
+                {
+                    CaptureSelectedModelDeviceIds(_selectedModelDeviceConfig);
+                    if (_deviceConnectionWindow != null)
+                    {
+                        _audioRoutingView.RefreshDevicesAfterConnection();
+                        CloseDeviceConnectionWindow();
+                    }
+                }
+                else
+                {
+                    if (_deviceConnectionWindow == null)
+                        ShowDeviceConnectionWindow(_selectedModelDeviceName, _selectedModelDeviceConfig, missing);
+                    else
+                        UpdateDeviceConnectionStatus(missing);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("Theo dõi thiết bị Model: " + ex);
+            }
+        }
+
+        private void StartAudioDeviceNotifications()
+        {
+            try
+            {
+                _deviceNotificationEnumerator = new MMDeviceEnumerator();
+                _deviceNotificationClient = new AudioDeviceNotificationClient(OnAudioEndpointChanged);
+                _deviceNotificationEnumerator.RegisterEndpointNotificationCallback(_deviceNotificationClient);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("Đăng ký thông báo thiết bị âm thanh: " + ex);
+            }
+        }
+
+        private void OnAudioEndpointChanged(string deviceId, bool disconnected)
+        {
+            Dispatcher.BeginInvoke((Action)(() =>
+            {
+                if (_selectedModelDeviceConfig == null) return;
+                if (disconnected && _selectedModelDeviceIds.Contains(deviceId) && _audioRoutingView.IsModelTransitionBusy)
+                    _audioRoutingView.CancelAndDiscardCurrentMeasurement();
+                _selectedModelDeviceCheckPending = true;
+            }));
+        }
+
+        private void CaptureSelectedModelDeviceIds(InOutConfig config)
+        {
+            _selectedModelDeviceIds.Clear();
+            List<MMDevice> playback = _audioEngine.GetPlaybackDevices();
+            List<MMDevice> recording = _audioEngine.GetRecordingDevices();
+            try
+            {
+                foreach (string name in config.Devices?.Input?.Values ?? Enumerable.Empty<string>())
+                    foreach (MMDevice device in playback.Where(device => device.FriendlyName.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                        _selectedModelDeviceIds.Add(device.ID);
+                foreach (string name in config.Devices?.Output?.Values ?? Enumerable.Empty<string>())
+                    foreach (MMDevice device in recording.Where(device => device.FriendlyName.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                        _selectedModelDeviceIds.Add(device.ID);
+            }
+            finally
+            {
+                foreach (MMDevice device in playback) try { device.Dispose(); } catch { }
+                foreach (MMDevice device in recording) try { device.Dispose(); } catch { }
+            }
+        }
+
+        private sealed class AudioDeviceNotificationClient(Action<string, bool> changed) : IMMNotificationClient
+        {
+            public void OnDeviceStateChanged(string deviceId, DeviceState newState) => changed(deviceId, (newState & DeviceState.Active) == 0);
+            public void OnDeviceAdded(string deviceId) => changed(deviceId, false);
+            public void OnDeviceRemoved(string deviceId) => changed(deviceId, true);
+            public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId) => changed(defaultDeviceId, false);
+            public void OnPropertyValueChanged(string deviceId, PropertyKey key) { }
+        }
+
+        private void ShowDeviceConnectionWindow(string model, InOutConfig config, string? missing)
+        {
+            _pendingDeviceModel = model;
+            _pendingDeviceConfig = config;
+            _pendingDeviceMissing = missing;
+            if (ShouldDeferDeviceConnectionWindow(IsLoaded, PresentationSource.FromVisual(this) != null))
+            {
+                if (!_deviceConnectionShowDeferred)
+                {
+                    _deviceConnectionShowDeferred = true;
+                    RoutedEventHandler? showAfterLoaded = null;
+                    showAfterLoaded = (_, _) =>
+                    {
+                        Loaded -= showAfterLoaded;
+                        _deviceConnectionShowDeferred = false;
+                        if (_pendingDeviceConfig != null)
+                            ShowDeviceConnectionWindow(_pendingDeviceModel, _pendingDeviceConfig, _pendingDeviceMissing);
+                    };
+                    Loaded += showAfterLoaded;
+                }
+                return;
+            }
+            if (_deviceConnectionWindow == null)
+            {
+                var panel = new StackPanel { Margin = new Thickness(22) };
+                panel.Children.Add(new TextBlock
+                {
+                    Text = "Đang chờ kết nối đủ thiết bị",
+                    FontSize = 17,
+                    FontWeight = FontWeights.SemiBold,
+                    Margin = new Thickness(0, 0, 0, 12),
+                    Foreground = new WpfSolidColorBrush(WpfColor.FromRgb(244, 244, 245))
+                });
+                _deviceConnectionStatus = new TextBlock
+                {
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 13,
+                    Foreground = new WpfSolidColorBrush(WpfColor.FromRgb(212, 212, 216))
+                };
+                panel.Children.Add(_deviceConnectionStatus);
+                panel.Children.Add(new TextBlock
+                {
+                    Text = "Cửa sổ sẽ tự đóng sau khi Windows nhận đủ ngõ phát và ngõ thu.",
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 16, 0, 0),
+                    Foreground = new WpfSolidColorBrush(WpfColor.FromRgb(161, 161, 170))
+                });
+                var dialogFrame = new Border
+                {
+                    Background = new WpfSolidColorBrush(WpfColor.FromRgb(15, 15, 17)),
+                    BorderBrush = new WpfSolidColorBrush(WpfColor.FromRgb(63, 63, 70)),
+                    BorderThickness = new Thickness(1.5),
+                    CornerRadius = new CornerRadius(10),
+                    Margin = new Thickness(15),
+                    Child = panel
+                };
+                _deviceConnectionWindow = new Window
+                {
+                    Title = "Kết nối thiết bị đo",
+                    Owner = this,
+                    Content = dialogFrame,
+                    Width = 510,
+                    Height = 270,
+                    MinWidth = 420,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                    WindowStyle = WindowStyle.None,
+                    AllowsTransparency = true,
+                    Background = System.Windows.Media.Brushes.Transparent,
+                    ResizeMode = ResizeMode.NoResize,
+                    ShowInTaskbar = false
+                };
+                _deviceConnectionWindow.Closing += (_, e) =>
+                {
+                    if (!_allowDeviceConnectionClose) e.Cancel = true;
+                };
+                _deviceConnectionWindow.Show();
+            }
+            UpdateDeviceConnectionStatus(missing);
+            _deviceConnectionWindow.Activate();
+        }
+
+        private static bool ShouldDeferDeviceConnectionWindow(bool ownerIsLoaded, bool ownerHasPresentationSource)
+            => !ownerIsLoaded || !ownerHasPresentationSource;
+
+        private void UpdateDeviceConnectionStatus(string? missing)
+        {
+            if (_deviceConnectionStatus != null)
+                _deviceConnectionStatus.Text = $"Model: {_pendingDeviceModel}\n\nCòn thiếu:\n{missing}";
+        }
+
+        private void CloseDeviceConnectionWindow()
+        {
+            _pendingDeviceConfig = null;
+            _pendingDeviceMissing = null;
+            if (_deviceConnectionWindow != null)
+            {
+                _allowDeviceConnectionClose = true;
+                _deviceConnectionWindow.Close();
+                _deviceConnectionWindow = null;
+                _deviceConnectionStatus = null;
+                _allowDeviceConnectionClose = false;
             }
         }
 
         private void TxtSerialNumber_LostFocus(object sender, RoutedEventArgs e)
         {
-            UpdateQrBarcode();
+            StartProductFromSerial();
         }
 
         private void TxtSerialNumber_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
@@ -441,6 +808,7 @@ namespace SoncaAudioInspector
                 && !string.Equals(TxtSerialNumber.Text.Trim(), "DEFAULT-00001", StringComparison.OrdinalIgnoreCase)
                 && ComboModels.SelectedItem != null;
             UpdateQrBarcode();
+            _standardMeasurementView?.SetCurrentContext(ComboModels.SelectedItem?.ToString()?.Trim() ?? "", TxtSerialNumber.Text.Trim());
         }
 
         private void TxtSerialNumber_KeyDown(object sender, KeyEventArgs e)
@@ -579,7 +947,6 @@ namespace SoncaAudioInspector
             _backgroundItemFingerprint = null;
             TxtSerialNumber.Clear();
             BtnAddProduct.IsEnabled = false;
-            _visualAIView.SetCurrentProduct(null);
             _audioRoutingView.SetCurrentProduct(null);
             _qrScanView?.ResetCancelledSession();
 
@@ -1085,7 +1452,6 @@ namespace SoncaAudioInspector
                     ProductResolveResult? resolution = await _creatingProductTask;
                     if (resolution is { Created: false })
                     {
-                        _visualAIView.SetCurrentProduct(product);
                         _audioRoutingView.SetCurrentProduct(product);
                         _qrScanView?.ShowProductDetails(product, qrCode);
                         _qrScanView?.AddToHistoryAndReset(product, scannedItems, itemSlots);
@@ -1105,7 +1471,6 @@ namespace SoncaAudioInspector
                     }
 
                     product = backgroundProduct;
-                    _visualAIView.SetCurrentProduct(product);
                     _audioRoutingView.SetCurrentProduct(product);
                     _qrScanView?.ShowProductDetails(product, qrCode);
                     _qrScanView?.AddToHistoryAndReset(product, scannedItems, itemSlots);
@@ -1160,7 +1525,6 @@ namespace SoncaAudioInspector
                         product = updated;
                     }
                 }
-                _visualAIView.SetCurrentProduct(product);
                 _audioRoutingView.SetCurrentProduct(product);
                 _qrScanView?.ShowProductDetails(product, qrCode);
                 
@@ -1205,7 +1569,7 @@ namespace SoncaAudioInspector
 
         private void SelectModel(string? model)
         {
-            if (string.IsNullOrWhiteSpace(model)) return;
+            if (!IsSupportedModel(model)) return;
             foreach (object item in ComboModels.Items)
             {
                 if (string.Equals(item?.ToString(), model, StringComparison.OrdinalIgnoreCase))
@@ -1215,9 +1579,14 @@ namespace SoncaAudioInspector
                 }
             }
 
-            ComboModels.Items.Add(model);
-            ComboModels.SelectedItem = model;
+            ComboModels.Items.Add(SupportedModelName);
+            ComboModels.SelectedItem = SupportedModelName;
         }
+
+        private static bool IsSupportedModel(string? model) =>
+            !string.IsNullOrWhiteSpace(model)
+            && string.Equals(BomCsvParser.NormalizeModelKey(model),
+                BomCsvParser.NormalizeModelKey(SupportedModelName), StringComparison.OrdinalIgnoreCase);
 
         private void BtnAddProduct_Click(object sender, RoutedEventArgs e)
         {
@@ -1328,7 +1697,6 @@ namespace SoncaAudioInspector
                 return;
             }
 
-            _visualAIView.SetCurrentProduct(product);
             _audioRoutingView.SetCurrentProduct(product);
             string effectiveProductId = productId;
             if (resolution.Bom is not null)
@@ -1385,7 +1753,6 @@ namespace SoncaAudioInspector
             ProductInfo? product = await RequestProductStatusAsync(serial, model);
             if (product is not null)
             {
-                _visualAIView.SetCurrentProduct(product);
                 _audioRoutingView.SetCurrentProduct(product);
                 _qrScanView?.ShowProductDetails(product, product.ProductCode ?? serial);
                 string details = $"Thiết bị (Serial: {serial}) đã được kiểm tra trạng thái thành công!";
@@ -1410,7 +1777,6 @@ namespace SoncaAudioInspector
             }
             else
             {
-                _visualAIView.SetCurrentProduct(null);
                 _audioRoutingView.SetCurrentProduct(null);
                 string errorMsg = ServerEngine.LastError != null && ServerEngine.LastError.Contains("Không tìm thấy")
                     ? $"Thiết bị (Serial: {serial}) chưa tồn tại trên server. Vui lòng đăng ký sản phẩm trước!"
@@ -1431,72 +1797,14 @@ namespace SoncaAudioInspector
 
         private void SwitchToTab(string tabName)
         {
-            if (tabName == "AudioRouting")
-            {
-                MainContentArea.Content = _audioRoutingView;
-                
-                // Highlight active button (Green theme)
-                BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129)); // neon green
-                BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
-                BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27)); // Dark background
-                
-                // Muted tab
-                BtnTabVisualAI.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122)); // muted zinc-500
-                BtnTabVisualAI.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42)); // zinc-800
-                BtnTabVisualAI.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17)); // Darker
-                BtnScanQr.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
-                BtnScanQr.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
-                BtnScanQr.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
-            }
-            else if (tabName == "VisualAI")
-            {
-                MainContentArea.Content = _visualAIView;
-
-                // Highlight active button (Blue theme)
-                BtnTabVisualAI.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(59, 130, 246)); // neon blue
-                BtnTabVisualAI.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(59, 130, 246));
-                BtnTabVisualAI.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
-                
-                // Muted tab
-                BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122)); // muted zinc-500
-                BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42)); // zinc-800
-                BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
-                BtnScanQr.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
-                BtnScanQr.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
-                BtnScanQr.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
-            }
-            else if (tabName == "QrScan")
-            {
-                if (_qrScanView == null)
-                {
-                    string modelName = _qrSessionModel ?? "";
-                    if (!string.IsNullOrWhiteSpace(modelName)) SelectModel(modelName);
-                    ModelConfig? modelConfig = _checkingConfig?.models.FirstOrDefault(value =>
-                        string.Equals(value.model, modelName, StringComparison.OrdinalIgnoreCase));
-                    _qrScanView = new QrScanWindow(GetItemSlotsForModel(modelName), modelConfig?.productIdLayout, modelName, focusSerialOnLoad: !string.IsNullOrWhiteSpace(modelName));
-            _qrScanView.ScanCompleted += QrScanView_ScanCompleted;
-            _qrScanView.ItemCommitted += QrScanView_ItemCommitted;
-            _qrScanView.CancelRequested += QrScanView_CancelRequested;
-                    _qrScanView.AddItemRequested += QrScanView_AddItemRequested;
-                    _qrScanView.LayoutSaveRequested += QrScanView_LayoutSaveRequested;
-                    _qrScanView.BomImportRequested += QrScanView_BomImportRequested;
-                    _qrScanView.SetLayoutLocked(_checkingConfig?.models.FirstOrDefault(value =>
-                        string.Equals(value.model, modelName, StringComparison.OrdinalIgnoreCase))?.itemLayoutLocked == true);
-                    _qrScanView.ShowProductDetails(ServerEngine.CurrentProduct, ServerEngine.CurrentProduct?.ProductCode);
-                    UpdateQrBarcode();
-                }
-                MainContentArea.Content = _qrScanView;
-
-                BtnScanQr.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(167, 139, 250));
-                BtnScanQr.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(139, 92, 246));
-                BtnScanQr.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
-                BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
-                BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
-                BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
-                BtnTabVisualAI.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
-                BtnTabVisualAI.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
-                BtnTabVisualAI.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
-            }
+            // This build intentionally exposes the complete Audio Routing workspace only.
+            // Auto Test, reference-line capture, Scope and all routing measurements live
+            // inside AudioRouting and remain available.
+            MainContentArea.Content = _audioRoutingView;
+            BtnToggleSettings.Visibility = Visibility.Visible;
+            BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+            BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+            BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
         }
 
         private void BtnTabAudioRouting_Click(object sender, RoutedEventArgs e)
@@ -1504,9 +1812,49 @@ namespace SoncaAudioInspector
             SwitchToTab("AudioRouting");
         }
 
-        private void BtnTabVisualAI_Click(object sender, RoutedEventArgs e)
+        private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            SwitchToTab("VisualAI");
+            if (e.Key == Key.Escape)
+            {
+                if (_audioRoutingView != null && (_audioRoutingView.IsFreqExpanded || _audioRoutingView.IsThdExpanded))
+                {
+                    _audioRoutingView.RestoreChartsLayout();
+                    e.Handled = true;
+                }
+            }
+        }
+
+        private void BtnToggleSettings_Click(object sender, RoutedEventArgs e)
+        {
+            _audioRoutingView?.ToggleSetupVisibility();
+            UpdateSettingsToggleIcon(_audioRoutingView?.IsSetupVisible ?? true);
+        }
+
+        private void BtnDiscardMeasurement_Click(object sender, RoutedEventArgs e)
+        {
+            _audioRoutingView?.CancelAndDiscardCurrentMeasurement();
+        }
+
+        public void UpdateSettingsToggleIcon(bool isVisible)
+        {
+            if (IconSettingsEye != null)
+            {
+                if (isVisible)
+                {
+                    IconSettingsEye.Data = System.Windows.Media.Geometry.Parse("M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z");
+                    IconSettingsEye.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+                }
+                else
+                {
+                    IconSettingsEye.Data = System.Windows.Media.Geometry.Parse("M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z");
+                    IconSettingsEye.Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(161, 161, 170));
+                }
+            }
+
+            // Auto Test belongs to Audio Routing. Only its measurement controls follow
+            // the setup visibility; removed modules must never be exposed by this toggle.
+            if (BtnDiscardMeasurement != null)
+                BtnDiscardMeasurement.Visibility = isVisible ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private bool _isFullscreen = false;
@@ -1526,6 +1874,7 @@ namespace SoncaAudioInspector
                 this.ResizeMode = ResizeMode.NoResize;
                 this.WindowState = WindowState.Maximized;
                 _isFullscreen = true;
+                BtnMinimizeApp.ToolTip = "Thu về cửa sổ để kéo chỉnh khung";
             }
             else
             {
@@ -1533,12 +1882,44 @@ namespace SoncaAudioInspector
                 this.ResizeMode = _previousResizeMode;
                 this.WindowState = _previousWindowState;
                 _isFullscreen = false;
+                BtnMinimizeApp.ToolTip = "Thu xuống thanh tác vụ";
+				if (this.WindowState == WindowState.Normal)
+				{
+					this.Top = SystemParameters.WorkArea.Top + 2.0;
+					this.Height = Math.Min(this.Height, SystemParameters.WorkArea.Height - 2.0);
+				}
             }
         }
 
         private void BtnMinimizeApp_Click(object sender, RoutedEventArgs e)
         {
-            this.WindowState = WindowState.Minimized;
+            if (_isFullscreen)
+                BtnToggleFullscreen_Click(sender, e);
+            else
+                this.WindowState = WindowState.Minimized;
+        }
+
+        private void ResizeThumb_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
+        {
+            if (WindowState != WindowState.Normal || sender is not FrameworkElement handle) return;
+            string edge = handle.Tag?.ToString() ?? "";
+            if (edge.Contains("Left", StringComparison.Ordinal))
+            {
+                double width = Math.Max(MinWidth, Width - e.HorizontalChange);
+                Left += Width - width;
+                Width = width;
+            }
+            else if (edge.Contains("Right", StringComparison.Ordinal))
+                Width = Math.Max(MinWidth, Width + e.HorizontalChange);
+
+            if (edge.Contains("Top", StringComparison.Ordinal))
+            {
+                double height = Math.Max(MinHeight, Height - e.VerticalChange);
+                Top += Height - height;
+                Height = height;
+            }
+            else if (edge.Contains("Bottom", StringComparison.Ordinal))
+                Height = Math.Max(MinHeight, Height + e.VerticalChange);
         }
 
         private void BtnCloseApp_Click(object sender, RoutedEventArgs e)
@@ -1553,7 +1934,8 @@ namespace SoncaAudioInspector
                 DependencyObject dep = (DependencyObject)e.OriginalSource;
                 while (dep != null)
                 {
-                    if (dep is System.Windows.Controls.Primitives.ButtonBase || 
+                    if (dep is System.Windows.Controls.Primitives.ButtonBase ||
+                        dep is System.Windows.Controls.Primitives.Thumb ||
                         dep is System.Windows.Controls.TextBox || 
                         dep is System.Windows.Controls.ComboBox)
                     {
@@ -1576,6 +1958,8 @@ namespace SoncaAudioInspector
         {
             if (_isLoggingOut)
             {
+                StopSelectedModelDeviceMonitor();
+                CloseDeviceConnectionWindow();
                 base.OnClosing(e);
                 return;
             }
@@ -1618,6 +2002,15 @@ namespace SoncaAudioInspector
 
         protected override void OnClosed(EventArgs e)
         {
+            try
+            {
+                if (_deviceNotificationEnumerator != null && _deviceNotificationClient != null)
+                    _deviceNotificationEnumerator.UnregisterEndpointNotificationCallback(_deviceNotificationClient);
+            }
+            catch { }
+            _deviceNotificationClient = null;
+            _deviceNotificationEnumerator?.Dispose();
+            _deviceNotificationEnumerator = null;
             _audioEngine?.Dispose();
             base.OnClosed(e);
         }

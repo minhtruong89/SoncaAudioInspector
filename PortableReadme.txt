@@ -1,19 +1,26 @@
-SONCA AUDIO INSPECTOR - BẢN PORTABLE WINDOWS X64
+SONCA AUDIO ROUTING - BẢN PORTABLE WINDOWS X64
 
-Đây là bản đầy đủ có AI/camera. Máy Windows 32-bit phải dùng gói win-x86-lite.
+Đây là bản chuyên dụng cho Audio Routing của model MI SAM.
 
-1. Giải nén TOÀN BỘ file ZIP vào một thư mục trên Windows 10/11 64-bit.
-2. Chạy SoncaAudioInspector.exe. Không cần cài .NET và không cần tải model AI.
+Bao gồm:
+- Chọn thiết bị phát/thu và kênh IN/OUT.
+- Tìm và lưu Line chuẩn.
+- Auto Test, Scope, đo đáp tuyến/FFT và THD trong Audio Routing.
+- Cấu hình mặc định 64K, chuẩn hóa 1 kHz và lưới FFT 1/48 octave.
+
+Không bao gồm giao diện Ngoại quan AI, Quét Barcode hoặc cửa sổ Đo âm học riêng.
+
+1. Giải nén toàn bộ file ZIP vào một thư mục trên Windows 10/11 64-bit.
+2. Chạy SoncaAudioInspector.exe.
 3. Không di chuyển riêng file EXE ra khỏi thư mục này.
 
-Bản portable đã kèm:
-- .NET Desktop Runtime 9 x64 và các thư viện NuGet/native cần thiết.
-- models\visual-ai.onnx.
-- checking_config.json dùng dự phòng khi chưa cập nhật được từ server.
-- drivers\FastTrackPro_x64 Driver.rar để cài driver nếu máy chưa nhận thiết bị.
+Gói portable đã kèm .NET Desktop Runtime 9, checking_config.json và driver FastTrack Pro x64.
+Ứng dụng vẫn cần kết nối server để xác thực/đăng nhập và gửi kết quả khi tùy chọn gửi server được bật.
 
-Ứng dụng vẫn cần kết nối server để xác thực/đăng nhập. Lần đầu triển khai cần
-verify.txt hợp lệ do quản trị viên cấp; file này chứa thông tin nhạy cảm nên không
-được đóng gói chung. Sau khi xác thực, ứng dụng mã hóa session theo Windows user.
-
-Nếu Windows SmartScreen cảnh báo cho bản build nội bộ, chọn More info > Run anyway.
+Line chuẩn và cấu hình Audio Routing được giữ tại %LOCALAPPDATA%\SoncaAudioInspector,
+nên vẫn còn khi thay thư mục hoặc cập nhật bản portable. Ứng dụng tự sao chép
+line chuẩn CSV nằm cạnh EXE đang chạy khi chạy lần đầu. Nếu cài bản mới ở thư
+mục khác, hãy chép "save standards" từ bản cũ vào thư mục mới trước lần chạy đầu.
+Mỗi line mới có thêm file JSON
+cùng tên để chuyển sang ứng dụng khác; JSON ghi rõ đơn vị, sample rate, 64K
+và từng điểm tần số/giới hạn.

@@ -5,10 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:SoncaAudioInspector"
         mc:Ignorable="d"
-        Title="Sonca Audio Inspector"  Height="780" Width="1200"
+        Title="Sonca Audio Routing" Height="780" Width="1200" MinWidth="900" MinHeight="560"
         Background="#0E0E10" Foreground="#E4E4E7" WindowStartupLocation="CenterScreen"
-        WindowStyle="None" AllowsTransparency="True" Icon="pack://application:,,,/Assets/app_icon.ico"
-        MouseDown="Window_MouseDown">
+        WindowStyle="None" AllowsTransparency="True" ResizeMode="CanResize" Icon="pack://application:,,,/SoncaAudioInspector;component/Assets/app_icon.ico"
+        MouseDown="Window_MouseDown" PreviewKeyDown="Window_PreviewKeyDown">
     
     <Grid>
         <Grid.RowDefinitions>
@@ -29,7 +29,7 @@
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="SONCA" FontSize="20" FontWeight="Black" Foreground="#10B981"/>
-                        <TextBlock Text=" AUDIO INSPECTOR" FontSize="20" FontWeight="Light" Foreground="#F4F4F5"/>
+                        <TextBlock Text=" AUDIO ROUTING" FontSize="20" FontWeight="Light" Foreground="#F4F4F5"/>
                     </StackPanel>
 
                     <!-- Staff User Info & Logout Button (Aligned Right) -->
@@ -48,10 +48,10 @@
                         <Border Background="#27272A" Padding="10,6" CornerRadius="6" Margin="0,0,10,0">
                             <StackPanel Orientation="Horizontal">
                                 <Ellipse Width="8" Height="8" Fill="#10B981" Margin="0,0,6,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="ASIO / WASAPI Ready" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center"/>
+                                <TextBlock Text="Âm thanh Windows" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center"/>
                             </StackPanel>
                         </Border>
-                        <Button Name="BtnMinimizeApp" Click="BtnMinimizeApp_Click" Width="30" Height="30" Background="#27272A" BorderThickness="0" Foreground="White" FontWeight="Bold" FontSize="14" Cursor="Hand" Margin="0,0,10,0">
+                        <Button Name="BtnMinimizeApp" Click="BtnMinimizeApp_Click" Width="30" Height="30" Background="#27272A" BorderThickness="0" Foreground="White" FontWeight="Bold" FontSize="14" Cursor="Hand" Margin="0,0,10,0" ToolTip="Thu xuống thanh tác vụ">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="15"/>
@@ -59,7 +59,7 @@
                             </Button.Resources>
                             —
                         </Button>
-                        <Button Name="BtnToggleFullscreen" Click="BtnToggleFullscreen_Click" Width="30" Height="30" Background="#27272A" BorderThickness="0" Foreground="White" FontWeight="Bold" FontSize="14" Cursor="Hand" Margin="0,0,10,0">
+                        <Button Name="BtnToggleFullscreen" Click="BtnToggleFullscreen_Click" Width="30" Height="30" Background="#27272A" BorderThickness="0" Foreground="White" FontWeight="Bold" FontSize="14" Cursor="Hand" Margin="0,0,10,0" ToolTip="Toàn màn hình / cửa sổ có thể kéo chỉnh khung">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="15"/>
@@ -79,7 +79,7 @@
                 </Grid>
 
                 <!-- Serial Number Row & Tab Buttons Row -->
-                <Grid Margin="20,5,20,10">
+                <Grid Margin="14,5,14,10">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
@@ -88,19 +88,77 @@
                     <!-- Tab Buttons (Left side) -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <Button Name="BtnTabAudioRouting" Content="Audio Routing" Style="{StaticResource TabButtonStyle}" Click="BtnTabAudioRouting_Click"/>
-                        <Button Name="BtnTabVisualAI" Content="Ngoại Quan AI" Style="{StaticResource TabButtonStyle}" Margin="10,0,0,0" Click="BtnTabVisualAI_Click"/>
-                        <Button Name="BtnScanQr" Content="Quét Barcode" Style="{StaticResource TabButtonStyle}" Click="BtnScanQr_Click" Margin="10,0,0,0" ToolTip="Mở khu vực quét barcode và đồng bộ item lên server"/>
+                        <Button Name="BtnScanQr" Content="Quét Barcode" Style="{StaticResource TabButtonStyle}" Click="BtnScanQr_Click" Margin="6,0,0,0" ToolTip="Mở khu vực quét barcode và đồng bộ item lên server" Visibility="Collapsed"/>
                     </StackPanel>
 
                     <!-- Serial Number & Model Inputs (Right side) -->
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="Model:" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <ComboBox Name="ComboModels" Width="130" Height="28" Style="{StaticResource DarkComboBoxStyle}" VerticalAlignment="Center" Margin="0,0,20,0" SelectionChanged="ComboModels_SelectionChanged"/>
+                        <TextBlock Text="Model:" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox Name="ComboModels" Width="120" Height="28" Style="{StaticResource DarkComboBoxStyle}" VerticalAlignment="Center" Margin="0,0,6,0" SelectionChanged="ComboModels_SelectionChanged">
+                            <ComboBox.ItemContainerStyle>
+                                <Style TargetType="ComboBoxItem">
+                                    <EventSetter Event="PreviewMouseLeftButtonUp" Handler="ComboModels_PreviewMouseLeftButtonUp"/>
+                                </Style>
+                            </ComboBox.ItemContainerStyle>
+                        </ComboBox>
 
-                        <TextBlock Text="Serial Number:" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <TextBox Name="TxtSerialNumber" Width="180" Height="28" Background="#18181B" BorderBrush="#3F3F46" Foreground="White" Padding="6,2" VerticalAlignment="Center" Text="" LostFocus="TxtSerialNumber_LostFocus" TextChanged="TxtSerialNumber_TextChanged" KeyDown="TxtSerialNumber_KeyDown"/>
+                        <Button Name="BtnToggleSettings" Click="BtnToggleSettings_Click" Width="30" Height="28" Background="#18181B" BorderBrush="#3F3F46" BorderThickness="1" Cursor="Hand" Margin="0,0,5,0" ToolTip="Ẩn / Hiện cài đặt Audio Routing">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="border" Property="Background" Value="#27272A"/>
+                                                        <Setter TargetName="border" Property="BorderBrush" Value="#10B981"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                            <Viewbox Width="16" Height="16">
+                                <Path Name="IconSettingsEye" Fill="#A1A1AA" Data="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.44-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
+                            </Viewbox>
+                        </Button>
 
-                        <Button Name="BtnAddProduct" Content="Add Product" Click="BtnAddProduct_Click" Background="#10B981" Foreground="Black" BorderThickness="0" FontSize="12" Padding="12,4" Height="28" Cursor="Hand" Margin="6,0,0,0">
+                        <Button Name="BtnDiscardMeasurement" Click="BtnDiscardMeasurement_Click" Width="30" Height="28" Background="#2A1114" BorderBrush="#EF4444" BorderThickness="1" Cursor="Hand" Margin="0,0,10,0" ToolTip="Dừng đo và xóa kết quả vừa đo" Visibility="Collapsed">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border x:Name="border" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="border" Property="Background" Value="#7F1D1D"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                            <Canvas Width="14" Height="14"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    SnapsToDevicePixels="True">
+                                <Rectangle Width="2" Height="12" Fill="White" Canvas.Left="3" Canvas.Top="1"/>
+                                <Rectangle Width="2" Height="12" Fill="White" Canvas.Left="9" Canvas.Top="1"/>
+                            </Canvas>
+                        </Button>
+
+                        <TextBlock Text="Serial Number:" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,6,0" Visibility="Collapsed"/>
+                        <TextBox Name="TxtSerialNumber" Width="150" Height="28" Background="#18181B" BorderBrush="#3F3F46" Foreground="White" Padding="6,2" VerticalAlignment="Center" Text="" LostFocus="TxtSerialNumber_LostFocus" TextChanged="TxtSerialNumber_TextChanged" KeyDown="TxtSerialNumber_KeyDown" Visibility="Collapsed"/>
+
+                        <Button Name="BtnAddProduct" Content="Add Product" Click="BtnAddProduct_Click" Visibility="Collapsed" Background="#10B981" Foreground="Black" BorderThickness="0" FontSize="12" Padding="10,4" Height="28" Cursor="Hand" Margin="5,0,0,0">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="4"/>
@@ -108,7 +166,7 @@
                             </Button.Resources>
                         </Button>
 
-                        <Button Name="BtnCheckStatus" Content="Check Status" Click="BtnCheckStatus_Click" Background="#3B82F6" Foreground="White" BorderThickness="0" FontSize="12" Padding="12,4" Height="28" Cursor="Hand" Margin="6,0,0,0">
+                        <Button Name="BtnCheckStatus" Content="Check Status" Click="BtnCheckStatus_Click" Visibility="Collapsed" Background="#3B82F6" Foreground="White" BorderThickness="0" FontSize="12" Padding="10,4" Height="28" Cursor="Hand" Margin="5,0,0,0">
                             <Button.Resources>
                                 <Style TargetType="Border">
                                     <Setter Property="CornerRadius" Value="4"/>
@@ -122,6 +180,30 @@
 
         <!-- Main Workspace Area -->
         <ContentControl Name="MainContentArea" Grid.Row="1"/>
+        <Grid Name="ResizeHandles" Grid.RowSpan="2" Panel.ZIndex="100">
+            <Grid.Resources>
+                <Style TargetType="Thumb">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Thumb"><Border Background="Transparent"/></ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Grid.Resources>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="8"/><RowDefinition Height="*"/><RowDefinition Height="8"/>
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="8"/><ColumnDefinition Width="*"/><ColumnDefinition Width="8"/>
+            </Grid.ColumnDefinitions>
+            <Thumb Grid.Row="0" Grid.Column="0" Tag="TopLeft" Cursor="SizeNWSE" Background="Transparent" DragDelta="ResizeThumb_DragDelta"/>
+            <Thumb Grid.Row="0" Grid.Column="1" Tag="Top" Cursor="SizeNS" Background="Transparent" DragDelta="ResizeThumb_DragDelta"/>
+            <Thumb Grid.Row="0" Grid.Column="2" Tag="TopRight" Cursor="SizeNESW" Background="Transparent" DragDelta="ResizeThumb_DragDelta"/>
+            <Thumb Grid.Row="1" Grid.Column="0" Tag="Left" Cursor="SizeWE" Background="Transparent" DragDelta="ResizeThumb_DragDelta"/>
+            <Thumb Grid.Row="1" Grid.Column="2" Tag="Right" Cursor="SizeWE" Background="Transparent" DragDelta="ResizeThumb_DragDelta"/>
+            <Thumb Grid.Row="2" Grid.Column="0" Tag="BottomLeft" Cursor="SizeNESW" Background="Transparent" DragDelta="ResizeThumb_DragDelta"/>
+            <Thumb Grid.Row="2" Grid.Column="1" Tag="Bottom" Cursor="SizeNS" Background="Transparent" DragDelta="ResizeThumb_DragDelta"/>
+            <Thumb Grid.Row="2" Grid.Column="2" Tag="BottomRight" Cursor="SizeNWSE" Background="Transparent" DragDelta="ResizeThumb_DragDelta"/>
+        </Grid>
     </Grid>
 </Window>
-

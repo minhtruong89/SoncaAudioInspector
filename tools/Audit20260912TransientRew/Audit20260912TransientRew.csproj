@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="StandardMeasurementCheck"><HintPath>..\StandardMeasurementCheck\bin\Debug\net9.0\StandardMeasurementCheck.dll</HintPath></Reference>
+    <Reference Include="MeasurementCheck"><HintPath>..\MeasurementCheck\bin\Debug\net9.0\MeasurementCheck.dll</HintPath></Reference>
+    <Reference Include="MathNet.Numerics"><HintPath>..\StandardMeasurementCheck\bin\Debug\net9.0\MathNet.Numerics.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

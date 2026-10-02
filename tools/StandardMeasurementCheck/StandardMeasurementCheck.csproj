@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove=".artifacts\**\*.cs" />
+    <Compile Remove="obj\**\*.cs" />
+    <Compile Include="..\..\StandardAcousticMeasurement.cs" Link="StandardAcousticMeasurement.cs" />
+    <Compile Include="..\..\SweepDistortionSummary.cs" Link="SweepDistortionSummary.cs" />
+    <Compile Include="..\..\MicrophoneCalibration.cs" Link="MicrophoneCalibration.cs" />
+    <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+  </ItemGroup>
+</Project>

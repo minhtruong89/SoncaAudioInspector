@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
@@ -9,6 +10,7 @@ namespace SoncaAudioInspector
 {
     public partial class SplashWindow : Window
     {
+        private bool _diagnosticsRunning;
         public SplashWindow()
         {
             InitializeComponent();
@@ -28,14 +30,20 @@ namespace SoncaAudioInspector
 
         private async Task RunDiagnosticsAsync()
         {
+            if (_diagnosticsRunning) return;
+            _diagnosticsRunning = true;
+            try
+            {
             // Reset UI states
             PanelFailureButtons.Visibility = Visibility.Collapsed;
+            PanelVerifyHelper.Visibility = Visibility.Collapsed;
+            TxtCopyFeedback.Visibility = Visibility.Collapsed;
             LblStatus.Text = "Đang thực hiện kiểm tra chẩn đoán hệ thống...";
             LblStatus.Foreground = new SolidColorBrush(Color.FromRgb(161, 161, 170));
 
             IconSys001.Text = "○";
             IconSys001.Foreground = new SolidColorBrush(Color.FromRgb(113, 113, 122));
-            TxtSys001.Text = "SYS001 - Kiểm tra kết nối Internet (Đang kiểm tra...)";
+            TxtSys001.Text = "SYS001 - Xác thực ứng dụng (Đang kiểm tra...)";
             ErrorSys001.Visibility = Visibility.Collapsed;
             ErrorSys001.Text = "";
 
@@ -52,43 +60,26 @@ namespace SoncaAudioInspector
             ErrorSys003.Text = "";
 
             // ---------------------------------------------------------
-            // SYS001 - Internet Connection Check
+            // Verify the app and fetch configuration concurrently. A third-party
+            // connectivity probe adds latency and can fail while our server works.
             // ---------------------------------------------------------
-            bool internetPass = false;
-            string internetError = "";
-            try
-            {
-                using (var client = new HttpClient())
-                {
-                    client.Timeout = TimeSpan.FromSeconds(3);
-                    var response = await client.GetAsync("http://clients3.google.com/generate_204");
-                    if (response.IsSuccessStatusCode)
-                    {
-                        internetPass = true;
-                    }
-                    else
-                    {
-                        internetError = $"Mã lỗi HTTP: {response.StatusCode}";
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                internetError = $"Không thể kết nối Internet: {ex.Message}";
-            }
+            Task<byte[]> configDownloadTask = DownloadCheckingConfigAsync();
+            Task<bool> appVerificationTask = ServerEngine.VerifyAppAsync(
+                new Progress<string>(message => LblStatus.Text = message));
+            bool appVerified = await appVerificationTask;
 
-            if (internetPass)
+            if (appVerified)
             {
                 IconSys001.Text = "✔";
                 IconSys001.Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129)); // Neon green
-                TxtSys001.Text = "SYS001 - Kiểm tra kết nối Internet (Đạt)";
+                TxtSys001.Text = "SYS001 - Xác thực ứng dụng (Đạt)";
             }
             else
             {
                 IconSys001.Text = "✘";
                 IconSys001.Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68)); // Neon red
-                TxtSys001.Text = "SYS001 - Kiểm tra kết nối Internet (Không Đạt)";
-                ErrorSys001.Text = internetError;
+                TxtSys001.Text = "SYS001 - Xác thực ứng dụng (Không Đạt)";
+                ErrorSys001.Text = ServerEngine.LastError ?? "Không thể xác thực ứng dụng.";
                 ErrorSys001.Visibility = Visibility.Visible;
             }
 
@@ -97,39 +88,34 @@ namespace SoncaAudioInspector
             // ---------------------------------------------------------
             bool sys002Pass = false;
             string sys002Error = "";
-            if (internetPass)
+            try
             {
+                string localPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
+                byte[] contentBytes = await configDownloadTask;
+                using (var document = System.Text.Json.JsonDocument.Parse(contentBytes))
+                {
+                    if (!document.RootElement.TryGetProperty("models", out var models)
+                        || models.ValueKind != System.Text.Json.JsonValueKind.Array
+                        || models.GetArrayLength() == 0)
+                        throw new InvalidOperationException("File cấu hình tải về không có danh sách model hợp lệ.");
+                }
+
+                string temporaryPath = localPath + ".download";
                 try
                 {
-                    string localPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
-                    string url = "http://data.soncamedia.com/firmware/smartbox/audioInspector/checking_config.json";
-
-                    using (var client = new HttpClient())
-                    {
-                        client.Timeout = TimeSpan.FromSeconds(10);
-                        using (var response = await client.GetAsync(url))
-                        {
-                            if (response.IsSuccessStatusCode)
-                            {
-                                byte[] contentBytes = await response.Content.ReadAsByteArrayAsync();
-                                System.IO.File.WriteAllBytes(localPath, contentBytes);
-                                sys002Pass = true;
-                            }
-                            else
-                            {
-                                sys002Error = $"Mã lỗi HTTP: {response.StatusCode}";
-                            }
-                        }
-                    }
+                    System.IO.File.WriteAllBytes(temporaryPath, contentBytes);
+                    System.IO.File.Move(temporaryPath, localPath, overwrite: true);
                 }
-                catch (Exception ex)
+                finally
                 {
-                    sys002Error = $"Lỗi khi tải hoặc lưu tệp cấu hình: {ex.Message}";
+                    if (System.IO.File.Exists(temporaryPath))
+                        System.IO.File.Delete(temporaryPath);
                 }
+                sys002Pass = true;
             }
-            else
+            catch (Exception ex)
             {
-                sys002Error = "Bỏ qua tải do kiểm tra internet không đạt.";
+                sys002Error = $"Lỗi khi tải hoặc lưu tệp cấu hình: {ex.Message}";
             }
 
             // Fallback to local file if it exists
@@ -164,72 +150,21 @@ namespace SoncaAudioInspector
             }
 
             // ---------------------------------------------------------
-            // SYS003 - Audio Hardware Detection Check (Formerly SYS002)
+            // SYS003 - Audio hardware is initialized once by Audio Routing.
+            // Avoid enumerating it again here so the login window appears faster.
             // ---------------------------------------------------------
-            bool hardwarePass = false;
-            string hardwareError = "";
-            try
-            {
-                using (var engine = new AudioEngine())
-                {
-                    var playback = engine.GetPlaybackDevices();
-                    var recording = engine.GetRecordingDevices();
-
-                    string[] targets = { "MI_LCD", "MI LCD", "MI SAM", "FastTrack Pro" };
-                    
-                    bool foundPlayback = playback.Any(d => targets.Any(t => d.FriendlyName.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0));
-                    bool foundRecording = recording.Any(d => targets.Any(t => d.FriendlyName.IndexOf(t, StringComparison.OrdinalIgnoreCase) >= 0));
-
-                    if (foundPlayback || foundRecording)
-                    {
-                        hardwarePass = true;
-                    }
-                    else
-                    {
-                        hardwareError = "Không tìm thấy thiết bị phần cứng âm thanh yêu cầu (Cần có ít nhất một thiết bị chứa tên: MI_LCD, MI LCD, MI SAM, hoặc FastTrack Pro).";
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                hardwareError = $"Lỗi khi quét thiết bị phần cứng: {ex.Message}";
-            }
-
-            hardwarePass = true; // TODO TEST
-
-            if (hardwarePass)
-            {
-                IconSys003.Text = "✔";
-                IconSys003.Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129)); // Neon green
-                TxtSys003.Text = "SYS003 - Kiểm tra kết nối thiết bị phần cứng (Đạt)";
-            }
-            else
-            {
-                IconSys003.Text = "✘";
-                IconSys003.Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68)); // Neon red
-                TxtSys003.Text = "SYS003 - Kiểm tra kết nối thiết bị phần cứng (Không Đạt)";
-                ErrorSys003.Text = hardwareError;
-                ErrorSys003.Visibility = Visibility.Visible;
-            }
+            bool hardwarePass = true;
+            IconSys003.Text = "○";
+            IconSys003.Foreground = new SolidColorBrush(Color.FromRgb(161, 161, 170));
+            TxtSys003.Text = "SYS003 - Thiết bị âm thanh sẽ được tải tại Audio Routing";
 
             // ---------------------------------------------------------
             // Final Decision
             // ---------------------------------------------------------
-            if (internetPass && sys002Pass && hardwarePass)
+            if (appVerified && sys002Pass && hardwarePass)
             {
-                LblStatus.Text = "Tất cả các kiểm tra đều đạt! Đang xác thực ứng dụng...";
+                LblStatus.Text = "Tất cả các kiểm tra đều đạt! Đang tải giao diện đăng nhập...";
                 LblStatus.Foreground = new SolidColorBrush(Color.FromRgb(16, 185, 129));
-
-                bool appVerified = await ServerEngine.VerifyAppAsync();
-                if (!appVerified)
-                {
-                    LblStatus.Text = ServerEngine.LastError ?? "Không thể xác thực ứng dụng.";
-                    LblStatus.Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68));
-                    PanelFailureButtons.Visibility = Visibility.Visible;
-                    return;
-                }
-
-                LblStatus.Text = "Ứng dụng đã được xác thực! Đang tải giao diện đăng nhập...";
 
                 // Launch login window
                 LoginWindow login = new LoginWindow();
@@ -246,10 +181,29 @@ namespace SoncaAudioInspector
             }
             else
             {
-                LblStatus.Text = "Kiểm tra chẩn đoán hệ thống không đạt!";
+                LblStatus.Text = ServerEngine.LastError ?? "Kiểm tra chẩn đoán hệ thống không đạt!";
                 LblStatus.Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68));
+                if (!appVerified)
+                {
+                    string expectedPath = ServerEngine.GetExpectedVerifyFilePath();
+                    bool isVerifyMissing = (ServerEngine.LastError?.Contains("verify.txt") == true) || !File.Exists(expectedPath);
+                    PanelVerifyHelper.Visibility = isVerifyMissing ? Visibility.Visible : Visibility.Collapsed;
+                    if (isVerifyMissing) TxtVerifyPath.Text = expectedPath;
+                }
                 PanelFailureButtons.Visibility = Visibility.Visible;
             }
+            }
+            finally { _diagnosticsRunning = false; }
+        }
+
+        private static async Task<byte[]> DownloadCheckingConfigAsync()
+        {
+            string localPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(File.Exists(localPath) ? 3 : 10) };
+            using var response = await client.GetAsync(
+                "http://data.soncamedia.com/firmware/smartbox/audioInspector/checking_config.json");
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsByteArrayAsync();
         }
 
         private async void BtnRetry_Click(object sender, RoutedEventArgs e)
@@ -260,6 +214,64 @@ namespace SoncaAudioInspector
         private void BtnExit_Click(object sender, RoutedEventArgs e)
         {
             Application.Current.Shutdown();
+        }
+        private void BtnCopyVerifyPath_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(TxtVerifyPath.Text))
+            {
+                Clipboard.SetText(TxtVerifyPath.Text);
+                TxtCopyFeedback.Text = "✓ Đã sao chép đường dẫn vào clipboard!";
+                TxtCopyFeedback.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void BtnOpenVerifyFolder_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string target = TxtVerifyPath.Text;
+                if (File.Exists(target))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{target}\"") { UseShellExecute = true });
+                }
+                else
+                {
+                    string? dir = Path.GetDirectoryName(target);
+                    if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{dir}\"") { UseShellExecute = true });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                ModernMessageBox.Show(this, "Không mở được thư mục: " + ex.Message, "Lỗi", ModernMessageBox.MessageBoxType.Error);
+            }
+        }
+
+        private void BtnCreateTemplateVerify_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string target = TxtVerifyPath.Text;
+                if (!File.Exists(target))
+                {
+                    string? dir = Path.GetDirectoryName(target);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    {
+                        Directory.CreateDirectory(dir);
+                    }
+                    string template = "{\n  \"email\": \"admin@sonca.vn\",\n  \"password\": \"mat_khau_admin_o_day\"\n}\n";
+                    File.WriteAllText(target, template, System.Text.Encoding.UTF8);
+                }
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("notepad.exe", $"\"{target}\"") { UseShellExecute = true });
+                TxtCopyFeedback.Text = "✓ Đã mở Notepad! Hãy nhập email/mật khẩu quản trị rồi bấm 'Kiểm tra lại'.";
+                TxtCopyFeedback.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex)
+            {
+                ModernMessageBox.Show(this, "Không tạo được file: " + ex.Message, "Lỗi", ModernMessageBox.MessageBoxType.Error);
+            }
         }
     }
 }

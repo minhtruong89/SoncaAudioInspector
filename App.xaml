@@ -139,7 +139,7 @@
             <Setter Property="Background" Value="#27272A"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="10"/>
+            <Setter Property="Padding" Value="10,5"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -159,9 +159,10 @@
                     <Setter Property="Background" Value="#3F3F46"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#1F1F22"/>
-                    <Setter Property="Foreground" Value="#52525B"/>
+                    <Setter Property="Background" Value="#3F3F46"/>
+                    <Setter Property="Foreground" Value="#F4F4F5"/>
                     <Setter Property="Cursor" Value="Arrow"/>
+                    <Setter Property="Opacity" Value="0.72"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -169,10 +170,10 @@
         <!-- Tab Button Style -->
         <Style x:Key="TabButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#18181B"/>
-            <Setter Property="Foreground" Value="#71717A"/>
+            <Setter Property="Foreground" Value="#D4D4D8"/>
             <Setter Property="BorderBrush" Value="#27272A"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="Padding" Value="12,6"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
@@ -195,6 +196,11 @@
                     <Setter Property="BorderBrush" Value="#3F3F46"/>
                     <Setter Property="Foreground" Value="#F4F4F5"/>
                 </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#3F3F46"/>
+                    <Setter Property="Foreground" Value="#F4F4F5"/>
+                    <Setter Property="Opacity" Value="0.72"/>
+                </Trigger>
             </Style.Triggers>
         </Style>
 
@@ -207,8 +213,8 @@
                     <Setter Property="Background" Value="#34D399"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#1F1F22"/>
-                    <Setter Property="Foreground" Value="#52525B"/>
+                    <Setter Property="Background" Value="#3F3F46"/>
+                    <Setter Property="Foreground" Value="#F4F4F5"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -222,8 +228,8 @@
                     <Setter Property="Background" Value="#60A5FA"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#1F1F22"/>
-                    <Setter Property="Foreground" Value="#52525B"/>
+                    <Setter Property="Background" Value="#3F3F46"/>
+                    <Setter Property="Foreground" Value="#F4F4F5"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -237,10 +243,39 @@
                     <Setter Property="Background" Value="#F87171"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Background" Value="#1F1F22"/>
-                    <Setter Property="Foreground" Value="#52525B"/>
+                    <Setter Property="Background" Value="#3F3F46"/>
+                    <Setter Property="Foreground" Value="#F4F4F5"/>
                 </Trigger>
             </Style.Triggers>
+        </Style>
+
+        <!-- Preset Button Style -->
+        <Style x:Key="PresetButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#18181B"/>
+            <Setter Property="Foreground" Value="#D4D4D8"/>
+            <Setter Property="BorderBrush" Value="#3F3F46"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="2,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#27272A"/>
+                                <Setter Property="BorderBrush" Value="#10B981"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Application.Resources>
 </Application>

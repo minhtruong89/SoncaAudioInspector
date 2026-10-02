@@ -28,3 +28,26 @@ packages/
 # Local bootstrap credentials
 verify.txt
 secret.json
+
+# CodeGraph
+.codegraph/
+
+# Local web research cache
+.firecrawl/
+
+# AI build outputs and local diagnostic data
+.artifacts/
+.artifacts-*/
+.codex-artifacts/
+.codex-bin-*/
+.codex-obj*/
+.codex-build/
+bin-*/
+obj-*/
+demo-builds/
+hardware-channel-fix/
+scratch/
+FastTrackPro_x64 Driver/
+save standards/
+codex-session-*.md
+tools/**/dist/

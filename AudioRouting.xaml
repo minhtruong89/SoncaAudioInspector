@@ -9,14 +9,46 @@
              d:DesignHeight="720" d:DesignWidth="1200"
              Background="#0E0E10" Foreground="#E4E4E7">
              
+    <UserControl.Resources>
+        <!-- Preset Button Style -->
+        <Style x:Key="PresetButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#18181B"/>
+            <Setter Property="Foreground" Value="#D4D4D8"/>
+            <Setter Property="BorderBrush" Value="#3F3F46"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="2,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#27272A"/>
+                                <Setter Property="BorderBrush" Value="#10B981"/>
+                                <Setter Property="Foreground" Value="#FFFFFF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="360"/>
+            <ColumnDefinition x:Name="SetupColumn" Width="0" MinWidth="0" MaxWidth="700"/>
+            <ColumnDefinition x:Name="SplitterColumn" Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
         <!-- Sidebar Controls & Setup -->
-        <Border Grid.Column="0" Background="#121214" BorderBrush="#27272A" BorderThickness="0,0,1,0" Padding="20">
+        <Border Name="PanelSetup" Grid.Column="0" Background="#121214" BorderBrush="#27272A" BorderThickness="0,0,1,0" Padding="20" Visibility="Collapsed">
             <ScrollViewer Name="SidebarScrollViewer" VerticalScrollBarVisibility="Auto">
                 <StackPanel>
                     <!-- AUDIO ROUTING SETUP -->
@@ -25,21 +57,19 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="AUDIO ROUTING SETUP" FontSize="11" FontWeight="Bold" Foreground="#71717A" VerticalAlignment="Center"/>
-                        <Button Name="BtnRefreshDevices" Content="↻" Click="BtnRefreshDevices_Click" Style="{StaticResource ModernButtonStyle}" Grid.Column="1" Width="26" Height="26" Padding="0" FontSize="14" ToolTip="Refresh Audio Devices" VerticalAlignment="Center"/>
+                        <TextBlock Text="CẤU HÌNH ĐƯỜNG ÂM THANH" FontSize="11" FontWeight="Bold" Foreground="#71717A" VerticalAlignment="Center"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Name="BtnRefreshDevices" Content="↻" Click="BtnRefreshDevices_Click" Style="{StaticResource ModernButtonStyle}" Width="26" Height="26" Padding="0" FontSize="14" ToolTip="Làm mới thiết bị âm thanh" VerticalAlignment="Center"/>
+                        </StackPanel>
                     </Grid>
 
                     <!-- PLAYBACK OUT REGION -->
                     <Border Background="#1A1A1E" CornerRadius="6" Padding="12" Margin="0,0,0,15" BorderBrush="#27272A" BorderThickness="1">
                         <StackPanel>
-                            <TextBlock Text="PLAYBACK OUT" FontSize="11" FontWeight="Bold" Foreground="#10B981" Margin="0,0,0,10"/>
+                            <TextBlock Text="NGÕ PHÁT" FontSize="11" FontWeight="Bold" Foreground="#10B981" Margin="0,0,0,10"/>
 
-                            <!-- USB Playback -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                <RadioButton Name="RadioUsbPlayback" IsChecked="True" GroupName="PlaybackSource" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="USB Playback Out" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <ComboBox Name="ComboPlayback" SelectionChanged="ComboDevice_SelectionChanged" Style="{StaticResource DarkComboBoxStyle}" DisplayMemberPath="DisplayName" Margin="0,0,0,10" Height="35">
+                            <TextBlock Text="Thiết bị phát" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,4"/>
+                            <ComboBox Name="ComboPlayback" SelectionChanged="ComboDevice_SelectionChanged" Style="{StaticResource DarkComboBoxStyle}" DisplayMemberPath="DisplayName" Margin="0,0,0,4" Height="35">
                                 <ComboBox.Resources>
                                     <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#3B82F6" />
                                     <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="White" />
@@ -50,47 +80,87 @@
                                     </Style>
                                 </ComboBox.Resources>
                             </ComboBox>
+                            <Button Name="BtnRemoveBluetooth" Content="Xóa Bluetooth đã ghép"
+                                    Click="BtnRemoveBluetooth_Click"
+                                    Style="{StaticResource ModernButtonStyle}"
+                                    HorizontalAlignment="Right" Padding="8,3" Margin="0,2,0,5"
+                                    ToolTip="Remove device trong Windows Bluetooth &amp; devices"/>
+                            <TextBlock Name="TxtPlaybackFormat" Text="Định dạng: chưa chọn thiết bị"
+                                       FontSize="10" Foreground="#71717A" Margin="0,0,0,8"/>
 
-                            <!-- Bluetooth Playback -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                                <RadioButton Name="RadioBtPlayback" GroupName="PlaybackSource" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="Bluetooth Playback Out" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <ComboBox Name="ComboBluetooth" SelectionChanged="ComboDevice_SelectionChanged" Style="{StaticResource DarkComboBoxStyle}" DisplayMemberPath="DisplayName" Margin="0,0,0,12" Height="35">
-                                <ComboBox.Resources>
-                                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#3B82F6" />
-                                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="White" />
-                                    <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#18181B" />
-                                    <Style TargetType="ComboBoxItem">
-                                        <Setter Property="Background" Value="#18181B"/>
-                                        <Setter Property="Foreground" Value="White"/>
-                                    </Style>
-                                </ComboBox.Resources>
-                            </ComboBox>
+                            <!-- Kênh phát (Out Channel) giống Đo Nâng Cao -->
+                            <Grid Name="GridRoutingPlaybackChannel" Margin="0,0,0,8" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Kênh phát (Out)" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center"/>
+                                <ComboBox Name="ComboRoutingPlaybackChannel" Grid.Column="1" Width="140" Height="28"
+                                          Style="{StaticResource DarkComboBoxStyle}"
+                                          SelectionChanged="ComboRoutingPlaybackChannel_SelectionChanged">
+                                    <ComboBoxItem Content="Cả 2 (L+R)" IsSelected="True"/>
+                                    <ComboBoxItem Content="Trái (L)"/>
+                                    <ComboBoxItem Content="Phải (R)"/>
+                                </ComboBox>
+                                <TextBlock Name="TxtPlaybackChannelUnavailable" Grid.Column="1" Text="Thiết bị mono · không có L/R"
+                                           Visibility="Collapsed" Foreground="#71717A" FontSize="10" VerticalAlignment="Center"/>
+                            </Grid>
 
+                            <!-- MỨC PHÁT TÍN HIỆU (LEVEL dBFS) -->
                             <Grid Margin="0,0,0,6">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Playback Volume" FontSize="11" Foreground="#71717A" VerticalAlignment="Center"/>
+                                <TextBlock Text="Mức phát tín hiệu" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center"/>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Name="BtnDecreasePlaybackVolume" Content="-" Click="BtnDecreasePlaybackVolume_Click" Style="{StaticResource ModernButtonStyle}" Width="24" Height="22" Padding="0" FontSize="14" FontWeight="Bold" Margin="0,0,4,0" ToolTip="Giảm 10%"/>
-                                    <TextBlock Name="LblPlaybackVolume" Text="80%" FontSize="11" Foreground="#3B82F6" FontWeight="Bold" VerticalAlignment="Center" Width="38" TextAlignment="Center"/>
-                                    <Button Name="BtnIncreasePlaybackVolume" Content="+" Click="BtnIncreasePlaybackVolume_Click" Style="{StaticResource ModernButtonStyle}" Width="24" Height="22" Padding="0" FontSize="14" FontWeight="Bold" Margin="4,0,0,0" ToolTip="Tăng 10%"/>
+                                    <Button Name="BtnDecreaseLevelDbfs" Content="-" Style="{StaticResource ModernButtonStyle}" Width="24" Height="22" Padding="0" FontSize="14" FontWeight="Bold" Margin="0,0,4,0" ToolTip="Giảm 1 dBFS" Click="BtnDecreaseLevelDbfs_Click"/>
+                                    <TextBox Name="TxtPlaybackLevelDbfs" Text="0" Width="45" Height="24" Background="#18181B" BorderBrush="#3F3F46" Foreground="#10B981" FontWeight="Bold" FontSize="11" TextAlignment="Center" Padding="0,2" VerticalAlignment="Center" LostFocus="TxtPlaybackLevelDbfs_LostFocus" KeyDown="TxtPlaybackLevelDbfs_KeyDown"/>
+                                    <TextBlock Text=" dBFS" FontSize="11" Foreground="#71717A" VerticalAlignment="Center" Margin="2,0,4,0"/>
+                                    <Button Name="BtnIncreaseLevelDbfs" Content="+" Style="{StaticResource ModernButtonStyle}" Width="24" Height="22" Padding="0" FontSize="14" FontWeight="Bold" ToolTip="Tăng 1 dBFS" Click="BtnIncreaseLevelDbfs_Click"/>
                                 </StackPanel>
                             </Grid>
-                            <Slider Name="SliderPlaybackVolume" Minimum="0" Maximum="100" Value="80" IsSnapToTickEnabled="True" TickFrequency="1" ValueChanged="SliderPlaybackVolume_ValueChanged" PreviewMouseWheel="SliderPlaybackVolume_PreviewMouseWheel" Margin="0,0,0,5"/>
+                            <Slider Name="SliderPlaybackLevelDbfs" Minimum="-60" Maximum="0" Value="0" IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,0,0,8" ValueChanged="SliderPlaybackLevelDbfs_ValueChanged" PreviewMouseWheel="SliderPlaybackLevelDbfs_PreviewMouseWheel"/>
+                            <Grid Margin="0,5,0,0" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="120"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Sample rate phát của App" FontSize="11" Foreground="#71717A" VerticalAlignment="Center"/>
+                                <ComboBox Name="ComboPlaybackSampleRate" Grid.Column="1" Height="30"
+                                          Style="{StaticResource DarkComboBoxStyle}"
+                                          IsEnabled="False" Focusable="False"
+                                          ToolTip="Sample rate phát cố định 44,1 kHz cho toàn bộ Auto Test"
+                                          SelectionChanged="PlaybackSampleRate_SelectionChanged">
+                                    <ComboBoxItem Content="44,1 kHz (Cố định)" Tag="44100" IsSelected="True"/>
+                                </ComboBox>
+                            </Grid>
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="120"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Chế độ phát" FontSize="11" Foreground="#71717A" VerticalAlignment="Center"/>
+                                <ComboBox Name="ComboPlaybackMode" Grid.Column="1" Height="30"
+                                          Style="{StaticResource DarkComboBoxStyle}"
+                                          IsEnabled="False" Focusable="False"
+                                          ToolTip="Mọi phép đo dùng Windows Shared"
+                                          SelectionChanged="PlaybackMode_SelectionChanged">
+                                    <ComboBoxItem Content="Shared (Windows)" Tag="Shared" IsSelected="True"/>
+                                </ComboBox>
+                            </Grid>
+                            <TextBlock Text="Mọi phép đo dùng chung thiết bị âm thanh qua Windows Shared."
+                                       FontSize="9" Foreground="#71717A" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
 
                     <!-- RECORDING IN REGION -->
                     <Border Background="#1A1A1E" CornerRadius="6" Padding="12" Margin="0,0,0,15" BorderBrush="#27272A" BorderThickness="1">
                         <StackPanel>
-                            <TextBlock Text="RECORDING IN" FontSize="11" FontWeight="Bold" Foreground="#3B82F6" Margin="0,0,0,10"/>
+                            <TextBlock Text="NGÕ THU" FontSize="11" FontWeight="Bold" Foreground="#3B82F6" Margin="0,0,0,10"/>
 
-                            <TextBlock Text="Recording In" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,4"/>
-                            <ComboBox Name="ComboRecording" SelectionChanged="ComboDevice_SelectionChanged" Style="{StaticResource DarkComboBoxStyle}" DisplayMemberPath="DisplayName" Margin="0,0,0,12" Height="35">
+                            <TextBlock Text="Thiết bị thu" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,4"/>
+                            <ComboBox Name="ComboRecording" SelectionChanged="ComboDevice_SelectionChanged" Style="{StaticResource DarkComboBoxStyle}" DisplayMemberPath="DisplayName" Margin="0,0,0,4" Height="35">
                                 <ComboBox.Resources>
                                     <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#3B82F6" />
                                     <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="White" />
@@ -101,41 +171,132 @@
                                     </Style>
                                 </ComboBox.Resources>
                             </ComboBox>
+                            <TextBlock Name="TxtRecordingFormat" Text="Định dạng: chưa chọn thiết bị"
+                                       FontSize="10" Foreground="#71717A" Margin="0,0,0,8"/>
 
-                            <Grid Margin="0,0,0,6">
+                            <!-- Kênh thu (Mic / In Channel) giống Đo Nâng Cao -->
+                            <Grid Name="GridRoutingRecordingChannel" Margin="0,0,0,8" Visibility="Collapsed">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Recording Gain" FontSize="11" Foreground="#71717A" VerticalAlignment="Center"/>
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Name="BtnDecreaseRecordingGain" Content="-" Click="BtnDecreaseRecordingGain_Click" Style="{StaticResource ModernButtonStyle}" Width="24" Height="22" Padding="0" FontSize="14" FontWeight="Bold" Margin="0,0,4,0" ToolTip="Giảm 10%"/>
-                                    <TextBlock Name="LblRecordingGain" Text="100%" FontSize="11" Foreground="#3B82F6" FontWeight="Bold" VerticalAlignment="Center" Width="38" TextAlignment="Center"/>
-                                    <Button Name="BtnIncreaseRecordingGain" Content="+" Click="BtnIncreaseRecordingGain_Click" Style="{StaticResource ModernButtonStyle}" Width="24" Height="22" Padding="0" FontSize="14" FontWeight="Bold" Margin="4,0,0,0" ToolTip="Tăng 10%"/>
-                                </StackPanel>
+                                <TextBlock Text="Kênh thu (Mic)" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center"/>
+                                <ComboBox Name="ComboRoutingRecordingChannel" Grid.Column="1" Width="140" Height="28"
+                                          Style="{StaticResource DarkComboBoxStyle}"
+                                          SelectionChanged="ComboRoutingRecordingChannel_SelectionChanged">
+                                    <ComboBoxItem Content="Cả 2 (Trộn)" IsSelected="True"/>
+                                    <ComboBoxItem Content="Mic 1 (Trái)"/>
+                                    <ComboBoxItem Content="Mic 2 (Phải)"/>
+                                </ComboBox>
+                                <TextBlock Name="TxtRecordingChannelUnavailable" Grid.Column="1" Text="Thiết bị mono · không có L/R"
+                                           Visibility="Collapsed" Foreground="#71717A" FontSize="10" VerticalAlignment="Center"/>
                             </Grid>
-                            <Slider Name="SliderRecordingGain" Minimum="0" Maximum="200" Value="100" IsSnapToTickEnabled="True" TickFrequency="1" ValueChanged="SliderRecordingGain_ValueChanged" PreviewMouseWheel="SliderRecordingGain_PreviewMouseWheel" Margin="0,0,0,5"/>
+
+
+                            <Border Background="#121820" BorderBrush="#164E63" BorderThickness="1" CornerRadius="6" Padding="9" Margin="0,2,0,0">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,4">
+                                        <TextBlock Text="SCOPE &amp; KIỂM TRA NHIỄU" FontSize="11" FontWeight="Bold" Foreground="#22D3EE"/>
+                                        <TextBlock Text="LIVE" HorizontalAlignment="Right" FontSize="10" FontWeight="Bold" Foreground="#67E8F9"/>
+                                    </Grid>
+                                    <TextBlock Text="Mở oscilloscope để tự ghi mức nền/nhiễu của chính ngõ thu. Có V/div và Sine Check 1 kHz."
+                                               FontSize="10" Foreground="#A1A1AA" TextWrapping="Wrap" Margin="0,0,0,7"/>
+                                    <Button Name="BtnOpenRoutingScope" Content="⌁ MỞ SCOPE / SINE CHECK" Click="BtnOpenRoutingScope_Click"
+                                            Style="{StaticResource BlueButtonStyle}" Height="32" FontWeight="Bold"
+                                            ToolTip="Mở Scope độc lập. Scope tự nhả ngõ thu trước khi bắt đầu phép đo."/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Hướng dẫn khi chưa chọn đủ cả Thiết bị phát và Thiết bị thu -->
+                            <Border x:Name="BorderHeadroomPrompt" Margin="0,8,0,0" Background="#141416" BorderBrush="#27272A"
+                                    BorderThickness="1" CornerRadius="6" Padding="10,10" Visibility="Visible">
+                                <TextBlock Text="ℹ Hãy chọn đủ Thiết bị phát (Out) và Thiết bị thu (In) để hiển thị Headroom."
+                                           FontSize="10" Foreground="#71717A" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"/>
+                            </Border>
+
+                            <!-- Headroom Ngõ thu REW (Chỉ hiển thị khi đã chọn xong cả In và Out, cố định chuẩn M 135px) -->
+                            <Border x:Name="BorderRoutingHeadroom" Margin="0,8,0,0" Background="#101820" BorderBrush="#164E63"
+                                    BorderThickness="1" CornerRadius="6" Padding="8,6" Visibility="Collapsed">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,5">
+                                        <TextBlock Text="HEADROOM NGÕ THU" FontSize="10" FontWeight="Bold" Foreground="#22D3EE" VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <local:RewRealtimeLevelMeter x:Name="RewMeterRouting" Height="135"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
                     </Border>
 
                     <!-- Test Configuration Limits -->
-                    <TextBlock Text="SPECIFICATION LIMITS" FontSize="11" FontWeight="Bold" Foreground="#71717A" Margin="0,0,0,12"/>
+                    <TextBlock Text="GIỚI HẠN KỸ THUẬT" FontSize="11" FontWeight="Bold" Foreground="#71717A" Margin="0,0,0,12"/>
                     <Grid Margin="0,0,0,20">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                            <TextBlock Text="Freq Tol (± dB)" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,4"/>
+                            <TextBlock Text="Sai số đáp tuyến (± dB)" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,4"/>
                             <TextBox Name="TxtFreqTolerance" Text="3.0" Background="#18181B" BorderBrush="#27272A" Foreground="White" Padding="8,6" Height="32"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                            <TextBlock Text="THD Limit (%)" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,4"/>
+                            <TextBlock Text="Giới hạn THD (%)" FontSize="11" Foreground="#A1A1AA" Margin="0,0,0,4"/>
                             <TextBox Name="TxtThdLimit" Text="0.5" Background="#18181B" BorderBrush="#27272A" Foreground="White" Padding="8,6" Height="32"/>
                         </StackPanel>
                     </Grid>
 
+                    <Border Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,16">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Name="ChkUseLogSweep" Content="MỘT LOG-SWEEP: ĐÁP TUYẾN + DISTORTION" IsChecked="True"
+                                          IsEnabled="False"
+                                          Foreground="#F4F4F5" FontSize="12" FontWeight="SemiBold"/>
+                                <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="22,6,0,0"
+                                            IsEnabled="{Binding IsEnabled, ElementName=BtnStart}">
+                                    <TextBlock Text="Sweep length" Foreground="#A1A1AA" FontSize="11" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <ComboBox Name="ComboSweepLength" Width="140" Height="28" Margin="0,0,5,0"
+                                              Style="{StaticResource DarkComboBoxStyle}" SelectionChanged="SweepLength_SelectionChanged"
+                                              ToolTip="Chọn số mẫu / thời lượng sweep định sẵn">
+                                        <ComboBoxItem Content="64k · 1,49 s" Tag="65536" IsSelected="True"/>
+                                        <ComboBoxItem Content="128k · 2,97 s" Tag="131072"/>
+                                        <ComboBoxItem Content="256k · 5,94 s" Tag="262144"/>
+                                        <ComboBoxItem Content="512k · 11,89 s" Tag="524288"/>
+                                        <ComboBoxItem Content="1M · 23,78 s" Tag="1048576"/>
+                                    </ComboBox>
+                                    <TextBox Name="TxtLogSweepDuration" Text="1.48608" Width="62" Height="28" Padding="6,4"
+                                             Background="#18181B" BorderBrush="#3F3F46" Foreground="White" Visibility="Collapsed"
+                                             LostFocus="MeasurementDuration_LostFocus" ToolTip="Thời gian sweep thực tế; nhập 0,5–30 giây hoặc chọn length"/>
+                                    <TextBlock Text="s" Foreground="#A1A1AA" FontSize="11" VerticalAlignment="Center" Margin="3,0,0,0" Visibility="Collapsed"/>
+                                    <TextBox Name="TxtMultitoneDuration" Text="10" Visibility="Collapsed"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Thu noise floor 1 giây trước sweep · phát guard 18 Hz → 22 kHz · cùng bản thu phân tích đáp tuyến, H2–H9 và THD"
+                                       Foreground="#71717A" FontSize="10" Margin="22,5,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
                     <Separator Background="#27272A" Margin="0,0,0,20"/>
+
+                    <CheckBox Name="ChkNormalizeOneKilohertz" Content="CHUẨN HÓA ĐÁP TUYẾN THEO 1 kHz (0 dBr)"
+                              IsChecked="True" Checked="NormalizeOneKilohertz_Changed" Unchecked="NormalizeOneKilohertz_Changed"
+                              IsEnabled="{Binding IsEnabled, ElementName=BtnStart}"
+                              Foreground="#F4F4F5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8"
+                              ToolTip="Trừ mức thu tại 1 kHz khỏi mọi điểm đáp tuyến. Mức thu 1 kHz thực vẫn hiện riêng bằng dBFS."/>
+                    <TextBlock Text="Mỗi chế độ dùng file line chuẩn riêng; mức thu 1 kHz thực vẫn được kiểm tra trước khi đánh giá."
+                               Foreground="#71717A" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,16"/>
+                    <TextBlock Name="TxtOneKilohertzLevel" Text="Mức thu 1 kHz: chưa đo" Foreground="#A1A1AA"
+                               FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,14"
+                               ToolTip="Mức tại 1 kHz suy ra từ phép đo đáp tuyến, trước khi trừ mốc 1 kHz. Chênh lệch so với chuẩn là mức thu, không phải dBr của đường đã chuẩn hóa."/>
+                    <TextBlock Name="TxtOneKilohertzToneLevel" Text="Tone 1 kHz: chưa đo" Foreground="#A1A1AA"
+                               FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,14"
+                               ToolTip="RMS dBFS và peak của bản thu tone 1 kHz thật; 0 dBFS là mức số tối đa, peak gần 1 có nguy cơ clipping."/>
 
                     <!-- Action Buttons -->
                     <Grid Margin="0,0,0,10">
@@ -143,14 +304,14 @@
                             <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <Button Name="BtnStart" Content="START LINE" Click="BtnStart_Click" Style="{StaticResource GreenButtonStyle}" FontWeight="Bold" Height="42" Margin="0,0,5,0"/>
-                        <Button Name="BtnSaveStandard" Grid.Column="1" Content="LƯU LINE" Click="BtnSaveStandard_Click" Style="{StaticResource BlueButtonStyle}" FontWeight="Bold" Height="42" Margin="5,0,0,0" IsEnabled="False"/>
+                        <Button Name="BtnStart" Content="BẮT ĐẦU ĐO LINE" Click="BtnStart_Click" Style="{StaticResource GreenButtonStyle}" FontWeight="Bold" Height="42" Margin="0,0,5,0"/>
+                        <Button Name="BtnSaveStandard" Grid.Column="1" Content="LƯU LINE CHUẨN" ToolTip="Lưu line chuẩn thành file theo cấu hình đo; ứng dụng sẽ tự nạp lại khi mở." Click="BtnSaveStandard_Click" Style="{StaticResource BlueButtonStyle}" FontWeight="Bold" Height="42" Margin="5,0,0,0" IsEnabled="False"/>
                     </Grid>
                     <Button Name="BtnSaveStandardReference" Content="TÌM LINE CHUẨN" Click="BtnSaveStandardReference_Click" Style="{StaticResource BlueButtonStyle}" FontWeight="Bold" Height="42" Margin="0,0,0,20"/>
-                    <Button Name="BtnNoiseTest" Content="TEST NOISE FLOOR (SILENCE)" Click="BtnNoiseTest_Click" Style="{StaticResource BlueButtonStyle}" FontWeight="Bold" Margin="0,0,0,20" Height="38" Visibility="Collapsed"/>
+                    <Button Name="BtnNoiseTest" Content="ĐO NỀN NHIỄU (IM LẶNG)" Click="BtnNoiseTest_Click" Style="{StaticResource BlueButtonStyle}" FontWeight="Bold" Margin="0,0,0,20" Height="38" Visibility="Collapsed"/>
 
                     <!-- Automated Checklist -->
-                    <TextBlock Text="TEST SEQUENCE STATUS" FontSize="11" FontWeight="Bold" Foreground="#71717A" Margin="0,0,0,12"/>
+                    <TextBlock Text="TRẠNG THÁI QUY TRÌNH ĐO" FontSize="11" FontWeight="Bold" Foreground="#71717A" Margin="0,0,0,12"/>
                     <ItemsControl Name="ListSteps">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -175,24 +336,40 @@
             </ScrollViewer>
         </Border>
 
+        <!-- Splitter để kéo chỉnh độ rộng của phần Cấu hình đường âm thanh -->
+        <GridSplitter x:Name="SetupSplitter" Grid.Column="1" Width="6" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                      Background="#141416" ShowsPreview="False" Cursor="SizeWE" Visibility="Collapsed">
+            <GridSplitter.Template>
+                <ControlTemplate TargetType="{x:Type GridSplitter}">
+                    <Border Background="#121214" BorderBrush="#27272A" BorderThickness="1,0,1,0">
+                        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <Rectangle Width="2" Height="4" Fill="#71717A" Margin="0,1" RadiusX="1" RadiusY="1"/>
+                            <Rectangle Width="2" Height="4" Fill="#71717A" Margin="0,1" RadiusX="1" RadiusY="1"/>
+                            <Rectangle Width="2" Height="4" Fill="#71717A" Margin="0,1" RadiusX="1" RadiusY="1"/>
+                        </StackPanel>
+                    </Border>
+                </ControlTemplate>
+            </GridSplitter.Template>
+        </GridSplitter>
+
         <!-- Right Panel (Charts & Verdict) -->
-        <Grid Grid.Column="1">
+        <Grid Grid.Column="2">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
+                <RowDefinition Name="RowFooterArea" Height="Auto"/>
             </Grid.RowDefinitions>
-            
+
             <!-- Plot Charts Panel -->
-            <Grid Grid.Row="0" Margin="15,15,15,5">
+            <Grid Name="GridChartsArea" Grid.Row="0" Margin="15,10,15,5">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2*"/>
-                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Name="ColChartsPlot" Width="*"/>
+                    <ColumnDefinition Name="ColAutoTestList" Width="0"/>
                 </Grid.ColumnDefinitions>
 
                 <Grid Grid.Column="0">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="*"/>
+                        <RowDefinition Name="RowFreqChart" Height="13*"/>
+                        <RowDefinition Name="RowThdChart" Height="7*"/>
                     </Grid.RowDefinitions>
 
                     <!-- Frequency Response Chart -->
@@ -206,30 +383,94 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="FREQUENCY RESPONSE ANALYSIS (20 Hz - 20 kHz)" FontSize="12" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center"/>
+                                <TextBlock Text="PHÂN TÍCH ĐÁP TUYẾN TẦN SỐ (20 Hz - 20 kHz)" FontSize="12" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center"/>
                                 <TextBlock Name="TxtFreqStatus" Grid.Column="1" Text="" FontSize="11" FontWeight="Bold" Foreground="#FA4B4B" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <Button Name="BtnToggleFreqFullscreen" Grid.Column="2" Click="BtnToggleFreqFullscreen_Click" Style="{StaticResource ModernButtonStyle}" Width="28" Height="24" Padding="0" Margin="4,0,0,0" ToolTip="Phóng to đồ thị tần số (Ẩn các phần khác để nhìn rõ tần số và dB)" VerticalAlignment="Center">
+                                    <Viewbox Width="13" Height="13">
+                                        <Path Name="IconFreqFullscreen" Fill="#A1A1AA" Data="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                                    </Viewbox>
+                                </Button>
                             </Grid>
-                            <ScottPlot:WpfPlot Name="PlotFreqResponse" Grid.Row="1"/>
+                            <Grid Grid.Row="1">
+                                <ScottPlot:WpfPlot Name="PlotFreqResponse"/>
+                                <Ellipse Name="EllipseFreqHoverPoint" Visibility="Collapsed" IsHitTestVisible="False"
+                                         HorizontalAlignment="Left" VerticalAlignment="Top" Panel.ZIndex="19"
+                                         Width="16" Height="16" Fill="#22C55E" Stroke="#DCFCE7" StrokeThickness="2"/>
+                                <Ellipse Name="EllipseFreqHoverStandardPoint" Visibility="Collapsed" IsHitTestVisible="False"
+                                         HorizontalAlignment="Left" VerticalAlignment="Top" Panel.ZIndex="18"
+                                         Width="14" Height="14" Fill="#FACC15" Stroke="#FEF9C3" StrokeThickness="2"/>
+                                <Border Name="BorderFreqHover" Visibility="Collapsed" IsHitTestVisible="False"
+                                        HorizontalAlignment="Left" VerticalAlignment="Top" Panel.ZIndex="20"
+                                        Background="#EE18181B" BorderBrush="#3F3F46" BorderThickness="1"
+                                        CornerRadius="5" Padding="8,5">
+                                    <TextBlock Name="TxtFreqHover" Foreground="#F4F4F5" FontSize="11"/>
+                                </Border>
+                            </Grid>
                         </Grid>
                     </Border>
 
-                    <!-- THD FFT Spectrum Chart -->
+                    <!-- Sweep-derived distortion metrics & Frequency Inspector -->
                     <Border Name="BorderThdChart" Grid.Row="1" Background="#121214" BorderBrush="#27272A" BorderThickness="2" CornerRadius="8" Padding="10">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
-                            <Grid Grid.Row="0" Margin="10,0,0,5">
+                            <Grid Grid.Row="0" Margin="10,0,10,5">
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="THD ANALYSIS - FFT SPECTRUM (1 kHz Sine Response)" FontSize="12" FontWeight="Bold" Foreground="#3B82F6" VerticalAlignment="Center"/>
-                                <TextBlock Name="TxtThdStatus" Grid.Column="1" Text="" FontSize="11" FontWeight="Bold" Foreground="#FA4B4B" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="0" Text="DISTORTION" FontSize="12" FontWeight="Bold" Foreground="#3B82F6" VerticalAlignment="Center" Margin="0,0,10,0"/>
+
+                                <Border Name="BorderThdVerdictBadge" Grid.Column="1" Background="#1C1917" BorderBrush="#78350F" BorderThickness="1" CornerRadius="4" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <TextBlock Name="TxtThdVerdictBadge" Text="CHƯA ĐO" FontSize="10" FontWeight="Bold" Foreground="#FBBF24"/>
+                                </Border>
+
+                                <TextBlock Name="TxtThdStatus" Grid.Column="2" Text="" FontSize="11" FontWeight="Bold" Foreground="#FA4B4B" Margin="0,0,10,0" VerticalAlignment="Center"/>
+
+                                <!-- Selector kiểm tra THD theo tần số đặt gọn bên phải -->
+                                <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <TextBlock Text="Tần số kiểm tra:" FontSize="11" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <ComboBox Name="ComboThdInspectFreq" Width="140" Height="26" Style="{StaticResource DarkComboBoxStyle}"
+                                              IsEditable="True" SelectionChanged="ComboThdInspectFreq_SelectionChanged"
+                                              ToolTip="Chọn hoặc nhập tần số để kiểm tra toàn bộ THD đã đo được (Mặc định 1000 Hz)"/>
+                                </StackPanel>
+
+                                <Button Name="BtnToggleThdFullscreen" Grid.Column="4" Click="BtnToggleThdFullscreen_Click" Visibility="Collapsed" Width="1" Height="1">
+                                    <Viewbox Width="13" Height="13">
+                                        <Path Name="IconThdFullscreen" Fill="#A1A1AA" Data="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                                    </Viewbox>
+                                </Button>
                             </Grid>
-                            <ScottPlot:WpfPlot Name="PlotThdFft" Grid.Row="1"/>
+
+                            <!-- Bố cục hiển thị chi tiết số liệu THD dạng text gọn gàng, tối ưu không gian -->
+                            <Grid Grid.Row="1" Margin="6,4,6,2">
+                                <TextBox Name="TxtSweepDistortionMetrics" Text="Chưa có dữ liệu sweep/THD. Mặc định kiểm tra tại 1000 Hz." IsReadOnly="True"
+                                         AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"
+                                         Background="#0E0E10" BorderBrush="#27272A" BorderThickness="1" Foreground="#E4E4E7"
+                                         FontFamily="Consolas" FontSize="12" Padding="12,8"/>
+                                <Grid Name="GridThdPlots" Visibility="Collapsed" Width="0" Height="0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="0"/>
+                                        <RowDefinition Height="0"/>
+                                    </Grid.RowDefinitions>
+                                    <ScottPlot:WpfPlot Name="PlotThdFft1k" Grid.Column="0" Visibility="Collapsed"/>
+                                    <ScottPlot:WpfPlot Name="PlotThdFft" Grid.Column="1" Visibility="Collapsed"/>
+                                    <ScottPlot:WpfPlot Name="PlotThdFft4k" Grid.Column="2" Visibility="Collapsed"/>
+                                </Grid>
+                            </Grid>
                         </Grid>
                     </Border>
                 </Grid>
@@ -248,14 +489,14 @@
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <Button Name="BtnStartAutoTest" Grid.Column="0" Content="START AUTO TEST" Click="BtnStartAutoTest_Click" Style="{StaticResource BlueButtonStyle}" FontWeight="Bold" Height="42" Margin="0,0,8,0"/>
-                            <CheckBox Name="ChkSendToServer" Grid.Column="1" Content="Gửi Server" IsChecked="True" Foreground="#A1A1AA" FontSize="12" VerticalAlignment="Center"/>
+                            <Button Name="BtnStartAutoTest" Grid.Column="0" Content="BẮT ĐẦU ĐO TỰ ĐỘNG" Click="BtnStartAutoTest_Click" Style="{StaticResource BlueButtonStyle}" FontWeight="Bold" Height="42"/>
+                            <CheckBox Name="ChkSendToServer" Grid.Column="1" Content="Gửi Server" IsChecked="True" Checked="ChkSendToServer_Changed" Unchecked="ChkSendToServer_Changed" Foreground="#A1A1AA" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0" Visibility="Collapsed"/>
                         </Grid>
 
                         <!-- Current Product Info -->
                         <StackPanel Name="PanelProductInfo" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,4">
                             <TextBlock Text="SẢN PHẨM: " FontSize="12" FontWeight="Bold" Foreground="#A1A1AA" VerticalAlignment="Center"/>
-                            <TextBlock Name="TxtProductSerial" Text="CHƯA CÓ SERIAL (N/A)" FontSize="13" FontWeight="Bold" Foreground="#EF4444" VerticalAlignment="Center"/>
+                            <TextBlock Name="TxtProductSerial" Text="TỰ ĐỘNG TẠO KHI BẮT ĐẦU ĐO" FontSize="13" FontWeight="Bold" Foreground="#3B82F6" VerticalAlignment="Center"/>
                         </StackPanel>
                     </StackPanel>
 
@@ -266,12 +507,12 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
-                            <TextBlock Grid.Row="0" Text="AUTO TEST CASES" FontSize="11" FontWeight="Bold" Foreground="#71717A" Margin="0,0,0,12"/>
+                            <TextBlock Grid.Row="0" Text="DANH SÁCH BÀI ĐO TỰ ĐỘNG" FontSize="11" FontWeight="Bold" Foreground="#71717A" Margin="0,0,0,12"/>
                             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                                 <ItemsControl Name="ListAutoTestCases">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border BorderBrush="#1F1F23" BorderThickness="0,0,0,1" Padding="0,10">
+                                            <Border BorderBrush="#1F1F23" BorderThickness="0,0,0,1" Padding="6,10" Background="Transparent" Cursor="Hand" PreviewMouseLeftButtonUp="TestCaseItem_PreviewMouseLeftButtonUp" ToolTip="Nhấp bài đã đo để xem đáp tuyến và distortion; bài chưa đo sẽ nạp cấu hình khi máy đang rảnh">
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
@@ -280,19 +521,19 @@
                                                     <StackPanel Grid.Column="0">
                                                         <TextBlock Text="{Binding Id}" FontWeight="Bold" Foreground="#E4E4E7" FontSize="13"/>
                                                         <TextBlock Text="{Binding Name}" Foreground="#71717A" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,4"/>
-                                                        
+
                                                         <StackPanel Orientation="Vertical" Margin="0,2,0,0">
                                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
-                                                                <TextBlock Text="• Freq: " FontSize="11" Foreground="#A1A1AA"/>
+                                                                <TextBlock Text="• Đáp tuyến: " FontSize="11" Foreground="#A1A1AA"/>
                                                                 <TextBlock Text="{Binding FreqStatus}" FontSize="11" Foreground="{Binding FreqBrush}" FontWeight="SemiBold"/>
                                                             </StackPanel>
                                                             <StackPanel Orientation="Horizontal">
-                                                                <TextBlock Text="• THD: " FontSize="11" Foreground="#A1A1AA"/>
+                                                                <TextBlock Text="• Distortion sweep: " FontSize="11" Foreground="#A1A1AA"/>
                                                                 <TextBlock Text="{Binding ThdStatus}" FontSize="11" Foreground="{Binding ThdBrush}" FontWeight="SemiBold"/>
                                                             </StackPanel>
                                                         </StackPanel>
                                                     </StackPanel>
-                                                    <TextBlock Grid.Column="1" Text="{Binding Status}" FontWeight="Black" FontSize="16" VerticalAlignment="Center" Foreground="{Binding StatusBrush}" Margin="10,0,0,0"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding StatusDisplay}" FontWeight="Black" FontSize="16" VerticalAlignment="Center" Foreground="{Binding StatusBrush}" Margin="10,0,0,0"/>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>
@@ -305,14 +546,17 @@
             </Grid>
 
             <!-- Footer / Verdict Banner -->
-            <Border Grid.Row="1" Background="#121214" BorderBrush="#27272A" BorderThickness="0,1,0,0" Height="85">
+            <Border Name="BorderFooterArea" Grid.Row="2" Background="#121214" BorderBrush="#27272A" BorderThickness="0,1,0,0" MinHeight="85">
                 <Grid Margin="15,10">
                     <!-- Overall Verdict Banner -->
                     <Border Name="BorderVerdict" Background="#18181B" BorderThickness="2" BorderBrush="#27272A" CornerRadius="8">
                         <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
                             <StackPanel HorizontalAlignment="Center">
-                                <TextBlock Text="OVERALL RESULT" FontSize="11" FontWeight="Bold" Foreground="#71717A" HorizontalAlignment="Center"/>
-                                <TextBlock Name="LblVerdict" Text="WAITING..." FontSize="28" FontWeight="Black" Foreground="#A1A1AA" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                <TextBlock Text="KẾT QUẢ TỔNG" FontSize="11" FontWeight="Bold" Foreground="#71717A" HorizontalAlignment="Center"/>
+                                <TextBlock Name="LblVerdict" Text="ĐANG CHỜ..." FontSize="28" FontWeight="Black" Foreground="#A1A1AA" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                <ScrollViewer MaxHeight="130" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <TextBlock Name="TxtFailureDiagnosis" Text="" FontSize="12" Foreground="#D4D4D8" TextAlignment="Left" TextWrapping="Wrap" MaxWidth="1000" Margin="16,6" Visibility="Collapsed"/>
+                                </ScrollViewer>
                             </StackPanel>
                         </Grid>
                     </Border>

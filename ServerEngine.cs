@@ -42,6 +42,7 @@ namespace SoncaAudioInspector
 
         private static readonly SemaphoreSlim VerifyLock = new(1, 1);
         private static readonly SemaphoreSlim RefreshLock = new(1, 1);
+        private static readonly SemaphoreSlim AuthenticationLock = new(1, 1);
 
         private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
         {
@@ -60,8 +61,19 @@ namespace SoncaAudioInspector
         public static DateTimeOffset? AppTokenExpiresAtUtc { get; private set; }
         public static string? SessionId { get; private set; }
         public static string? LastError { get; private set; }
-        public static ProductInfo? CurrentProduct { get; private set; }
+        public static ProductInfo? CurrentProduct { get; set; }
         private static System.Timers.Timer? _heartbeatTimer;
+
+        static ServerEngine()
+        {
+            try
+            {
+                Client.DefaultRequestHeaders.UserAgent.ParseAdd("SoncaAudioInspector/1.0 (Windows NT 10.0; Win64; x64)");
+            }
+            catch
+            {
+            }
+        }
 
         public static bool HasValidApiKey =>
             !string.IsNullOrWhiteSpace(ApiKey) &&
@@ -78,11 +90,11 @@ namespace SoncaAudioInspector
 
         private static string ApiBaseUrl => CurrentApiBaseUrl;
 
-        public static async Task<bool> VerifyAppAsync()
+        public static async Task<bool> VerifyAppAsync(IProgress<string>? progress = null)
         {
             try
             {
-                await EnsureAppApiKeyAsync(forceBootstrap: false);
+                await EnsureAppApiKeyAsync(forceBootstrap: false, progress);
                 LastError = null;
                 return true;
             }
@@ -93,7 +105,14 @@ namespace SoncaAudioInspector
             }
         }
 
-        public static async Task<bool> AuthenticateAsync(string account, string password)
+        public static async Task<bool> AuthenticateAsync(string account, string password, IProgress<string>? progress = null)
+        {
+            await AuthenticationLock.WaitAsync();
+            try { return await AuthenticateCoreAsync(account, password, progress); }
+            finally { AuthenticationLock.Release(); }
+        }
+
+        private static async Task<bool> AuthenticateCoreAsync(string account, string password, IProgress<string>? progress)
         {
             ClearStaffSession(keepError: true);
 
@@ -120,15 +139,19 @@ namespace SoncaAudioInspector
 
                 while (true)
                 {
-                    await EnsureAppApiKeyAsync(forceBootstrap: false);
+                    progress?.Report("Đang chờ xác thực ứng dụng với server...");
+                    await EnsureAppApiKeyAsync(forceBootstrap: false, progress);
 
-                    using var request = new HttpRequestMessage(HttpMethod.Post, $"{ApiBaseUrl}/api/app/login")
+                    progress?.Report("Đang chờ server xác thực tài khoản...");
+                    using HttpResponseMessage response = await TransientHttpRetry.SendAsync(Client, () =>
                     {
-                        Content = JsonContent(requestBody)
-                    };
-                    request.Headers.Add("X-App-Api-Key", AppToken);
-                    
-                    using HttpResponseMessage response = await Client.SendAsync(request);
+                        var request = new HttpRequestMessage(HttpMethod.Post, $"{ApiBaseUrl}/api/app/login")
+                        {
+                            Content = JsonContent(requestBody)
+                        };
+                        request.Headers.Add("X-App-Api-Key", AppToken);
+                        return request;
+                    }, progress);
                     string responseJson = await response.Content.ReadAsStringAsync();
 
                     if (!response.IsSuccessStatusCode)
@@ -138,7 +161,7 @@ namespace SoncaAudioInspector
                         {
                             appRetried = true;
                             await ClearStoredAppSessionAsync();
-                            await EnsureAppApiKeyAsync(forceBootstrap: true);
+                            await EnsureAppApiKeyAsync(forceBootstrap: true, progress);
                             continue;
                         }
 
@@ -151,7 +174,7 @@ namespace SoncaAudioInspector
                     ApiKey = Require(data.AccessToken, "Backend không trả accessToken.");
                     RefreshToken = Require(data.RefreshToken, "Backend không trả refreshToken.");
 
-                    UserName = data.Name ?? account.Trim();
+                    UserName = new[] { data.FullName, data.Name, data.Username }.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s)) ?? account.Trim();
                     UserEmail = data.Email ?? (account.Contains('@') ? account.Trim() : null);
                     UserRole = string.IsNullOrWhiteSpace(data.Role) ? "STAFF" : data.Role.ToUpperInvariant();
                     SessionId = data.SessionId;
@@ -301,7 +324,7 @@ namespace SoncaAudioInspector
             return ProductInfo.FromApiData(data);
         }
 
-        public static async Task<ProductInfo?> GetProductBySerialAsync(string serialNumber)
+        public static async Task<ProductInfo?> GetProductBySerialAsync(string serialNumber, string? model = null)
         {
             if (string.IsNullOrWhiteSpace(serialNumber))
             {
@@ -312,13 +335,18 @@ namespace SoncaAudioInspector
             try
             {
                 IReadOnlyList<ProductInfo> products = await GetProductsAsync(1, 100, serialNumber.Trim());
-                ProductInfo? product = products.FirstOrDefault(p =>
-                    EqualsIgnoreCase(p.SerialNumber, serialNumber) ||
-                    EqualsIgnoreCase(p.ProductCode, serialNumber) ||
-                    EqualsIgnoreCase(p.Id, serialNumber));
+                List<ProductInfo> matches = products.Where(p =>
+                        (EqualsIgnoreCase(p.SerialNumber, serialNumber) ||
+                         EqualsIgnoreCase(p.ProductCode, serialNumber) ||
+                         EqualsIgnoreCase(p.Id, serialNumber))
+                        && (string.IsNullOrWhiteSpace(model) || EqualsIgnoreCase(p.Model, model)))
+                    .ToList();
+                ProductInfo? product = matches.Count == 1 ? matches[0] : null;
 
                 CurrentProduct = product;
-                LastError = product is null ? "Không tìm thấy thông tin sản phẩm từ server." : null;
+                LastError = matches.Count > 1
+                    ? "Serial tồn tại ở nhiều model. Vui lòng chọn đúng model."
+                    : product is null ? "Không tìm thấy thông tin sản phẩm từ server." : null;
                 return product;
             }
             catch (Exception ex)
@@ -735,10 +763,14 @@ namespace SoncaAudioInspector
                 throw new InvalidOperationException("Ảnh ngoại quan rỗng, không thể upload.");
             }
 
-            using var form = new MultipartFormDataContent();
+            using var form = CreateMultipartFormDataContent();
             form.Add(new StringContent(product.Id), "productId");
             form.Add(new StringContent(string.IsNullOrWhiteSpace(status) ? "PENDING" : status.Trim().ToUpperInvariant()), "status");
             form.Add(new StringContent(note ?? ""), "note");
+            if (!string.IsNullOrWhiteSpace(UserName))
+            {
+                form.Add(new StringContent(UserName), "staffName");
+            }
 
             var imageContent = new ByteArrayContent(imageBytes);
             imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
@@ -788,31 +820,35 @@ namespace SoncaAudioInspector
                     details = s.Details
                 }).ToList();
 
-                using var form = new MultipartFormDataContent();
-                form.Add(new StringContent(product.Id), "productId");
-                form.Add(new StringContent(passed ? "PASS" : "FAIL"), "status");
-                form.Add(new StringContent(passed ? "Audio auto test passed" : "Audio auto test failed"), "note");
-                form.Add(new StringContent(deviceReady ? "true" : "false"), "deviceReady");
-                if (!string.IsNullOrWhiteSpace(uploadSessionId))
-                {
-                    form.Add(new StringContent(uploadSessionId.Trim()), "uploadSessionId");
-                }
-                if (stepList is not null)
-                {
-                    form.Add(new StringContent(JsonSerializer.Serialize(stepList, JsonOptions), Encoding.UTF8, "application/json"), "steps");
-                }
-
+                var images = new List<object>();
                 foreach (string imagePath in graphImagePaths ?? Array.Empty<string>())
                 {
                     if (!File.Exists(imagePath)) continue;
-
-                    var imageContent = new StreamContent(File.OpenRead(imagePath));
-                    imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+                    byte[] imageBytes = await File.ReadAllBytesAsync(imagePath);
                     string fileName = Path.GetFileName(imagePath);
-                    form.Add(imageContent, "file", string.IsNullOrWhiteSpace(fileName) ? "audio-qa-graph.png" : fileName);
+                    images.Add(new
+                    {
+                        fileName = string.IsNullOrWhiteSpace(fileName) ? "audio-qa-response.png" : fileName,
+                        contentType = "image/png",
+                        base64 = Convert.ToBase64String(imageBytes)
+                    });
                 }
 
-                using HttpResponseMessage response = await SendAuthorizedAsync(HttpMethod.Post, "api/app/qa-audio", form);
+                var body = new
+                {
+                    productId = product.Id,
+                    status = passed ? "PASS" : "FAIL",
+                    note = passed ? "Audio auto test passed" : "Audio auto test failed",
+                    deviceReady,
+                    uploadSessionId = string.IsNullOrWhiteSpace(uploadSessionId) ? null : uploadSessionId.Trim(),
+                    staffName = UserName,
+                    steps = stepList,
+                    images
+                };
+                using HttpResponseMessage response = await SendAuthorizedAsync(
+                    HttpMethod.Post,
+                    "api/app/qa-audio",
+                    JsonContent(body));
                 string responseJson = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
                 {
@@ -831,6 +867,41 @@ namespace SoncaAudioInspector
             }
         }
 
+        public static async Task<bool?> GetAudioQaUploadPreferenceAsync()
+        {
+            try
+            {
+                using HttpResponseMessage response = await SendAuthorizedAsync(HttpMethod.Get, "api/app/preferences");
+                if (!response.IsSuccessStatusCode) return null;
+                string responseJson = await response.Content.ReadAsStringAsync();
+                using JsonDocument document = JsonDocument.Parse(responseJson);
+                JsonElement payload = GetPayload(document.RootElement);
+                if (payload.TryGetProperty("audioQaUploadEnabled", out JsonElement prop))
+                {
+                    return prop.GetBoolean();
+                }
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public static async Task<bool> SaveAudioQaUploadPreferenceAsync(bool enabled)
+        {
+            try
+            {
+                var content = JsonContent(new { audioQaUploadEnabled = enabled });
+                using HttpResponseMessage response = await SendAuthorizedAsync(HttpMethod.Patch, "api/app/preferences", content);
+                return response.IsSuccessStatusCode;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private static string MapStepStatus(string? status)
         {
             if (string.IsNullOrWhiteSpace(status)) return "PENDING";
@@ -838,6 +909,22 @@ namespace SoncaAudioInspector
             if (s is "PASS" or "PASSED") return "PASS";
             if (s is "FAIL" or "FAILED") return "FAIL";
             return "PENDING";
+        }
+
+        private static MultipartFormDataContent CreateMultipartFormDataContent()
+        {
+            string boundary = $"----SoncaAudioInspector{Guid.NewGuid():N}";
+            var form = new MultipartFormDataContent(boundary);
+            NameValueHeaderValue? boundaryParameter = form.Headers.ContentType?.Parameters
+                .FirstOrDefault(parameter =>
+                    string.Equals(parameter.Name, "boundary", StringComparison.OrdinalIgnoreCase));
+            if (boundaryParameter is not null)
+            {
+                // Some Fetch/FormData parsers reject a quoted boundary even though
+                // RFC 2046 permits it. Emit the token form for broad compatibility.
+                boundaryParameter.Value = boundary;
+            }
+            return form;
         }
 
         public static HttpRequestMessage CreateAuthorizedRequest(HttpMethod method, string relativePath)
@@ -947,7 +1034,7 @@ namespace SoncaAudioInspector
             }
         }
 
-        private static async Task EnsureAppApiKeyAsync(bool forceBootstrap)
+        private static async Task EnsureAppApiKeyAsync(bool forceBootstrap, IProgress<string>? progress = null)
         {
             if (!forceBootstrap && HasValidAppSessionInMemory())
             {
@@ -975,12 +1062,11 @@ namespace SoncaAudioInspector
 
                 BootstrapCredentials credentials = ReadVerifyFile();
 
-                using var request = new HttpRequestMessage(HttpMethod.Post, $"{ApiBaseUrl}/api/app/verify")
-                {
-                    Content = JsonContent(new VerifyAppRequest(credentials.Email, credentials.Password))
-                };
-
-                using HttpResponseMessage response = await Client.SendAsync(request);
+                using HttpResponseMessage response = await TransientHttpRetry.SendAsync(Client,
+                    () => new HttpRequestMessage(HttpMethod.Post, $"{ApiBaseUrl}/api/app/verify")
+                    {
+                        Content = JsonContent(new VerifyAppRequest(credentials.Email, credentials.Password))
+                    }, progress);
                 string responseJson = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode)
@@ -1038,6 +1124,13 @@ namespace SoncaAudioInspector
                         || error.Code is "REFRESH_TOKEN_INVALID" or "REFRESH_TOKEN_EXPIRED" or "REFRESH_TOKEN_REVOKED" or "REFRESH_TOKEN_REUSED")
                     {
                         ClearStaffSession(keepError: true);
+                    }
+
+                    // If server returned a temporary 500/502/503/504 error during refresh,
+                    // but the existing ApiKey is still unexpired, keep using it rather than aborting.
+                    if ((int)response.StatusCode >= 500 && ApiKeyExpiresAtUtc.HasValue && ApiKeyExpiresAtUtc.Value > DateTimeOffset.UtcNow)
+                    {
+                        return;
                     }
 
                     throw new ApiException(response.StatusCode, error.Code, ToApiMessage(response.StatusCode, error));
@@ -1180,7 +1273,7 @@ namespace SoncaAudioInspector
 
         private static string BuildLoginError(HttpStatusCode statusCode, ApiError error)
         {
-            if (!string.IsNullOrWhiteSpace(error.Message))
+            if (!string.IsNullOrWhiteSpace(error.Message) && error.Message != "Server không trả nội dung lỗi.")
             {
                 return error.Code.Length > 0 ? $"{error.Code}: {error.Message}" : error.Message;
             }
@@ -1190,6 +1283,7 @@ namespace SoncaAudioInspector
                 HttpStatusCode.Unauthorized => "Tài khoản hoặc mật khẩu không chính xác.",
                 HttpStatusCode.Forbidden => "Tài khoản không có quyền truy cập hoặc bị khóa.",
                 HttpStatusCode.RequestTimeout => "Server phản hồi quá chậm. Vui lòng thử lại.",
+                HttpStatusCode.TooManyRequests => "Server đang giới hạn lượt đăng nhập. Vui lòng chờ trước khi thử lại.",
                 _ => $"Đăng nhập thất bại: HTTP {(int)statusCode}"
             };
         }
@@ -1218,6 +1312,8 @@ namespace SoncaAudioInspector
 
         private static string ToApiMessage(HttpStatusCode statusCode, ApiError error)
         {
+            if (error.Message == "Server không trả nội dung lỗi.")
+                return $"Server trả HTTP {(int)statusCode} nhưng không có nội dung lỗi.";
             if (!string.IsNullOrWhiteSpace(error.Message))
             {
                 return !string.IsNullOrWhiteSpace(error.Code)
@@ -1335,7 +1431,9 @@ namespace SoncaAudioInspector
                 path);
         }
 
-        private static string GetVerifyFilePath()
+        public static string GetExpectedVerifyFilePath() => GetVerifyFilePath();
+
+        public static string GetVerifyFilePath()
         {
             string? configuredPath = Environment.GetEnvironmentVariable("SONCA_VERIFY_FILE");
             if (!string.IsNullOrWhiteSpace(configuredPath))
@@ -1351,7 +1449,9 @@ namespace SoncaAudioInspector
             {
                 AddCandidate(candidates, Path.Combine(root, "verify.txt"));
                 AddCandidate(candidates, Path.Combine(root, "bin", "Debug", "net9.0-windows", "verify.txt"));
+                AddCandidate(candidates, Path.Combine(root, "bin", "Debug", "net9.0-windows10.0.19041.0", "verify.txt"));
                 AddCandidate(candidates, Path.Combine(root, "bin", "x64", "Debug", "net9.0-windows", "verify.txt"));
+                AddCandidate(candidates, Path.Combine(root, "bin", "x64", "Debug", "net9.0-windows10.0.19041.0", "verify.txt"));
             }
 
             return candidates.FirstOrDefault(File.Exists)
@@ -1604,6 +1704,7 @@ namespace SoncaAudioInspector
             public string? StaffId { get; set; }
             public string? Role { get; set; }
             public string? Name { get; set; }
+            public string? FullName { get; set; }
             public string? Username { get; set; }
             public string? Email { get; set; }
             public string? SessionId { get; set; }

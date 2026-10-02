@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="System Pre-check"  Height="460" Width="520"
+        Title="System Pre-check" MinHeight="460" Width="560" SizeToContent="Height"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         WindowStartupLocation="CenterScreen" Icon="pack://application:,,,/Assets/app_icon.ico">
 
@@ -41,7 +41,7 @@
 
                         <!-- Icon & Label -->
                         <TextBlock Name="IconSys001" Grid.Column="0" Text="○" FontSize="18" FontWeight="Bold" Foreground="#71717A" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                        <TextBlock Name="TxtSys001" Grid.Column="1" Text="SYS001 - Kiểm tra kết nối Internet (Đang kiểm tra...)" FontSize="13" Foreground="#E4E4E7" VerticalAlignment="Center"/>
+                        <TextBlock Name="TxtSys001" Grid.Column="1" Text="SYS001 - Xác thực ứng dụng (Đang kiểm tra...)" FontSize="13" Foreground="#E4E4E7" VerticalAlignment="Center"/>
                         
                         <!-- Error message if fail -->
                         <TextBlock Name="ErrorSys001" Grid.Row="1" Grid.Column="1" Text="" FontSize="11" Foreground="#EF4444" Margin="0,4,0,0" Visibility="Collapsed" TextWrapping="Wrap"/>
@@ -89,7 +89,69 @@
 
             <!-- Bottom Info / Buttons -->
             <StackPanel Grid.Row="2" Margin="0,15,0,0">
-                <TextBlock Name="LblStatus" Text="Đang thực hiện kiểm tra chẩn đoán hệ thống..." FontSize="12" Foreground="#A1A1AA" HorizontalAlignment="Center" Margin="0,0,0,15"/>
+                <TextBlock Name="LblStatus" Text="Đang thực hiện kiểm tra chẩn đoán hệ thống..." FontSize="12" Foreground="#A1A1AA" HorizontalAlignment="Center" Margin="0,0,0,15" TextWrapping="Wrap" TextAlignment="Center"/>
+                
+                <!-- Panel hướng dẫn tạo file verify.txt khi thiếu file -->
+                <Border Name="PanelVerifyHelper" Visibility="Collapsed" Background="#18181B" BorderBrush="#3F3F46" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,14">
+                    <StackPanel>
+                        <TextBlock Text="Đường dẫn file xác thực verify.txt cần tạo:" FontSize="11" FontWeight="SemiBold" Foreground="#A1A1AA" Margin="0,0,0,6"/>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Name="TxtVerifyPath" IsReadOnly="True" Background="#0E0E10" Foreground="#38BDF8" BorderBrush="#27272A" BorderThickness="1" Padding="8,5" FontSize="11" FontFamily="Consolas, monospace" VerticalContentAlignment="Center"/>
+                            <Button Name="BtnCopyVerifyPath" Grid.Column="1" Content="📋 Sao chép" Click="BtnCopyVerifyPath_Click" Margin="6,0,0,0" Padding="10,4" Background="#2563EB" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="11" Cursor="Hand">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </Grid>
+                        <TextBlock Name="TxtCopyFeedback" Text="✓ Đã sao chép đường dẫn vào clipboard!" FontSize="11" Foreground="#10B981" Visibility="Collapsed" HorizontalAlignment="Right" Margin="0,0,0,4"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,0">
+                            <Button Name="BtnOpenVerifyFolder" Content="📁 Mở thư mục" Click="BtnOpenVerifyFolder_Click" Margin="0,0,8,0" Padding="8,4" Background="#27272A" Foreground="#E4E4E7" BorderThickness="1" BorderBrush="#3F3F46" FontSize="11" Cursor="Hand">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                            <Button Name="BtnCreateTemplateVerify" Content="➕ Tạo file verify mẫu" Click="BtnCreateTemplateVerify_Click" Padding="8,4" Background="#065F46" Foreground="#34D399" BorderThickness="1" BorderBrush="#059669" FontWeight="SemiBold" FontSize="11" Cursor="Hand">
+                                <Button.Style>
+                                    <Style TargetType="Button">
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
                 
                 <!-- Buttons shown ONLY on failure -->
                 <Grid Name="PanelFailureButtons" Visibility="Collapsed">

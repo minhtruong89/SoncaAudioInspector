@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
@@ -7,6 +7,8 @@ namespace SoncaAudioInspector
 {
     public partial class LoginWindow : Window
     {
+        private bool _loginInProgress;
+        internal Func<string, string, IProgress<string>?, Task<bool>> Authenticate = ServerEngine.AuthenticateAsync;
         public LoginWindow()
         {
             InitializeComponent();
@@ -17,7 +19,7 @@ namespace SoncaAudioInspector
         {
             LblStatus.Text = "";
             LoadRememberedLogin();
-            SetUiEnabled(true);
+            SetUiEnabled(!_loginInProgress);
             
             System.Windows.Input.KeyEventHandler enterHandler = (s, args) => 
             {
@@ -33,6 +35,7 @@ namespace SoncaAudioInspector
 
         private async void BtnLogin_Click(object sender, RoutedEventArgs e)
         {
+            if (_loginInProgress) return;
             // Reset validation states and status messages
             bool isValid = true;
             LblStatus.Text = "";
@@ -62,6 +65,9 @@ namespace SoncaAudioInspector
                 return;
             }
 
+            _loginInProgress = true;
+            try
+            {
             // Disable UI inputs during verification
             SetUiEnabled(false);
             LblStatus.Text = "Đang xác thực thông tin đăng nhập...";
@@ -71,7 +77,11 @@ namespace SoncaAudioInspector
             string password = TxtPassword.Password;
 
             // Send information to the ServerEngine
-            bool success = await ServerEngine.AuthenticateAsync(account, password);
+            var progress = new Progress<string>(message =>
+            {
+                if (_loginInProgress) LblStatus.Text = message;
+            });
+            bool success = await Authenticate(account, password, progress);
 
             if (success)
             {
@@ -99,12 +109,25 @@ namespace SoncaAudioInspector
                 LblStatus.Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68)); // red-500
                 SetUiEnabled(true);
             }
+            }
+            catch (Exception ex)
+            {
+                LblStatus.Text = "Chưa hoàn tất đăng nhập: " + ex.Message;
+                LblStatus.Foreground = Brushes.Salmon;
+            }
+            finally
+            {
+                _loginInProgress = false;
+                SetUiEnabled(true);
+            }
         }
 
         private void SetUiEnabled(bool enabled)
         {
             TxtUsername.IsEnabled = enabled;
             TxtPassword.IsEnabled = enabled;
+            TxtPasswordVisible.IsEnabled = enabled;
+            BtnTogglePassword.IsEnabled = enabled;
             ChkRememberLogin.IsEnabled = enabled;
             BtnLogin.IsEnabled = enabled;
             BtnExit.IsEnabled = enabled;

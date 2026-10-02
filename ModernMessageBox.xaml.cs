@@ -60,11 +60,19 @@ namespace SoncaAudioInspector
                     break;
             }
 
+            // An upload failure can contain the only actionable cause (HTTP status,
+            // storage error, expired session, etc.). Never dismiss it before the
+            // technician has had a chance to read or copy it.
+            if (type == MessageBoxType.Error)
+            {
+                return;
+            }
+
             if (type != MessageBoxType.Confirmation)
             {
                 _autoCloseTimer = new System.Windows.Threading.DispatcherTimer
                 {
-                    Interval = System.TimeSpan.FromSeconds(1)
+                    Interval = System.TimeSpan.FromSeconds(4)
                 };
                 _autoCloseTimer.Tick += (_, _) =>
                 {
@@ -88,12 +96,23 @@ namespace SoncaAudioInspector
             return msgBox._result;
         }
 
-        public static bool ShowRetryCancel(Window owner, string message, string title, out bool cancelPressed)
+		public static bool ShowPersistentWarning(Window owner, string message, string title)
+		{
+			var msgBox = new ModernMessageBox(message, title, MessageBoxType.Warning);
+			msgBox._autoCloseTimer?.Stop();
+			msgBox._autoCloseTimer = null;
+			if (owner != null && owner.IsVisible)
+				msgBox.Owner = owner;
+			msgBox.ShowDialog();
+			return msgBox._result;
+		}
+
+        public static bool ShowRetryCancel(Window owner, string message, string title, out bool cancelPressed, string retryLabel = "Thử lại")
         {
             var msgBox = new ModernMessageBox(message, title, MessageBoxType.Confirmation);
             msgBox.TxtIcon.Text = "🔌";
             msgBox.TxtIcon.Foreground = new SolidColorBrush(Color.FromRgb(245, 158, 11)); // Orange/Yellow
-            msgBox.BtnYes.Content = "Thử lại";
+            msgBox.BtnYes.Content = retryLabel;
             msgBox.BtnYes.Background = new SolidColorBrush(Color.FromRgb(16, 185, 129)); // Green
             msgBox.BtnYes.Foreground = Brushes.Black;
             msgBox.BtnNo.Content = "Hủy";

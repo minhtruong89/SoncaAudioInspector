@@ -31,8 +31,8 @@
                     <TextBox x:Name="DevicePathText" Text="/video" Width="70" Height="28"/>
                 </StackPanel>
 
-                <Button Content="Connect" Width="82" Height="28" Margin="0,0,8,0" Click="ConnectButton_Click"/>
-                <Button x:Name="DisconnectBtn" Content="Disconnect" Width="92" Height="28" Margin="0,0,16,0" IsEnabled="False" Click="DisconnectButton_Click"/>
+                <Button Content="Connect" MinWidth="85" Height="30" Padding="10,2" Margin="0,0,8,0" Click="ConnectButton_Click" Style="{StaticResource BlueButtonStyle}"/>
+                <Button x:Name="DisconnectBtn" Content="Disconnect" MinWidth="95" Height="30" Padding="10,2" Margin="0,0,16,0" IsEnabled="False" Click="DisconnectButton_Click" Style="{StaticResource ModernButtonStyle}"/>
 
                 <TextBlock x:Name="StatusLabel" Text="Offline" FontWeight="SemiBold" Foreground="#EF4444" VerticalAlignment="Center"/>
             </WrapPanel>
@@ -76,14 +76,14 @@
                 </Grid.ColumnDefinitions>
 
                 <Grid Grid.Column="0" Margin="0,0,12,0">
-                    <TextBox x:Name="ModelPathText" Height="32" VerticalContentAlignment="Center"/>
-                    <ProgressBar x:Name="ModelProgressBar" Height="8" IsIndeterminate="True" Visibility="Collapsed" VerticalAlignment="Bottom"/>
+                    <TextBox x:Name="ModelPathText" Height="34" VerticalContentAlignment="Center" Padding="8,4" Background="#18181B" Foreground="White" BorderBrush="#27272A"/>
+                    <ProgressBar x:Name="ModelProgressBar" Height="6" IsIndeterminate="True" Visibility="Collapsed" VerticalAlignment="Bottom"/>
                 </Grid>
 
-                <Button Content="Model..." Grid.Column="1" Width="80" Height="32" Margin="0,0,8,0" Click="BrowseModel_Click"/>
-                <Button Content="Import" Grid.Column="2" Width="80" Height="32" Margin="0,0,8,0" Click="ImportButton_Click"/>
-                <Button Content="Capture" Grid.Column="3" Width="84" Height="32" Margin="0,0,8,0" Click="CaptureButton_Click"/>
-                <Button x:Name="DetectBtn" Content="Detect" Grid.Column="4" Width="90" Height="32" Background="#3B82F6" Foreground="White" Click="DetectButton_Click"/>
+                <Button Content="Model..." Grid.Column="1" MinWidth="88" Height="34" Padding="12,4" Margin="0,0,8,0" Click="BrowseModel_Click" Style="{StaticResource ModernButtonStyle}"/>
+                <Button Content="Import" Grid.Column="2" MinWidth="85" Height="34" Padding="12,4" Margin="0,0,8,0" Click="ImportButton_Click" Style="{StaticResource ModernButtonStyle}"/>
+                <Button Content="Capture" Grid.Column="3" MinWidth="88" Height="34" Padding="12,4" Margin="0,0,8,0" Click="CaptureButton_Click" Style="{StaticResource ModernButtonStyle}"/>
+                <Button x:Name="DetectBtn" Content="Detect" Grid.Column="4" MinWidth="95" Height="34" Padding="14,4" Click="DetectButton_Click" Style="{StaticResource BlueButtonStyle}"/>
             </Grid>
         </Border>
     </Grid>
