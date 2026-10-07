@@ -6,7 +6,107 @@
              mc:Ignorable="d" 
              d:DesignHeight="720" d:DesignWidth="1200"
              Background="#0E0E10" Foreground="#E4E4E7">
-    <Grid>
-        <!-- Device Tab content - Để trống sẵn -->
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Connection Toolbar -->
+            <RowDefinition Height="Auto"/> <!-- Firmware Info Row -->
+            <RowDefinition Height="*"/>    <!-- Debug / Communication Log -->
+        </Grid.RowDefinitions>
+
+        <!-- 1. Connection Toolbar -->
+        <Border Grid.Row="0" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,15">
+            <StackPanel Orientation="Vertical">
+                <TextBlock Text="KẾT NỐI USB BOARD (ACNOS / SONCA)" FontSize="15" FontWeight="Bold" Foreground="#10B981" Margin="0,0,0,12"/>
+                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnScan" Content="🔍 Quét thiết bị" Click="BtnScan_Click" Style="{StaticResource ModernButtonStyle}" Width="130" Height="32" Margin="0,0,10,0"/>
+
+                    <TextBlock Text="Thiết bị:" FontSize="13" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="ComboDevices" Width="360" Height="32" Style="{StaticResource DarkComboBoxStyle}" Margin="0,0,10,0" SelectionChanged="ComboDevices_SelectionChanged">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Product}" FontWeight="SemiBold" Foreground="White" Margin="0,0,8,0"/>
+                                    <TextBlock Text="[" Foreground="#71717A"/>
+                                    <TextBlock Text="{Binding SerialNumber}" Foreground="#A1A1AA"/>
+                                    <TextBlock Text="]" Foreground="#71717A" Margin="0,0,8,0"/>
+                                    <TextBlock Text="(VID: " Foreground="#52525B"/>
+                                    <TextBlock Text="{Binding Vid, StringFormat='{}{0:X4}'}" Foreground="#10B981"/>
+                                    <TextBlock Text=")" Foreground="#52525B"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Button x:Name="BtnConnect" Content="Kết nối" Click="BtnConnect_Click" Width="100" Height="32" Background="#10B981" Foreground="Black" FontWeight="Bold" Margin="0,0,10,0" Cursor="Hand" IsEnabled="False">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+
+                    <Button x:Name="BtnDisconnect" Content="Ngắt kết nối" Click="BtnDisconnect_Click" Width="110" Height="32" Background="#EF4444" Foreground="White" FontWeight="Bold" Margin="0,0,15,0" Cursor="Hand" Visibility="Collapsed">
+                        <Button.Resources>
+                            <Style TargetType="Border">
+                                <Setter Property="CornerRadius" Value="6"/>
+                            </Style>
+                        </Button.Resources>
+                    </Button>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="5,0,0,0">
+                        <Ellipse x:Name="StatusIndicator" Width="10" Height="10" Fill="#71717A" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="TxtConnectionStatus" Text="Chưa kết nối" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </WrapPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- 2. Firmware Info Row (ProcessControlWord CW_FW_INFO response display) -->
+        <Border Grid.Row="1" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,15">
+            <StackPanel Orientation="Vertical">
+                <TextBlock Text="THÔNG TIN THIẾT BỊ (FIRMWARE INFO)" FontSize="13" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Firmware Info: " FontSize="13" FontWeight="SemiBold" Foreground="#A1A1AA"/>
+                        <TextBlock x:Name="TxtFwInfo" Text="[Chưa có dữ liệu]" FontSize="13" FontWeight="Bold" Foreground="#F4F4F5"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Trạng thái ICBM: " FontSize="13" FontWeight="SemiBold" Foreground="#A1A1AA"/>
+                        <TextBlock x:Name="TxtIcbmStatus" Text="Chưa truy vấn" FontSize="13" FontWeight="Bold" Foreground="#FBBF24"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- 3. Debug / Communication Log Panel -->
+        <Border Grid.Row="2" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" Padding="15">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="COMMUNICATION &amp; DEBUG LOG" FontSize="13" FontWeight="Bold" Foreground="#A1A1AA" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" x:Name="BtnClearLog" Content="Xóa Log" Click="BtnClearLog_Click" Style="{StaticResource ModernButtonStyle}" Height="26" Padding="10,2" FontSize="11"/>
+                </Grid>
+
+                <ScrollViewer Grid.Row="1" x:Name="LogScrollViewer" Background="#0F0F11">
+                    <TextBox x:Name="TxtDebugLog" Background="Transparent" Foreground="#34D399" FontFamily="Consolas, Courier New" FontSize="12" IsReadOnly="True" BorderThickness="0" TextWrapping="Wrap" Margin="10"/>
+                </ScrollViewer>
+            </Grid>
+        </Border>
     </Grid>
 </UserControl>
