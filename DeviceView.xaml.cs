@@ -26,15 +26,27 @@ namespace SoncaAudioInspector
         private const byte CW_FW_INFO = 0x00;
         private const byte CW_QC = 0xFD;
 
-        // QC Sub-group 0x01: MIC Control
-        private const byte QC_GROUP_MIC = 0x01;
-        private const byte QC_MIC_RESET = 0x01;
-        private const byte QC_MIC_SET_KEYS = 0x02;
+        // CW_QC Enums (Control Word: 0xFD)
+        public enum CW_QC_GROUP : byte
+        {
+            TEST_MIC_CONTROL = 0,
+            TEST_INPUT_CONTROL = 1
+        }
 
-        // QC Sub-group 0x02: Ngõ Audio
-        private const byte QC_GROUP_AUDIO = 0x02;
-        private const byte QC_AUDIO_GET = 0x01;
-        private const byte QC_AUDIO_SET = 0x02;
+        public enum TEST_MIC_CONTROL : byte
+        {
+            MIC_CONTROL_RESET = 0,
+            MIC_CONTROL_GET_ID = 1,
+            MIC_CONTROL_SET_ID_ALL = 2,
+            MIC_CONTROL_SET_ID_1 = 3,
+            MIC_CONTROL_SET_ID_2 = 4
+        }
+
+        public enum TEST_INPUT_CONTROL : byte
+        {
+            INPUT_CONTROL_GET = 0,
+            INPUT_CONTROL_SET = 1
+        }
 
         // Audio options enum: 0: BLUETOOTH, 1: LINE IN, 2: OPTICAL, 3: UNKNOWN
         private static readonly string[] AudioOutOptions = new[]
@@ -209,6 +221,9 @@ namespace SoncaAudioInspector
 
                     // Đọc ngõ Audio hiện tại
                     await GetAudioModeAsync();
+
+                    // Đọc ID MIC hiện tại (MIC 1 & MIC 2)
+                    await getIDMicAsync();
                 }
             }
             catch (Exception ex)
@@ -363,6 +378,10 @@ namespace SoncaAudioInspector
                 StatusIndicator.Fill = BrushGray;
                 TxtConnectionStatus.Text = "Chưa kết nối";
                 TxtFwInfo.Text = "[Chưa có dữ liệu]";
+                TxtMic1Display.Text = "-- -- -- --";
+                TxtMic2Display.Text = "-- -- -- --";
+                TxtMic1.Text = "";
+                TxtMic2.Text = "";
                 PanelQc.Visibility = Visibility.Collapsed;
 
                 _isUpdatingAudioSelection = true;
@@ -431,7 +450,7 @@ namespace SoncaAudioInspector
         }
 
         // ==========================================
-        // TÁC VỤ KIỂM TRA QC (CW_QC: 0xFE)
+        // TÁC VỤ KIỂM TRA QC (CW_QC: 0xFD)
         // ==========================================
 
         private async void BtnResetMic_Click(object sender, RoutedEventArgs e)
@@ -442,8 +461,8 @@ namespace SoncaAudioInspector
             {
                 try
                 {
-                    AppendLog("QC", ">>> Gửi lệnh Reset MIC (0x01, 0x01)...");
-                    byte[] payload = new byte[] { QC_GROUP_MIC, QC_MIC_RESET };
+                    AppendLog("QC", $">>> Gửi lệnh Reset MIC (0x{(byte)CW_QC_GROUP.TEST_MIC_CONTROL:X2}, 0x{(byte)TEST_MIC_CONTROL.MIC_CONTROL_RESET:X2})...");
+                    byte[] payload = new byte[] { (byte)CW_QC_GROUP.TEST_MIC_CONTROL, (byte)TEST_MIC_CONTROL.MIC_CONTROL_RESET };
                     byte[] actualData = ProcessControlWord(CW_QC, payload);
                     if (actualData.Length > 0)
                     {
@@ -457,6 +476,133 @@ namespace SoncaAudioInspector
             });
         }
 
+        private async void BtnGetMicId_Click(object sender, RoutedEventArgs e)
+        {
+            await getIDMicAsync();
+        }
+
+        private async Task getIDMicAsync()
+        {
+            await GetIdMicAsync();
+        }
+
+        private async Task GetIdMicAsync()
+        {
+            if (_devManager == null || !_devManager.IsConnected || _currentDevice == null) return;
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    AppendLog("QC", $">>> Gửi lệnh Đọc MIC IDs (0x{(byte)CW_QC_GROUP.TEST_MIC_CONTROL:X2}, 0x{(byte)TEST_MIC_CONTROL.MIC_CONTROL_GET_ID:X2})...");
+                    byte[] payload = new byte[] { (byte)CW_QC_GROUP.TEST_MIC_CONTROL, (byte)TEST_MIC_CONTROL.MIC_CONTROL_GET_ID };
+                    byte[] actualData = ProcessControlWord(CW_QC, payload);
+                    if (actualData.Length > 0)
+                    {
+                        int offset = 0;
+                        if (actualData.Length >= 10 && actualData[0] == (byte)CW_QC_GROUP.TEST_MIC_CONTROL && actualData[1] == (byte)TEST_MIC_CONTROL.MIC_CONTROL_GET_ID)
+                        {
+                            offset = 2;
+                        }
+
+                        if (actualData.Length >= offset + 8)
+                        {
+                            // 4 byte đầu là id mic 1, 4 byte sau là id mic 2
+                            byte[] mic1Bytes = new byte[4];
+                            byte[] mic2Bytes = new byte[4];
+                            Array.Copy(actualData, offset, mic1Bytes, 0, 4);
+                            Array.Copy(actualData, offset + 4, mic2Bytes, 0, 4);
+
+                            string mic1Hex = ByteArrayToString(mic1Bytes);
+                            string mic2Hex = ByteArrayToString(mic2Bytes);
+
+                            AppendLog("QC", $"Đã nhận MIC IDs -> MIC 1: [{mic1Hex}], MIC 2: [{mic2Hex}]");
+
+                            Dispatcher.Invoke(() =>
+                            {
+                                TxtMic1Display.Text = mic1Hex;
+                                TxtMic2Display.Text = mic2Hex;
+                                TxtMic1.Text = mic1Hex;
+                                TxtMic2.Text = mic2Hex;
+                            });
+                        }
+                        else
+                        {
+                            string rawStr = Encoding.ASCII.GetString(actualData, offset, actualData.Length - offset).Trim('\0', ' ', '\r', '\n');
+                            AppendLog("QC", $"Đã đọc MIC IDs (raw): \"{rawStr}\"");
+
+                            string[] parts = rawStr.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                            Dispatcher.Invoke(() =>
+                            {
+                                if (parts.Length >= 2)
+                                {
+                                    TxtMic1Display.Text = parts[0];
+                                    TxtMic2Display.Text = parts[1];
+                                    TxtMic1.Text = parts[0];
+                                    TxtMic2.Text = parts[1];
+                                }
+                                else if (parts.Length == 1)
+                                {
+                                    TxtMic1Display.Text = parts[0];
+                                    TxtMic1.Text = parts[0];
+                                }
+                            });
+                        }
+                    }
+                    else
+                    {
+                        AppendLog("WARN", "Không lấy được dữ liệu MIC IDs từ thiết bị.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendLog("ERROR", "Lỗi khi đọc MIC IDs: " + ex.Message);
+                }
+            });
+        }
+
+        private static bool TryParseHexTo4Bytes(string input, out byte[] result)
+        {
+            result = new byte[4];
+            if (string.IsNullOrWhiteSpace(input)) return false;
+
+            // Nếu người dùng nhập 4 giá trị phân cách bởi dấu cách, gạch ngang, hai chấm hoặc phẩy
+            string[] tokens = input.Split(new[] { ' ', '-', ':', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length == 4)
+            {
+                for (int i = 0; i < 4; i++)
+                {
+                    string tok = tokens[i].Replace("0x", "").Replace("0X", "").Trim();
+                    if (!byte.TryParse(tok, System.Globalization.NumberStyles.HexNumber, null, out result[i]))
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            // Trường hợp nhập chuỗi hex liền nhau (ví dụ: "12345678" hoặc "A1B2C3D4")
+            string clean = input.Replace(" ", "")
+                                .Replace("-", "")
+                                .Replace(":", "")
+                                .Replace("0x", "")
+                                .Replace("0X", "")
+                                .Trim();
+
+            if (clean.Length > 8) return false;
+            clean = clean.PadLeft(8, '0');
+
+            for (int i = 0; i < 4; i++)
+            {
+                string byteHex = clean.Substring(i * 2, 2);
+                if (!byte.TryParse(byteHex, System.Globalization.NumberStyles.HexNumber, null, out result[i]))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         private async void BtnSetMicKeys_Click(object sender, RoutedEventArgs e)
         {
             if (_devManager == null || !_devManager.IsConnected || _currentDevice == null) return;
@@ -464,33 +610,130 @@ namespace SoncaAudioInspector
             string mic1 = TxtMic1.Text.Trim();
             string mic2 = TxtMic2.Text.Trim();
 
-            if (string.IsNullOrEmpty(mic1) && string.IsNullOrEmpty(mic2))
+            if (!TryParseHexTo4Bytes(mic1, out byte[] mic1Bytes))
             {
-                AppendLog("WARN", "Vui lòng nhập chuỗi MIC 1 và MIC 2 trước khi cài đặt!");
+                AppendLog("WARN", $"Chuỗi hex MIC 1 \"{mic1}\" không hợp lệ (cần 4 byte hex, ví dụ: '12 34 56 78' hoặc '12345678')!");
                 return;
             }
 
-            string combined = $"{mic1} {mic2}";
+            if (!TryParseHexTo4Bytes(mic2, out byte[] mic2Bytes))
+            {
+                AppendLog("WARN", $"Chuỗi hex MIC 2 \"{mic2}\" không hợp lệ (cần 4 byte hex, ví dụ: '12 34 56 78' hoặc '12345678')!");
+                return;
+            }
+
             await Task.Run(() =>
             {
                 try
                 {
-                    AppendLog("QC", $">>> Gửi lệnh Cài đặt MIC Keys (0x01, 0x02): \"{combined}\"...");
-                    byte[] strBytes = Encoding.ASCII.GetBytes(combined);
-                    byte[] payload = new byte[2 + strBytes.Length];
-                    payload[0] = QC_GROUP_MIC;
-                    payload[1] = QC_MIC_SET_KEYS;
-                    Array.Copy(strBytes, 0, payload, 2, strBytes.Length);
+                    string mic1Hex = ByteArrayToString(mic1Bytes);
+                    string mic2Hex = ByteArrayToString(mic2Bytes);
+                    AppendLog("QC", $">>> Gửi lệnh Cài đặt Tất Cả MIC IDs (0x{(byte)CW_QC_GROUP.TEST_MIC_CONTROL:X2}, 0x{(byte)TEST_MIC_CONTROL.MIC_CONTROL_SET_ID_ALL:X2}): MIC1=[{mic1Hex}], MIC2=[{mic2Hex}]...");
+
+                    byte[] payload = new byte[10];
+                    payload[0] = (byte)CW_QC_GROUP.TEST_MIC_CONTROL;
+                    payload[1] = (byte)TEST_MIC_CONTROL.MIC_CONTROL_SET_ID_ALL;
+                    Array.Copy(mic1Bytes, 0, payload, 2, 4);
+                    Array.Copy(mic2Bytes, 0, payload, 6, 4);
 
                     byte[] actualData = ProcessControlWord(CW_QC, payload);
                     if (actualData.Length > 0)
                     {
-                        AppendLog("QC", $"Đã hoàn tất cài đặt MIC Keys: \"{combined}\"");
+                        AppendLog("QC", $"Đã hoàn tất cài đặt Tất Cả MIC IDs: MIC1=[{mic1Hex}], MIC2=[{mic2Hex}]");
+                        Dispatcher.Invoke(() =>
+                        {
+                            TxtMic1Display.Text = mic1Hex;
+                            TxtMic2Display.Text = mic2Hex;
+                            TxtMic1.Text = mic1Hex;
+                            TxtMic2.Text = mic2Hex;
+                        });
                     }
                 }
                 catch (Exception ex)
                 {
-                    AppendLog("ERROR", "Lỗi khi cài đặt MIC Keys: " + ex.Message);
+                    AppendLog("ERROR", "Lỗi khi cài đặt Tất Cả MIC IDs: " + ex.Message);
+                }
+            });
+        }
+
+        private async void BtnSetMic1_Click(object sender, RoutedEventArgs e)
+        {
+            if (_devManager == null || !_devManager.IsConnected || _currentDevice == null) return;
+
+            string mic1 = TxtMic1.Text.Trim();
+            if (!TryParseHexTo4Bytes(mic1, out byte[] mic1Bytes))
+            {
+                AppendLog("WARN", $"Chuỗi hex MIC 1 \"{mic1}\" không hợp lệ (cần 4 byte hex, ví dụ: '12 34 56 78' hoặc '12345678')!");
+                return;
+            }
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    string mic1Hex = ByteArrayToString(mic1Bytes);
+                    AppendLog("QC", $">>> Gửi lệnh Cài đặt MIC 1 (0x{(byte)CW_QC_GROUP.TEST_MIC_CONTROL:X2}, 0x{(byte)TEST_MIC_CONTROL.MIC_CONTROL_SET_ID_1:X2}): [{mic1Hex}]...");
+
+                    byte[] payload = new byte[6];
+                    payload[0] = (byte)CW_QC_GROUP.TEST_MIC_CONTROL;
+                    payload[1] = (byte)TEST_MIC_CONTROL.MIC_CONTROL_SET_ID_1;
+                    Array.Copy(mic1Bytes, 0, payload, 2, 4);
+
+                    byte[] actualData = ProcessControlWord(CW_QC, payload);
+                    if (actualData.Length > 0)
+                    {
+                        AppendLog("QC", $"Đã hoàn tất cài đặt MIC 1: [{mic1Hex}]");
+                        Dispatcher.Invoke(() =>
+                        {
+                            TxtMic1Display.Text = mic1Hex;
+                            TxtMic1.Text = mic1Hex;
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendLog("ERROR", "Lỗi khi cài đặt MIC 1: " + ex.Message);
+                }
+            });
+        }
+
+        private async void BtnSetMic2_Click(object sender, RoutedEventArgs e)
+        {
+            if (_devManager == null || !_devManager.IsConnected || _currentDevice == null) return;
+
+            string mic2 = TxtMic2.Text.Trim();
+            if (!TryParseHexTo4Bytes(mic2, out byte[] mic2Bytes))
+            {
+                AppendLog("WARN", $"Chuỗi hex MIC 2 \"{mic2}\" không hợp lệ (cần 4 byte hex, ví dụ: '12 34 56 78' hoặc '12345678')!");
+                return;
+            }
+
+            await Task.Run(() =>
+            {
+                try
+                {
+                    string mic2Hex = ByteArrayToString(mic2Bytes);
+                    AppendLog("QC", $">>> Gửi lệnh Cài đặt MIC 2 (0x{(byte)CW_QC_GROUP.TEST_MIC_CONTROL:X2}, 0x{(byte)TEST_MIC_CONTROL.MIC_CONTROL_SET_ID_2:X2}): [{mic2Hex}]...");
+
+                    byte[] payload = new byte[6];
+                    payload[0] = (byte)CW_QC_GROUP.TEST_MIC_CONTROL;
+                    payload[1] = (byte)TEST_MIC_CONTROL.MIC_CONTROL_SET_ID_2;
+                    Array.Copy(mic2Bytes, 0, payload, 2, 4);
+
+                    byte[] actualData = ProcessControlWord(CW_QC, payload);
+                    if (actualData.Length > 0)
+                    {
+                        AppendLog("QC", $"Đã hoàn tất cài đặt MIC 2: [{mic2Hex}]");
+                        Dispatcher.Invoke(() =>
+                        {
+                            TxtMic2Display.Text = mic2Hex;
+                            TxtMic2.Text = mic2Hex;
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AppendLog("ERROR", "Lỗi khi cài đặt MIC 2: " + ex.Message);
                 }
             });
         }
@@ -508,19 +751,19 @@ namespace SoncaAudioInspector
             {
                 try
                 {
-                    AppendLog("QC", ">>> Gửi lệnh Đọc ngõ Audio hiện tại (0x02, 0x01)...");
-                    byte[] payload = new byte[] { QC_GROUP_AUDIO, QC_AUDIO_GET };
+                    AppendLog("QC", $">>> Gửi lệnh Đọc ngõ Audio hiện tại (0x{(byte)CW_QC_GROUP.TEST_INPUT_CONTROL:X2}, 0x{(byte)TEST_INPUT_CONTROL.INPUT_CONTROL_GET:X2})...");
+                    byte[] payload = new byte[] { (byte)CW_QC_GROUP.TEST_INPUT_CONTROL, (byte)TEST_INPUT_CONTROL.INPUT_CONTROL_GET };
                     byte[] actualData = ProcessControlWord(CW_QC, payload);
 
                     if (actualData.Length > 0)
                     {
                         // Trích xuất index ngõ audio từ phản hồi
                         int audioIdx;
-                        if (actualData.Length >= 3 && actualData[0] == QC_GROUP_AUDIO && actualData[1] == QC_AUDIO_GET)
+                        if (actualData.Length >= 3 && actualData[0] == (byte)CW_QC_GROUP.TEST_INPUT_CONTROL && actualData[1] == (byte)TEST_INPUT_CONTROL.INPUT_CONTROL_GET)
                         {
                             audioIdx = actualData[2];
                         }
-                        else if (actualData.Length >= 2 && actualData[0] == QC_GROUP_AUDIO)
+                        else if (actualData.Length >= 2 && actualData[0] == (byte)CW_QC_GROUP.TEST_INPUT_CONTROL)
                         {
                             audioIdx = actualData[1];
                         }
@@ -596,8 +839,8 @@ namespace SoncaAudioInspector
                 try
                 {
                     string audioName = GetAudioModeName(audioIdx);
-                    AppendLog("QC", $">>> Gửi lệnh Chuyển ngõ Audio sang: [{audioIdx}] {audioName} (0x02, 0x02, 0x{audioIdx:X2})...");
-                    byte[] payload = new byte[] { QC_GROUP_AUDIO, QC_AUDIO_SET, audioIdx };
+                    AppendLog("QC", $">>> Gửi lệnh Chuyển ngõ Audio sang: [{audioIdx}] {audioName} (0x{(byte)CW_QC_GROUP.TEST_INPUT_CONTROL:X2}, 0x{(byte)TEST_INPUT_CONTROL.INPUT_CONTROL_SET:X2}, 0x{audioIdx:X2})...");
+                    byte[] payload = new byte[] { (byte)CW_QC_GROUP.TEST_INPUT_CONTROL, (byte)TEST_INPUT_CONTROL.INPUT_CONTROL_SET, audioIdx };
                     byte[] actualData = ProcessControlWord(CW_QC, payload);
                     if (actualData.Length > 0)
                     {

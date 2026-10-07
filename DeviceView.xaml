@@ -7,30 +7,36 @@
              d:DesignHeight="720" d:DesignWidth="1200"
              Background="#0E0E10" Foreground="#E4E4E7">
 
-    <Grid Margin="20">
+    <Grid Margin="14,10,14,12">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/> <!-- Connection Toolbar -->
-            <RowDefinition Height="Auto"/> <!-- Firmware Info Row -->
-            <RowDefinition Height="Auto"/> <!-- QC Commands Panel (CW_QC: 0xFE) -->
-            <RowDefinition Height="*"/>    <!-- Debug / Communication Log -->
+            <RowDefinition Height="Auto"/> <!-- 0. Connection Toolbar & Firmware Info -->
+            <RowDefinition Height="Auto"/> <!-- 1. QC Commands Panel (CW_QC: 0xFD) -->
+            <RowDefinition Height="Auto"/> <!-- 2. GridSplitter -->
+            <RowDefinition Height="*" MinHeight="180"/> <!-- 3. Debug / Communication Log Panel -->
         </Grid.RowDefinitions>
 
-        <!-- 1. Connection Toolbar -->
-        <Border Grid.Row="0" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,15">
-            <StackPanel Orientation="Vertical">
-                <TextBlock Text="KẾT NỐI USB BOARD (ACNOS / SONCA)" FontSize="15" FontWeight="Bold" Foreground="#10B981" Margin="0,0,0,12"/>
-                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button x:Name="BtnScan" Content="🔍 Quét thiết bị" Click="BtnScan_Click" Style="{StaticResource ModernButtonStyle}" Width="130" Height="32" Margin="0,0,10,0"/>
+        <!-- 1. Connection Toolbar & Firmware Info -->
+        <Border Grid.Row="0" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" Padding="12,8" Margin="0,0,0,8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                    <TextBlock Text="Thiết bị:" FontSize="13" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <ComboBox x:Name="ComboDevices" Width="360" Height="32" Style="{StaticResource DarkComboBoxStyle}" Margin="0,0,10,0" SelectionChanged="ComboDevices_SelectionChanged">
+                <!-- Row 0: Nút quét & kết nối thiết bị -->
+                <WrapPanel Grid.Row="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,6">
+                    <TextBlock Text="KẾT NỐI USB BOARD (ACNOS / SONCA)" FontSize="13" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                    <Button x:Name="BtnScan" Content="🔍 Quét thiết bị" Click="BtnScan_Click" Style="{StaticResource ModernButtonStyle}" Width="120" Height="28" Margin="0,0,10,0"/>
+
+                    <TextBlock Text="Thiết bị:" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ComboBox x:Name="ComboDevices" Width="320" Height="28" Style="{StaticResource DarkComboBoxStyle}" Margin="0,0,10,0" SelectionChanged="ComboDevices_SelectionChanged">
                         <ComboBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="{Binding Product}" FontWeight="SemiBold" Foreground="White" Margin="0,0,8,0"/>
+                                    <TextBlock Text="{Binding Product}" FontWeight="SemiBold" Foreground="White" Margin="0,0,6,0"/>
                                     <TextBlock Text="[" Foreground="#71717A"/>
                                     <TextBlock Text="{Binding SerialNumber}" Foreground="#A1A1AA"/>
-                                    <TextBlock Text="]" Foreground="#71717A" Margin="0,0,8,0"/>
+                                    <TextBlock Text="]" Foreground="#71717A" Margin="0,0,6,0"/>
                                     <TextBlock Text="(VID: " Foreground="#52525B"/>
                                     <TextBlock Text="{Binding Vid, StringFormat='{}{0:X4}'}" Foreground="#10B981"/>
                                     <TextBlock Text=")" Foreground="#52525B"/>
@@ -39,7 +45,7 @@
                         </ComboBox.ItemTemplate>
                     </ComboBox>
 
-                    <Button x:Name="BtnConnect" Content="Kết nối" Click="BtnConnect_Click" Width="100" Height="32" Background="#10B981" Foreground="Black" FontWeight="Bold" Margin="0,0,10,0" Cursor="Hand" IsEnabled="False">
+                    <Button x:Name="BtnConnect" Content="Kết nối" Click="BtnConnect_Click" Width="90" Height="28" Background="#10B981" Foreground="Black" FontWeight="Bold" Margin="0,0,10,0" Cursor="Hand" IsEnabled="False">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
@@ -47,7 +53,7 @@
                         </Button.Resources>
                     </Button>
 
-                    <Button x:Name="BtnDisconnect" Content="Ngắt kết nối" Click="BtnDisconnect_Click" Width="110" Height="32" Background="#EF4444" Foreground="White" FontWeight="Bold" Margin="0,0,15,0" Cursor="Hand" Visibility="Collapsed">
+                    <Button x:Name="BtnDisconnect" Content="Ngắt kết nối" Click="BtnDisconnect_Click" Width="100" Height="28" Background="#EF4444" Foreground="White" FontWeight="Bold" Margin="0,0,12,0" Cursor="Hand" Visibility="Collapsed">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
@@ -55,99 +61,125 @@
                         </Button.Resources>
                     </Button>
 
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="5,0,0,0">
-                        <Ellipse x:Name="StatusIndicator" Width="10" Height="10" Fill="#71717A" Margin="0,0,6,0"/>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse x:Name="StatusIndicator" Width="8" Height="8" Fill="#71717A" Margin="0,0,6,0"/>
                         <TextBlock x:Name="TxtConnectionStatus" Text="Chưa kết nối" FontSize="12" Foreground="#A1A1AA" VerticalAlignment="Center"/>
                     </StackPanel>
                 </WrapPanel>
-            </StackPanel>
-        </Border>
 
-        <!-- 2. Firmware Info Row (ProcessControlWord CW_FW_INFO response display) -->
-        <Border Grid.Row="1" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,15">
-            <StackPanel Orientation="Vertical">
-                <TextBlock Text="THÔNG TIN THIẾT BỊ (FIRMWARE INFO)" FontSize="13" FontWeight="Bold" Foreground="#38BDF8" Margin="0,0,0,8"/>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Firmware Info: " FontSize="13" FontWeight="SemiBold" Foreground="#A1A1AA"/>
-                    <TextBlock x:Name="TxtFwInfo" Text="[Chưa có dữ liệu]" FontSize="13" FontWeight="Bold" Foreground="#F4F4F5"/>
+                <!-- Row 1: Thông tin Firmware -->
+                <StackPanel Grid.Row="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Firmware Info: " FontSize="12" FontWeight="SemiBold" Foreground="#38BDF8"/>
+                    <TextBlock x:Name="TxtFwInfo" Text="[Chưa có dữ liệu]" FontSize="12" FontWeight="Bold" Foreground="#F4F4F5"/>
                 </StackPanel>
-            </StackPanel>
+            </Grid>
         </Border>
 
-        <!-- 3. QC Commands Panel (CW_QC: 0xFE) -->
-        <Border x:Name="PanelQc" Grid.Row="2" Background="#18181B" BorderBrush="#2563EB" BorderThickness="1" CornerRadius="8" Padding="15" Margin="0,0,0,15" Visibility="Collapsed">
+        <!-- 2. QC Commands Panel (CW_QC: 0xFD) -->
+        <Border x:Name="PanelQc" Grid.Row="1" Background="#18181B" BorderBrush="#2563EB" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,8" Visibility="Collapsed">
             <StackPanel Orientation="Vertical">
-                <TextBlock Text="TÁC VỤ KIỂM TRA QC (CW_QC: 0xFE)" FontSize="14" FontWeight="Bold" Foreground="#60A5FA" Margin="0,0,0,12"/>
+                <TextBlock Text="TÁC VỤ KIỂM TRA QC (CW_QC: 0xFD)" FontSize="13" FontWeight="Bold" Foreground="#60A5FA" Margin="0,0,0,8"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="20"/>
+                        <ColumnDefinition Width="15"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Cột 1: MIC Control (0x01) -->
-                    <Border Grid.Column="0" Background="#121214" BorderBrush="#27272A" BorderThickness="1" CornerRadius="6" Padding="15">
+                    <!-- Cột 1: MIC Control (TEST_MIC_CONTROL: 0) -->
+                    <Border Grid.Column="0" Background="#121214" BorderBrush="#27272A" BorderThickness="1" CornerRadius="6" Padding="10">
                         <StackPanel Orientation="Vertical">
-                            <TextBlock Text="1. ĐIỀU KHIỂN MIC (0x01)" FontSize="13" FontWeight="Bold" Foreground="#34D399" Margin="0,0,0,12"/>
+                            <TextBlock Text="1. ĐIỀU KHIỂN MIC (TEST_MIC_CONTROL: 0)" FontSize="12" FontWeight="Bold" Foreground="#34D399" Margin="0,0,0,8"/>
 
-                            <!-- Reset MIC -->
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                                <Button x:Name="BtnResetMic" Content="🔄 Reset MIC" Click="BtnResetMic_Click" Style="{StaticResource ModernButtonStyle}" Width="120" Height="32" FontSize="12"/>
-                                <TextBlock Text="Gửi lệnh reset MIC (0x01, 0x01)" FontSize="11" Foreground="#71717A" VerticalAlignment="Center" Margin="10,0,0,0"/>
-                            </StackPanel>
+                            <!-- Reset MIC & Get ID -->
+                            <WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <Button x:Name="BtnResetMic" Content="🔄 Reset MIC" Click="BtnResetMic_Click" Style="{StaticResource ModernButtonStyle}" Width="105" Height="28" FontSize="12" Margin="0,0,8,0"/>
+                                <Button x:Name="BtnGetMicId" Content="🔍 Đọc MIC IDs" Click="BtnGetMicId_Click" Style="{StaticResource ModernButtonStyle}" Width="105" Height="28" FontSize="12" Margin="0,0,8,0"/>
+                            </WrapPanel>
+
+                            <!-- Hiển thị MIC IDs hiện tại (Hex: xx xx xx xx) -->
+                            <Border Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="4" Padding="10,6" Margin="0,0,0,8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="10"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0">
+                                        <TextBlock Text="MIC 1 ID (Hex):" FontSize="11" FontWeight="SemiBold" Foreground="#A1A1AA" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="TxtMic1Display" Text="-- -- -- --" FontFamily="Consolas, Courier New" FontSize="13" FontWeight="Bold" Foreground="#34D399"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="2">
+                                        <TextBlock Text="MIC 2 ID (Hex):" FontSize="11" FontWeight="SemiBold" Foreground="#A1A1AA" Margin="0,0,0,2"/>
+                                        <TextBlock x:Name="TxtMic2Display" Text="-- -- -- --" FontFamily="Consolas, Courier New" FontSize="13" FontWeight="Bold" Foreground="#34D399"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
 
                             <!-- Set MIC keys -->
-                            <TextBlock Text="Cài đặt MIC Keys (0x02):" FontSize="12" FontWeight="SemiBold" Foreground="#A1A1AA" Margin="0,0,0,6"/>
-                            <TextBlock Text="Cú pháp: [String MIC 1] [Space] [String MIC 2]" FontSize="11" Foreground="#52525B" Margin="0,0,0,8"/>
-                            <Grid Margin="0,0,0,10">
+                            <Grid Margin="0,0,0,6">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="10"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBox x:Name="TxtMic1" Grid.Column="0" Height="32" Background="#1E1E22" Foreground="White" BorderBrush="#3F3F46" BorderThickness="1" Padding="8,5" VerticalContentAlignment="Center" FontSize="12" ToolTip="Nhập chuỗi MIC 1"/>
-                                <TextBox x:Name="TxtMic2" Grid.Column="2" Height="32" Background="#1E1E22" Foreground="White" BorderBrush="#3F3F46" BorderThickness="1" Padding="8,5" VerticalContentAlignment="Center" FontSize="12" ToolTip="Nhập chuỗi MIC 2"/>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="MIC 1:" FontSize="10" Foreground="#71717A" Margin="0,0,0,2"/>
+                                    <TextBox x:Name="TxtMic1" Height="26" Background="#1E1E22" Foreground="White" FontFamily="Consolas, Courier New" BorderBrush="#3F3F46" BorderThickness="1" Padding="6,2" VerticalContentAlignment="Center" FontSize="12" ToolTip="Nhập chuỗi / hex MIC 1"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="MIC 2:" FontSize="10" Foreground="#71717A" Margin="0,0,0,2"/>
+                                    <TextBox x:Name="TxtMic2" Height="26" Background="#1E1E22" Foreground="White" FontFamily="Consolas, Courier New" BorderBrush="#3F3F46" BorderThickness="1" Padding="6,2" VerticalContentAlignment="Center" FontSize="12" ToolTip="Nhập chuỗi / hex MIC 2"/>
+                                </StackPanel>
                             </Grid>
-                            <Button x:Name="BtnSetMicKeys" Content="💾 Xác nhận cài MIC Keys" Click="BtnSetMicKeys_Click" Style="{StaticResource ModernButtonStyle}" Width="180" Height="32" FontSize="12" HorizontalAlignment="Left"/>
+
+                            <WrapPanel Orientation="Horizontal">
+                                <Button x:Name="BtnSetMicKeys" Content="💾 Cài Tất Cả" Click="BtnSetMicKeys_Click" Style="{StaticResource ModernButtonStyle}" Height="28" FontSize="11" Padding="10,0" Margin="0,0,6,0"/>
+                                <Button x:Name="BtnSetMic1" Content="Cài MIC 1" Click="BtnSetMic1_Click" Style="{StaticResource ModernButtonStyle}" Height="28" FontSize="11" Padding="10,0" Margin="0,0,6,0"/>
+                                <Button x:Name="BtnSetMic2" Content="Cài MIC 2" Click="BtnSetMic2_Click" Style="{StaticResource ModernButtonStyle}" Height="28" FontSize="11" Padding="10,0"/>
+                            </WrapPanel>
                         </StackPanel>
                     </Border>
 
-                    <!-- Cột 2: Ngõ Audio (0x02) -->
-                    <Border Grid.Column="2" Background="#121214" BorderBrush="#27272A" BorderThickness="1" CornerRadius="6" Padding="15">
+                    <!-- Cột 2: Ngõ Audio (TEST_INPUT_CONTROL: 1) -->
+                    <Border Grid.Column="2" Background="#121214" BorderBrush="#27272A" BorderThickness="1" CornerRadius="6" Padding="10">
                         <StackPanel Orientation="Vertical">
-                            <TextBlock Text="2. NGÕ AUDIO (0x02)" FontSize="13" FontWeight="Bold" Foreground="#FBBF24" Margin="0,0,0,12"/>
+                            <TextBlock Text="2. NGÕ AUDIO (TEST_INPUT_CONTROL: 1)" FontSize="12" FontWeight="Bold" Foreground="#FBBF24" Margin="0,0,0,8"/>
 
-                            <TextBlock Text="Ngõ Audio hiện tại / Chọn ngõ chuyển đổi:" FontSize="12" FontWeight="SemiBold" Foreground="#A1A1AA" Margin="0,0,0,8"/>
-                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                                <ComboBox x:Name="ComboAudioOut" Width="220" Height="32" Style="{StaticResource DarkComboBoxStyle}" SelectionChanged="ComboAudioOut_SelectionChanged"/>
-                                <Button x:Name="BtnGetAudio" Content="🔄 Đọc ngõ hiện tại" Click="BtnGetAudio_Click" Style="{StaticResource ModernButtonStyle}" Height="32" Padding="12,0" FontSize="12" Margin="10,0,0,0"/>
+                            <TextBlock Text="Ngõ Audio hiện tại / Chọn ngõ chuyển đổi:" FontSize="11" FontWeight="SemiBold" Foreground="#A1A1AA" Margin="0,0,0,6"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <ComboBox x:Name="ComboAudioOut" Width="200" Height="28" Style="{StaticResource DarkComboBoxStyle}" SelectionChanged="ComboAudioOut_SelectionChanged"/>
+                                <Button x:Name="BtnGetAudio" Content="🔄 Đọc ngõ hiện tại" Click="BtnGetAudio_Click" Style="{StaticResource ModernButtonStyle}" Height="28" Padding="10,0" FontSize="11" Margin="8,0,0,0"/>
                             </StackPanel>
-                            <TextBlock Text="* Khi chọn mục trong danh sách, hệ thống sẽ tự động gửi lệnh chuyển ngõ: (0x02, 0x02, [Idx])." FontSize="11" Foreground="#71717A" TextWrapping="Wrap"/>
+                            <TextBlock Text="* Lệnh INPUT_CONTROL_GET: (0x01, 0x00), INPUT_CONTROL_SET: (0x01, 0x01, [Idx])." FontSize="11" Foreground="#71717A" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
                 </Grid>
             </StackPanel>
         </Border>
 
+        <!-- 3. GridSplitter for resizing between QC panel and Log panel -->
+        <GridSplitter Grid.Row="2" Height="4" HorizontalAlignment="Stretch" Background="#27272A" Cursor="SizeNS" Margin="0,0,0,6" ShowsPreview="True"/>
+
         <!-- 4. Debug / Communication Log Panel -->
-        <Border Grid.Row="3" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" Padding="15">
+        <Border Grid.Row="3" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="8" Padding="12,10" MinHeight="180">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <Grid Grid.Row="0" Margin="0,0,0,8">
+                <Grid Grid.Row="0" Margin="0,0,0,6">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="COMMUNICATION &amp; DEBUG LOG" FontSize="13" FontWeight="Bold" Foreground="#A1A1AA" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" x:Name="BtnClearLog" Content="Xóa Log" Click="BtnClearLog_Click" Style="{StaticResource ModernButtonStyle}" Height="26" Padding="10,2" FontSize="11"/>
+                    <TextBlock Grid.Column="0" Text="COMMUNICATION &amp; DEBUG LOG" FontSize="12" FontWeight="Bold" Foreground="#A1A1AA" VerticalAlignment="Center"/>
+                    <Button Grid.Column="1" x:Name="BtnClearLog" Content="Xóa Log" Click="BtnClearLog_Click" Style="{StaticResource ModernButtonStyle}" Height="24" Padding="10,2" FontSize="11"/>
                 </Grid>
 
-                <ScrollViewer Grid.Row="1" x:Name="LogScrollViewer" Background="#0F0F11">
-                    <TextBox x:Name="TxtDebugLog" Background="Transparent" Foreground="#34D399" FontFamily="Consolas, Courier New" FontSize="12" IsReadOnly="True" BorderThickness="0" TextWrapping="Wrap" Margin="10"/>
+                <ScrollViewer Grid.Row="1" x:Name="LogScrollViewer" Background="#0F0F11" VerticalScrollBarVisibility="Auto">
+                    <TextBox x:Name="TxtDebugLog" Background="Transparent" Foreground="#34D399" FontFamily="Consolas, Courier New" FontSize="12" IsReadOnly="True" BorderThickness="0" TextWrapping="Wrap" Margin="8"/>
                 </ScrollViewer>
             </Grid>
         </Border>
