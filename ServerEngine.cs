@@ -810,9 +810,15 @@ namespace SoncaAudioInspector
                 return false;
             }
 
+            string? pendingPath = null;
             try
             {
-                var stepList = steps?.Select((s, idx) => new
+                var stepSnapshot = steps?.ToArray() ?? Array.Empty<AudioQaStepResult>();
+                var graphSnapshot = graphImagePaths?.ToArray() ?? Array.Empty<string>();
+                pendingPath = LocalQaStorage.SavePending(new PendingAudioQaUpload(CurrentApiBaseUrl, StaffID ?? "",
+                    product.Id, passed, stepSnapshot, graphSnapshot.Select(Path.GetFileName).Select(name => name!).ToArray(),
+                    deviceReady, uploadSessionId ?? "", DateTimeOffset.UtcNow), graphSnapshot);
+                var stepList = stepSnapshot.Select((s, idx) => new
                 {
                     stepIndex = idx + 1,
                     stepName = s.Name,
@@ -821,7 +827,7 @@ namespace SoncaAudioInspector
                 }).ToList();
 
                 var images = new List<object>();
-                foreach (string imagePath in graphImagePaths ?? Array.Empty<string>())
+                foreach (string imagePath in graphSnapshot)
                 {
                     if (!File.Exists(imagePath)) continue;
                     byte[] imageBytes = await File.ReadAllBytesAsync(imagePath);
@@ -854,9 +860,21 @@ namespace SoncaAudioInspector
                 {
                     ApiError error = ReadApiError(responseJson);
                     LastError = ToApiMessage(response.StatusCode, error);
+                    if (pendingPath != null && response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                        LocalQaStorage.MarkRetrySafe(pendingPath);
                     return false;
                 }
 
+                if (pendingPath != null)
+                {
+                    try { LocalQaStorage.MarkUploaded(LocalQaStorage.Root, pendingPath); }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Ghi xác nhận upload QA: " + ex.Message); }
+                }
+                _ = Task.Run(() =>
+                {
+                    try { LocalQaStorage.PruneUploadedGraphs(LocalQaStorage.Root); }
+                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Dọn ảnh QA đã gửi: " + ex.Message); }
+                });
                 LastError = null;
                 return true;
             }
@@ -865,6 +883,51 @@ namespace SoncaAudioInspector
                 LastError = ToUserMessage(ex);
                 return false;
             }
+        }
+
+        public sealed record PendingAudioQaItem(string Path, PendingAudioQaUpload Result);
+
+        public static IReadOnlyList<PendingAudioQaItem> GetPendingAudioQaUploads()
+        {
+            var items = new List<PendingAudioQaItem>();
+            if (string.IsNullOrWhiteSpace(StaffID)) return items;
+            foreach (string path in LocalQaStorage.FindPending(LocalQaStorage.Root))
+            {
+                try
+                {
+                    var pending = LocalQaStorage.ReadPending(LocalQaStorage.Root, path);
+                    if (pending != null && pending.StaffId == StaffID
+                        && string.Equals(pending.Server.TrimEnd('/'), CurrentApiBaseUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+                        items.Add(new PendingAudioQaItem(path, pending));
+                }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Đọc kết quả QA chờ gửi: " + ex.Message); }
+            }
+            return items.OrderBy(item => item.Result.CreatedUtc).ToArray();
+        }
+
+        public static async Task<bool> RetryPendingAudioQaAsync(string path, bool allowUncertainRetry)
+        {
+            var pending = LocalQaStorage.ReadPending(LocalQaStorage.Root, path);
+            if (pending == null || pending.StaffId != StaffID
+                || !string.Equals(pending.Server.TrimEnd('/'), CurrentApiBaseUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+            {
+                LastError = "Kết quả chờ gửi không thuộc tài khoản/server hiện tại hoặc đã được gửi.";
+                return false;
+            }
+            if (!pending.SafeToRetry && !allowUncertainRetry)
+            {
+                LastError = "Cần kiểm tra lịch sử QA trước khi gửi lại kết quả chưa rõ trạng thái trên server.";
+                return false;
+            }
+            string folder = Path.GetDirectoryName(path)!;
+            string[] graphs = pending.GraphFiles.Select(name => Path.Combine(folder, name)).ToArray();
+            if (graphs.Any(graph => !File.Exists(graph)))
+            {
+                LastError = "Thiếu ảnh đo đã lưu; không gửi lại kết quả QA thiếu dữ liệu.";
+                return false;
+            }
+            return await UploadAudioQaResultAsync(new ProductInfo { Id = pending.ProductId }, pending.Passed,
+                pending.Steps, graphs, pending.DeviceReady, pending.UploadSessionId);
         }
 
         public static async Task<bool?> GetAudioQaUploadPreferenceAsync()
@@ -950,14 +1013,44 @@ namespace SoncaAudioInspector
             string relativePath,
             HttpContent? content = null)
         {
-            if (!HasValidApiKey && HasValidRefreshToken)
+            using (content)
             {
-                await RefreshAccessTokenOrThrowAsync(ApiKey);
+                await EnsureAppApiKeyAsync(forceBootstrap: false);
+                if (!HasValidApiKey && HasValidRefreshToken)
+                    await RefreshAccessTokenOrThrowAsync(ApiKey);
+                byte[]? bytes = content == null ? null : await content.ReadAsByteArrayAsync();
+                var headers = content?.Headers.ToArray();
+                bool appRetried = false, authRetried = false;
+                string? tokenUsed = null;
+                return await AuthorizedHttpRetry.SendAsync(Client, () =>
+                {
+                    tokenUsed = ApiKey;
+                    HttpRequestMessage request = CreateAuthorizedRequest(method, relativePath);
+                    if (bytes != null)
+                    {
+                        request.Content = new ByteArrayContent(bytes);
+                        foreach (var header in headers!) request.Content.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                    }
+                    return request;
+                }, async response =>
+                {
+                    ApiError error = ReadApiError(await response.Content.ReadAsStringAsync());
+                    if (!appRetried && IsAppKeyError(response.StatusCode, error))
+                    {
+                        appRetried = true;
+                        await ClearStoredAppSessionAsync();
+                        await EnsureAppApiKeyAsync(forceBootstrap: true);
+                        return true;
+                    }
+                    if (!authRetried && response.StatusCode == HttpStatusCode.Unauthorized && HasValidRefreshToken)
+                    {
+                        authRetried = true;
+                        await RefreshAccessTokenOrThrowAsync(tokenUsed);
+                        return true;
+                    }
+                    return false;
+                });
             }
-
-            HttpRequestMessage request = CreateAuthorizedRequest(method, relativePath);
-            request.Content = content;
-            return await Client.SendAsync(request);
         }
 
         public static void ClearSession(bool keepError = false)
@@ -977,61 +1070,16 @@ namespace SoncaAudioInspector
             string relativePath,
             object? body = null)
         {
-            bool appRetried = false;
-            bool authRetried = false;
-
-            while (true)
+            using HttpResponseMessage response = await SendAuthorizedAsync(method, relativePath,
+                body is null ? null : JsonContent(body));
+            string responseJson = await response.Content.ReadAsStringAsync();
+            if (response.IsSuccessStatusCode)
             {
-                await EnsureAppApiKeyAsync(forceBootstrap: false);
-                string? tokenUsed = ApiKey;
-
-                if (!HasValidApiKey && HasValidRefreshToken)
-                {
-                    await RefreshAccessTokenOrThrowAsync(tokenUsed);
-                    tokenUsed = ApiKey;
-                }
-
-                using HttpRequestMessage request = CreateAuthorizedRequest(method, relativePath);
-                if (body is not null)
-                {
-                    request.Content = JsonContent(body);
-                }
-
-                using HttpResponseMessage response = await Client.SendAsync(request);
-                string responseJson = await response.Content.ReadAsStringAsync();
-
-                if (response.IsSuccessStatusCode)
-                {
-                    using JsonDocument document = JsonDocument.Parse(responseJson);
-                    JsonElement payload = GetPayload(document.RootElement);
-                    return payload.Clone();
-                }
-
-                ApiError error = ReadApiError(responseJson);
-
-                if (response.StatusCode == HttpStatusCode.Unauthorized
-                    && !authRetried
-                    && HasValidRefreshToken)
-                {
-                    // App routes may return a generic 401 when an opaque
-                    // access-token row has expired. The refresh token is the
-                    // authoritative recovery path, so do not depend on a
-                    // particular error code from every route.
-                    authRetried = true;
-                    await RefreshAccessTokenOrThrowAsync(tokenUsed);
-                    continue;
-                }
-
-                if (IsAppKeyError(response.StatusCode, error) && !appRetried)
-                {
-                    appRetried = true;
-                    await ClearStoredAppSessionAsync();
-                    await EnsureAppApiKeyAsync(forceBootstrap: true);
-                    continue;
-                }
-
-                throw new ApiException(response.StatusCode, error.Code, ToApiMessage(response.StatusCode, error));
+                using JsonDocument document = JsonDocument.Parse(responseJson);
+                return GetPayload(document.RootElement).Clone();
             }
+            ApiError error = ReadApiError(responseJson);
+            throw new ApiException(response.StatusCode, error.Code, ToApiMessage(response.StatusCode, error));
         }
 
         private static async Task EnsureAppApiKeyAsync(bool forceBootstrap, IProgress<string>? progress = null)
@@ -1052,7 +1100,7 @@ namespace SoncaAudioInspector
                 if (!forceBootstrap)
                 {
                     AppSessionData? stored = ReadProtectedRegistryValue<AppSessionData>(AppSessionValueName);
-                    if (stored is not null && !string.IsNullOrWhiteSpace(stored.AppApiKey))
+                    if (stored is not null && IsAppSessionUsable(stored.AppApiKey, stored.ExpiresAtUtc))
                     {
                         AppToken = stored.AppApiKey;
                         AppTokenExpiresAtUtc = stored.ExpiresAtUtc;
@@ -1149,8 +1197,12 @@ namespace SoncaAudioInspector
 
         private static bool HasValidAppSessionInMemory()
         {
-            return !string.IsNullOrWhiteSpace(AppToken);
+            return IsAppSessionUsable(AppToken, AppTokenExpiresAtUtc);
         }
+
+        internal static bool IsAppSessionUsable(string? token, DateTimeOffset? expiresAtUtc) =>
+            !string.IsNullOrWhiteSpace(token) && expiresAtUtc.HasValue
+            && expiresAtUtc.Value > DateTimeOffset.UtcNow.AddSeconds(30);
 
         public static void ClearStaffSession(bool keepError = false)
         {
@@ -1630,7 +1682,7 @@ namespace SoncaAudioInspector
                     "SoncaAudioInspector");
                 Directory.CreateDirectory(logDir);
                 string logPath = Path.Combine(logDir, "visual-ai-upload.log");
-                File.AppendAllText(logPath, line + Environment.NewLine, Encoding.UTF8);
+                LocalQaStorage.AppendRotatingLog(logPath, line);
             }
             catch
             {

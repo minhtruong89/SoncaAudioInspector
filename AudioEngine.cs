@@ -33,7 +33,7 @@ public class AudioEngine : IDisposable
 {
 
 	public sealed record DualCaptureResult(float[] DutSamples, int DutSampleRate, float[]? AmbientSamples, int AmbientSampleRate, string? AmbientError);
-
+	
 
 
 	public static bool flagSaveFile = false;
@@ -1740,7 +1740,11 @@ public class AudioEngine : IDisposable
 
 
 
-	public void StartContinuousCapture(MMDevice? recordingDevice, Action<float[], int> onSamplesAvailable)
+	public void StartContinuousCapture(MMDevice? recordingDevice, Action<float[], int> onSamplesAvailable) =>
+		StartContinuousCapture(recordingDevice, onSamplesAvailable, null);
+
+	public void StartContinuousCapture(MMDevice? recordingDevice, Action<float[], int> onSamplesAvailable,
+		Action<Exception>? onCaptureFailed)
 
 	{
 		lock (_lifecycleLock)
@@ -1771,6 +1775,12 @@ public class AudioEngine : IDisposable
 
 				int sampleRate = format.SampleRate;
 
+				WasapiCapture capture = _continuousCapture;
+				capture.RecordingStopped += (_, e) =>
+				{
+					if (ReferenceEquals(_continuousCapture, capture))
+						onCaptureFailed?.Invoke(e.Exception ?? new IOException("Luồng theo dõi ngõ thu đã dừng."));
+				};
 				_continuousCapture.DataAvailable += delegate (object? s, WaveInEventArgs e)
 
 				{

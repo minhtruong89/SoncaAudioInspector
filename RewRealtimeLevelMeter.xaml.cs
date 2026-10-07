@@ -254,7 +254,7 @@ public partial class RewRealtimeLevelMeter : UserControl
             TxtHeadroom.Foreground = BrushGreen;
             BorderStatusBadge.Background = BgGreen;
             BorderStatusBadge.BorderBrush = BrushGreen;
-            TxtStatusBadge.Text = "✔ ĐẠT CHUẨN REW (OK)";
+            TxtStatusBadge.Text = "✔ MỨC THU PHÙ HỢP";
             TxtStatusBadge.Foreground = BrushGreen;
         }
 
@@ -273,6 +273,13 @@ public partial class RewRealtimeLevelMeter : UserControl
         TxtStatusBadge.Text = "ℹ CHỜ TÍN HIỆU";
         TxtStatusBadge.Foreground = BrushBlue;
         TxtStatsDetail.Text = "Peak: -- | RMS: --";
+    }
+
+    public void ShowUnavailable(string message)
+    {
+        Reset();
+        TxtStatusBadge.Text = message;
+        TxtStatsDetail.Text = "Chưa có dữ liệu thu mới";
     }
 }
 

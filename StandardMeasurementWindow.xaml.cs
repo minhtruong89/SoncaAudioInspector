@@ -173,12 +173,18 @@ public partial class StandardMeasurementWindow : UserControl
 
     public void ReloadDevices()
     {
+        if (_isBusy || (Application.Current.MainWindow as MainWindow)?.IsAudioRoutingBusy == true) return;
+        StopLiveInstruments();
+        var previous = ComboPlayback.Items.OfType<MMDevice>().Concat(ComboRecording.Items.OfType<MMDevice>()).ToArray();
+        var discovered = new List<MMDevice>();
         try
         {
             string? playbackId = (ComboPlayback.SelectedItem as MMDevice)?.ID;
             string? recordingId = (ComboRecording.SelectedItem as MMDevice)?.ID;
             var playbacks = _audioEngine.GetPlaybackDevices() ?? new List<MMDevice>();
+            discovered.AddRange(playbacks);
             var recordings = _audioEngine.GetRecordingDevices() ?? new List<MMDevice>();
+            discovered.AddRange(recordings);
             ComboPlayback.ItemsSource = playbacks;
             ComboRecording.ItemsSource = recordings;
             string? defaultPlaybackId = _audioEngine.TryGetWindowsDefaultPlaybackVolume()?.DeviceId;
@@ -193,6 +199,20 @@ public partial class StandardMeasurementWindow : UserControl
         catch
         {
         }
+        finally
+        {
+            var retained = ComboPlayback.Items.OfType<MMDevice>().Concat(ComboRecording.Items.OfType<MMDevice>()).ToHashSet();
+            foreach (var device in previous.Concat(discovered).Distinct().Where(device => !retained.Contains(device)))
+                try { device.Dispose(); } catch { }
+        }
+    }
+
+    public void ReleaseDeviceItems()
+    {
+        var devices = ComboPlayback.Items.OfType<MMDevice>().Concat(ComboRecording.Items.OfType<MMDevice>()).Distinct().ToArray();
+        ComboPlayback.ItemsSource = null;
+        ComboRecording.ItemsSource = null;
+        foreach (var device in devices) try { device.Dispose(); } catch { }
     }
 
     public void ReloadCalibrations()

@@ -73,6 +73,7 @@ public partial class AudioRouting : UserControl
 			return null;
 		}
 		_routingWorkflowActive = true;
+		SetRoutingControlsLocked(true);
 		return new RoutingWorkflowLease(this);
 	}
 
@@ -84,7 +85,14 @@ public partial class AudioRouting : UserControl
 			AudioRouting? current = System.Threading.Interlocked.Exchange(ref _owner, null);
 			if (current == null) return;
 			try { current._audioEngine.StopAllAudio(); }
-			finally { current._routingWorkflowActive = false; }
+			finally
+			{
+				current._routingWorkflowActive = false;
+				current._routingMeterBuffer.Stop();
+				current.SetRoutingControlsLocked(false);
+				if (current.IsLoaded) current.MaintainRoutingHeadroomMonitor();
+				if (current.IsLoaded) _ = current.RefreshPendingQaAsync();
+			}
 		}
 	}
 
@@ -128,6 +136,9 @@ public partial class AudioRouting : UserControl
 	private string _preferredUsbPlaybackDeviceId;
 
 	private string _preferredRecordingDeviceId;
+	private string _preferredPlaybackDeviceName = "";
+	private string _preferredRecordingDeviceName = "";
+	private string _fastTrackPlayback12Identity = "";
 
 	private bool _isAutoSelectingDevices;
 
@@ -183,6 +194,14 @@ public partial class AudioRouting : UserControl
 	private bool _isRoutingHeadroomRunning;
 
 	private string _routingHeadroomRecordingId;
+	private bool _routingHeadroomEnabled = true;
+	private readonly LiveLevelBuffer _routingMeterBuffer = new();
+	private long _routingMeterSession;
+	private readonly DispatcherTimer _routingMeterTimer;
+	private DateTime _headroomRetryAtUtc;
+	private int _headroomFailureCount;
+	private Dictionary<UIElement, bool>? _lockedRoutingControls;
+	private bool _configSaveWarningShown;
 
 
 	public bool IsFreqExpanded => _isFreqExpanded;
@@ -264,6 +283,20 @@ public partial class AudioRouting : UserControl
 		_isRoutingHeadroomRunning = false;
 		_routingHeadroomRecordingId = "";
 		InitializeComponent();
+		_routingMeterTimer = new DispatcherTimer(DispatcherPriority.Background)
+		{
+			Interval = TimeSpan.FromMilliseconds(100)
+		};
+		_routingMeterTimer.Tick += (_, _) =>
+		{
+			if (_routingMeterBuffer.TryRead(out double peak, out double rms, out bool clipped, out bool invalid))
+			{
+				if (invalid) RewMeterRouting.ShowUnavailable("DỮ LIỆU THU KHÔNG HỢP LỆ");
+				else RewMeterRouting.PushLevel(peak, rms, clipped);
+			}
+			if (!_isRoutingHeadroomRunning && _headroomRetryAtUtc != DateTime.MinValue
+				&& DateTime.UtcNow >= _headroomRetryAtUtc) MaintainRoutingHeadroomMonitor();
+		};
 		_frequencyChartRefreshTimer = new DispatcherTimer
 		{
 			Interval = TimeSpan.FromMilliseconds(80L, 0L)
@@ -287,16 +320,15 @@ public partial class AudioRouting : UserControl
 		_testRunner = testRunner;
 		_testRunner.OnRealTimeRecordedSamples += delegate(float[] samples)
 		{
-			((DispatcherObject)this).Dispatcher.InvokeAsync((Action)delegate
-			{
-				RewMeterRouting?.PushSamples(samples);
-			}, (DispatcherPriority)7);
+			_routingMeterBuffer.Push(samples, System.Threading.Volatile.Read(ref _routingMeterSession));
 		};
 		_testRunner.OnMeasurementCaptured += delegate(float[] samples, double peakDb, double rmsDb, double snrDb, bool isClipped)
 		{
+			long session = System.Threading.Volatile.Read(ref _routingMeterSession);
 			((DispatcherObject)this).Dispatcher.InvokeAsync((Action)delegate
 			{
-				RewMeterRouting?.DisplayCapturedResult(samples, peakDb, rmsDb, snrDb, isClipped);
+				if (_routingMeterBuffer.IsCurrent(session) && !_discardCurrentMeasurementRequested)
+					RewMeterRouting?.DisplayCapturedResult(samples, peakDb, rmsDb, snrDb, isClipped);
 			}, (DispatcherPriority)7);
 		};
 		_testRunner.OnStepsChanged += delegate(List<TestStep> Steps)
@@ -553,7 +585,7 @@ public partial class AudioRouting : UserControl
 		};
 		CheckAndLoadStandardDevice();
 		SetCurrentProduct(ServerEngine.CurrentProduct);
-		LoadSendToServerPreferenceAsync();
+		_ = LoadSendToServerPreferenceAsync();
 	}
 
 	private async Task LoadSendToServerPreferenceAsync()
@@ -630,11 +662,12 @@ public partial class AudioRouting : UserControl
 		try
 		{
 			string path = GetRoutingConfigPath();
-			if (File.Exists(path))
+			if (File.Exists(path) || File.Exists(path + ".bak"))
 			{
-				AppConfig appConfig = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(path));
+				AppConfig appConfig = AtomicFile.ReadJson<AppConfig>(path);
 				if (appConfig != null)
 				{
+					_routingHeadroomEnabled = appConfig.HeadroomEnabled;
 					PlaybackLevelDbfs = appConfig.PlaybackLevelDbfs;
 					SelectPlaybackSampleRate(appConfig.PlaybackSampleRate);
 					SelectPlaybackMode(appConfig.PlaybackMode);
@@ -656,6 +689,9 @@ public partial class AudioRouting : UserControl
 					_testRunner.MultitoneDurationSeconds = GetSelectedMultitoneDuration();
 					_lastSyncedSendToServer = appConfig.SendToServer;
 					_preferredRecordingDeviceId = appConfig.RecordingDeviceId ?? "";
+					_preferredPlaybackDeviceName = appConfig.UsbPlaybackDeviceName ?? "";
+					_preferredRecordingDeviceName = appConfig.RecordingDeviceName ?? "";
+					_fastTrackPlayback12Identity = appConfig.FastTrackPlayback12Identity ?? "";
 					_audioEngine.PlaybackVolume = appConfig.PlaybackVolume / 100.0;
 					_audioEngine.PlaybackSampleRate = GetSelectedPlaybackSampleRate();
 					_audioEngine.UseExclusivePlayback = IsExclusivePlaybackSelected();
@@ -943,7 +979,7 @@ public partial class AudioRouting : UserControl
 			WaveFormat mixFormat = formatClient.MixFormat;
 			string value = ((double)mixFormat.SampleRate / 1000.0).ToString("0.#", CultureInfo.InvariantCulture);
 			string value2 = ((!(mixFormat is WaveFormatExtensible waveFormatExtensible)) ? ((mixFormat.Encoding == WaveFormatEncoding.IeeeFloat) ? "Float" : "PCM") : ((waveFormatExtensible.SubFormat == new Guid("00000003-0000-0010-8000-00aa00389b71")) ? "Float" : "PCM"));
-			return playback ? $"Ngõ phát: {mixFormat.BitsPerSample}-bit {value2} · {mixFormat.Channels} kênh" : $"Ngõ thu: {mixFormat.BitsPerSample}-bit {value2} · {mixFormat.Channels} kênh";
+				return playback ? $"Ngõ phát: {value} kHz · {mixFormat.BitsPerSample}-bit {value2} · {mixFormat.Channels} kênh" : $"Ngõ thu: {value} kHz · {mixFormat.BitsPerSample}-bit {value2} · {mixFormat.Channels} kênh";
 		}
 		catch (Exception ex)
 		{
@@ -1030,6 +1066,7 @@ public partial class AudioRouting : UserControl
 		try
 		{
 			AppConfig appConfig = new AppConfig();
+			appConfig.HeadroomEnabled = _routingHeadroomEnabled;
 			appConfig.PlaybackVolume = 60.0;
 			appConfig.PlaybackLevelDbfs = PlaybackLevelDbfs;
 			appConfig.PlaybackSampleRate = GetSelectedPlaybackSampleRate();
@@ -1047,25 +1084,39 @@ public partial class AudioRouting : UserControl
 			appConfig.UsbPlaybackDeviceId = _preferredUsbPlaybackDeviceId;
 			appConfig.BluetoothPlaybackDeviceId = "";
 			appConfig.RecordingDeviceId = _preferredRecordingDeviceId;
+			appConfig.UsbPlaybackDeviceName = _preferredPlaybackDeviceName;
+			appConfig.RecordingDeviceName = _preferredRecordingDeviceName;
+			appConfig.FastTrackPlayback12Identity = _fastTrackPlayback12Identity;
 			appConfig.LastPlaybackChannel = _audioEngine?.PlaybackChannel;
 			appConfig.LastRecordingChannel = _audioEngine?.RecordingChannel;
 			string contents = JsonSerializer.Serialize(appConfig);
-			File.WriteAllText(GetRoutingConfigPath(), contents);
+			AtomicFile.WriteAllText(GetRoutingConfigPath(), contents);
+			_configSaveWarningShown = false;
 		}
-		catch
+		catch (Exception ex)
 		{
+			AppendLog("Lưu cấu hình", ex.Message);
+			if (IsLoaded && !_configSaveWarningShown)
+			{
+				_configSaveWarningShown = true;
+				ModernMessageBox.Show(Window.GetWindow(this), "Chưa lưu được cấu hình: " + ex.Message,
+					"Lỗi lưu cấu hình", ModernMessageBox.MessageBoxType.Warning);
+			}
 		}
 	}
 
 	private void AutoDetectDevices()
 	{
+		List<MMDevice> playbackDevices = new();
+		List<MMDevice> recordingDevices = new();
 		try
 		{
 			_isAutoSelectingDevices = true;
-			ComboPlayback.Items.Clear();
-			ComboRecording.Items.Clear();
-			List<MMDevice> playbackDevices = _audioEngine.GetPlaybackDevices();
-			List<MMDevice> recordingDevices = _audioEngine.GetRecordingDevices();
+			StopRoutingHeadroomMonitor();
+			DisposeRoutingDeviceItems();
+			playbackDevices = _audioEngine.GetPlaybackDevices();
+			recordingDevices = _audioEngine.GetRecordingDevices();
+			if (!IsTestingBusy) PrepareFastTrackEndpoints(playbackDevices, recordingDevices);
 			AppendLog("System", $"Found {playbackDevices.Count} playback and {recordingDevices.Count} recording devices.");
 			foreach (MMDevice item in playbackDevices)
 			{
@@ -1080,22 +1131,30 @@ public partial class AudioRouting : UserControl
 				ComboRecording.Items.Add(new DeviceItem(item2, displayName2));
 				AppendLog("Device", "Recording In Found: " + item2.FriendlyName);
 			}
-			DeviceItem deviceItem = ComboPlayback.Items.Cast<DeviceItem>().FirstOrDefault((DeviceItem deviceItem3) => string.Equals(deviceItem3.Device.ID, _preferredUsbPlaybackDeviceId, StringComparison.OrdinalIgnoreCase)) ?? ComboPlayback.Items.Cast<DeviceItem>().FirstOrDefault((DeviceItem deviceItem3) => deviceItem3.Device.FriendlyName.IndexOf("MI_LCD", StringComparison.OrdinalIgnoreCase) >= 0 || deviceItem3.Device.FriendlyName.IndexOf("MI LCD", StringComparison.OrdinalIgnoreCase) >= 0 || deviceItem3.Device.FriendlyName.IndexOf("MI_SAM", StringComparison.OrdinalIgnoreCase) >= 0);
-			DeviceItem deviceItem2 = ComboRecording.Items.Cast<DeviceItem>().FirstOrDefault((DeviceItem deviceItem3) => string.Equals(deviceItem3.Device.ID, _preferredRecordingDeviceId, StringComparison.OrdinalIgnoreCase)) ?? ComboRecording.Items.Cast<DeviceItem>().FirstOrDefault((DeviceItem deviceItem3) => deviceItem3.Device.FriendlyName.IndexOf("SONCA", StringComparison.OrdinalIgnoreCase) >= 0);
-			if (deviceItem != null && !string.IsNullOrEmpty(_preferredUsbPlaybackDeviceId) && deviceItem.Device.ID != _preferredUsbPlaybackDeviceId)
-			{
-				deviceItem = null;
-			}
-			if (deviceItem2 != null && !string.IsNullOrEmpty(_preferredRecordingDeviceId) && deviceItem2.Device.ID != _preferredRecordingDeviceId)
-			{
-				deviceItem2 = null;
-			}
+			MMDevice? playback = FastTrackDeviceSetup.SelectUnique(playbackDevices, _preferredUsbPlaybackDeviceId, d =>
+				!string.IsNullOrEmpty(_preferredPlaybackDeviceName) && !FastTrackDeviceSetup.IsUnnamedAnalog(_preferredPlaybackDeviceName)
+					? FastTrackDeviceSetup.NormalizeFriendlyName(d.FriendlyName).Equals(FastTrackDeviceSetup.NormalizeFriendlyName(_preferredPlaybackDeviceName), StringComparison.OrdinalIgnoreCase)
+					: IsFastTrackPlayback12(d));
+			playback ??= FastTrackDeviceSetup.SelectUnique(playbackDevices, "", IsFastTrackPlayback12);
+			if (playback == null && string.IsNullOrEmpty(_preferredUsbPlaybackDeviceId))
+				playback = playbackDevices.FirstOrDefault(d => d.FriendlyName.Contains("MI_LCD", StringComparison.OrdinalIgnoreCase)
+					|| d.FriendlyName.Contains("MI LCD", StringComparison.OrdinalIgnoreCase) || d.FriendlyName.Contains("MI_SAM", StringComparison.OrdinalIgnoreCase));
+			MMDevice? recording = FastTrackDeviceSetup.SelectUnique(recordingDevices, _preferredRecordingDeviceId, d =>
+				!string.IsNullOrEmpty(_preferredRecordingDeviceName)
+					? FastTrackDeviceSetup.NormalizeFriendlyName(d.FriendlyName).Equals(FastTrackDeviceSetup.NormalizeFriendlyName(_preferredRecordingDeviceName), StringComparison.OrdinalIgnoreCase)
+					: FastTrackDeviceSetup.IsFastTrack(d));
+			recording ??= FastTrackDeviceSetup.SelectUnique(recordingDevices, "", FastTrackDeviceSetup.IsFastTrack);
+			if (recording == null && string.IsNullOrEmpty(_preferredRecordingDeviceId))
+				recording = recordingDevices.FirstOrDefault(d => d.FriendlyName.Contains("SONCA", StringComparison.OrdinalIgnoreCase));
+			DeviceItem? deviceItem = ComboPlayback.Items.Cast<DeviceItem>().FirstOrDefault(i => i.Device == playback);
+			DeviceItem? deviceItem2 = ComboRecording.Items.Cast<DeviceItem>().FirstOrDefault(i => i.Device == recording);
 			if (deviceItem != null)
 			{
 				ComboPlayback.SelectedItem = deviceItem;
 				AppendLog("AutoSelect", "Matched Output: " + deviceItem.Device.FriendlyName);
 			}
-			else if (ComboPlayback.Items.Count > 0 && string.IsNullOrEmpty(_preferredUsbPlaybackDeviceId))
+			else if (ComboPlayback.Items.Count > 0 && string.IsNullOrEmpty(_preferredUsbPlaybackDeviceId)
+				&& !playbackDevices.Any(FastTrackDeviceSetup.IsFastTrack))
 			{
 				ComboPlayback.SelectedIndex = 0;
 				AppendLog("AutoSelect", "Fallback Output (No MI_LCD/MI_SAM found): " + ((DeviceItem)ComboPlayback.SelectedItem).Device.FriendlyName);
@@ -1111,20 +1170,71 @@ public partial class AudioRouting : UserControl
 				AppendLog("AutoSelect", "Fallback Input (No SONCA found): " + ((DeviceItem)ComboRecording.SelectedItem).Device.FriendlyName);
 			}
 			AppendLog("System", "Device discovery finished.");
+			RememberSelectedDeviceNames();
+			if (_isConfigLoaded) SaveConfig();
 			UpdateSelectedDeviceFormats();
-			TxtFreqStatus.Text = ((ComboRecording.SelectedItem == null) ? "Chưa chọn thiết bị" : "");
+			TxtFreqStatus.Text = ((ComboRecording.SelectedItem == null || ComboPlayback.SelectedItem == null) ? "Chưa chọn đủ ngõ phát/thu" : "");
 		}
 		catch (Exception ex)
 		{
 			AppendLog("Error", "Failed to list audio devices: " + ex.Message);
-			ComboPlayback.Items.Clear();
-			ComboRecording.Items.Clear();
+			DisposeRoutingDeviceItems(playbackDevices.Concat(recordingDevices));
 			TxtFreqStatus.Text = "Không cập nhật được thiết bị: " + ex.Message;
 			ModernMessageBox.Show(Window.GetWindow((DependencyObject)(object)this), TxtFreqStatus.Text, "Lỗi cập nhật thiết bị", ModernMessageBox.MessageBoxType.Error);
 		}
 		finally
 		{
 			_isAutoSelectingDevices = false;
+		}
+	}
+
+	private bool IsFastTrackPlayback12(MMDevice device) => FastTrackDeviceSetup.IsFastTrack(device)
+		&& (device.FriendlyName.Contains(FastTrackDeviceSetup.Playback12Name, StringComparison.OrdinalIgnoreCase)
+			|| (!string.IsNullOrEmpty(_fastTrackPlayback12Identity)
+				&& FastTrackDeviceSetup.GetPlaybackIdentity(device) == _fastTrackPlayback12Identity));
+
+	private void RememberSelectedDeviceNames()
+	{
+		if (SelectedPlaybackDevice is { } playback)
+		{
+			_preferredUsbPlaybackDeviceId = playback.ID;
+			_preferredPlaybackDeviceName = playback.FriendlyName;
+		}
+		if (SelectedRecordingDevice is { } recording)
+		{
+			_preferredRecordingDeviceId = recording.ID;
+			_preferredRecordingDeviceName = recording.FriendlyName;
+		}
+	}
+
+	private void PrepareFastTrackEndpoints(List<MMDevice> playback, List<MMDevice> recording)
+	{
+		try
+		{
+			using var enumerator = new MMDeviceEnumerator();
+			using var history = new DeviceEnumerationLease(enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.All).ToList());
+			_fastTrackPlayback12Identity = FastTrackDeviceSetup.LearnPlayback12Identity(history.Devices
+				.Where(FastTrackDeviceSetup.IsFastTrack).Select(d => (d.FriendlyName, FastTrackDeviceSetup.GetPlaybackIdentity(d))), _fastTrackPlayback12Identity);
+		}
+		catch (Exception ex) { AppendLog("FastTrack", "Chưa đọc được nhận diện ngõ 1/2: " + ex.Message); }
+		foreach (MMDevice device in playback.Where(FastTrackDeviceSetup.IsFastTrack))
+		{
+			FastTrackDeviceSetup.TryRenamePlayback12(device, _fastTrackPlayback12Identity, out string message);
+			if (!string.IsNullOrEmpty(message)) AppendLog("FastTrack", message);
+		}
+		foreach (MMDevice device in recording.Where(FastTrackDeviceSetup.IsFastTrack))
+		{
+			try
+			{
+				if (FastTrackDeviceSetup.ReadMixSampleRate(device.ID) != FastTrackDeviceSetup.RecordingSampleRate)
+				{
+					_audioEngine.StopAllAudio();
+					_audioEngine.CaptureSession.Reset();
+				}
+				FastTrackDeviceSetup.TrySetRecordingSampleRate(device, out string message);
+				if (!string.IsNullOrEmpty(message)) AppendLog("FastTrack", message);
+			}
+			catch (Exception ex) { AppendLog("FastTrack", "Chưa cấu hình được ngõ thu: " + ex.Message); }
 		}
 	}
 
@@ -1190,7 +1300,7 @@ public partial class AudioRouting : UserControl
 		{
 			string key = item.Key;
 			string targetName = item.Value;
-			if (!playbackDevices.Devices.Any(d => d.FriendlyName.IndexOf(targetName, StringComparison.OrdinalIgnoreCase) >= 0))
+			if (ResolvePlaybackDevice(key, targetName, playbackDevices.Devices, requireConfiguredMatch: true) == null)
 			{
 				list.Add($"- Ngõ vào thiết bị (Playback Out): {key} (yêu cầu chứa \"{targetName}\")");
 			}
@@ -1206,6 +1316,24 @@ public partial class AudioRouting : UserControl
 		}
 		missingMessage = ((list.Count == 0) ? null : string.Join(Environment.NewLine, list));
 		return list.Count == 0;
+	}
+
+	public HashSet<string> GetModelDeviceIds(InOutConfig config)
+	{
+		var ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		using var playback = new DeviceEnumerationLease(_audioEngine.GetPlaybackDevices());
+		using var recording = new DeviceEnumerationLease(_audioEngine.GetRecordingDevices());
+		foreach (var entry in config.Devices?.Input ?? new Dictionary<string, string>())
+		{
+			var device = ResolvePlaybackDevice(entry.Key, entry.Value, playback.Devices, requireConfiguredMatch: true);
+			if (device != null) ids.Add(device.ID);
+		}
+		foreach (var entry in config.Devices?.Output ?? new Dictionary<string, string>())
+		{
+			var device = ResolveRecordingDevice(entry.Key, entry.Value, recording.Devices, requireConfiguredMatch: true);
+			if (device != null) ids.Add(device.ID);
+		}
+		return ids;
 	}
 
 	private void InitCharts()
@@ -2975,6 +3103,7 @@ public partial class AudioRouting : UserControl
 		_audioEngine.StopAllAudio();
 		AppendLog("Audio", "Đã tắt mọi nguồn phát của app và đóng/xóa buffer bài cũ; bắt đầu bài mới.");
 		RewMeterRouting?.PrepareForLiveCapture();
+		System.Threading.Interlocked.Exchange(ref _routingMeterSession, _routingMeterBuffer.Start());
 		_testRunner.AutoTestOneKilohertzOnly = _isExecutingAutoSuite;
 		bool referenceAcquisition = referenceAcquisitionOverride ?? _isFindingStandardReference;
 		// Capture and plot the full 20 Hz–20 kHz sweep, but judge FEQ only from 50 Hz through 18 kHz.
@@ -3071,18 +3200,31 @@ public partial class AudioRouting : UserControl
 		try
 		{
 			_audioEngine.RecordingChannel = null;
+			_discardCurrentMeasurementRequested = false;
+			System.Threading.Interlocked.Exchange(ref _routingMeterSession, _routingMeterBuffer.Start());
 			await _testRunner.RunNoiseTestAsync(selectedPlaybackDevice, mMDevice);
+			LblVerdict.Text = _discardCurrentMeasurementRequested ? "ĐÃ HỦY ĐO NHIỄU" : "ĐÃ ĐO NHIỄU";
+			LblVerdict.Foreground = Brushes.MediumSpringGreen;
+		}
+		catch (Exception ex)
+		{
+			LblVerdict.Text = "CHƯA ĐO ĐƯỢC NHIỄU";
+			LblVerdict.Foreground = Brushes.Salmon;
+			AppendLog("Lỗi đo nhiễu", ex.ToString());
+			ModernMessageBox.Show(Window.GetWindow(this), GetMeasurementErrorMessage(ex),
+				"Không thể đo nhiễu", ModernMessageBox.MessageBoxType.Error);
 		}
 		finally
 		{
-			_audioEngine.StopAllAudio();
-			_audioEngine.RecordingChannel = previousRecordingChannel;
+			try { _audioEngine.StopAllAudio(); }
+			finally
+			{
+				_audioEngine.RecordingChannel = previousRecordingChannel;
+				BtnStart.IsEnabled = true;
+				BtnSaveStandardReference.IsEnabled = true;
+				BtnNoiseTest.IsEnabled = true;
+			}
 		}
-		BtnStart.IsEnabled = true;
-		BtnSaveStandardReference.IsEnabled = true;
-		BtnNoiseTest.IsEnabled = true;
-		LblVerdict.Text = "ĐÃ ĐO NHIỄU";
-		LblVerdict.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(52, 211, 153));
 	}
 
 	private void BtnDecreaseLevelDbfs_Click(object sender, RoutedEventArgs e)
@@ -3149,7 +3291,9 @@ public partial class AudioRouting : UserControl
 		_hwndSource = PresentationSource.FromVisual(this) as HwndSource;
 		_hwndSource?.AddHook(HwndHorizontalWheelHook);
 		SyncChannelSelectionsFromEngine();
+		_routingMeterTimer.Start();
 		MaintainRoutingHeadroomMonitor();
+		_ = RefreshPendingQaAsync();
 	}
 
 	private void AudioRouting_Unloaded(object sender, RoutedEventArgs e)
@@ -3159,6 +3303,8 @@ public partial class AudioRouting : UserControl
 		_hwndSource?.RemoveHook(HwndHorizontalWheelHook);
 		_hwndSource = null;
 		StopRoutingHeadroomMonitor();
+		_routingMeterTimer.Stop();
+		_routingMeterBuffer.Stop();
 	}
 
 	private void ShowSignalLevelPopupIfNeeded()
@@ -3352,6 +3498,9 @@ public partial class AudioRouting : UserControl
 		if (!IsTestingBusy)
 		{
 			AutoDetectDevices();
+			_leaveAudioReleasedAfterAutoTest = false;
+			CheckAndLoadStandardDevice();
+			MaintainRoutingHeadroomMonitor();
 		}
 	}
 
@@ -3362,24 +3511,29 @@ public partial class AudioRouting : UserControl
 			ModernMessageBox.Show(Window.GetWindow((DependencyObject)this), "Dừng phép đo trước khi xóa thiết bị Bluetooth.", "Đang đo", ModernMessageBox.MessageBoxType.Warning);
 			return;
 		}
-		object selectedItem = ComboPlayback.SelectedItem;
-		if (!(selectedItem is DeviceItem selected))
+		string modelName = (Application.Current.MainWindow as MainWindow)?.ComboModels?.SelectedItem?.ToString()?.Trim() ?? "";
+		if (string.IsNullOrWhiteSpace(modelName))
 		{
-			ModernMessageBox.Show(Window.GetWindow((DependencyObject)this), "Chọn ngõ phát Bluetooth cần xóa.", "Thiết bị Bluetooth", ModernMessageBox.MessageBoxType.Warning);
+			ModernMessageBox.Show(Window.GetWindow((DependencyObject)this), "Chọn model trước khi xóa thiết bị Bluetooth đã ghép.", "Thiết bị Bluetooth", ModernMessageBox.MessageBoxType.Warning);
 			return;
 		}
+		using var workflow = TryBeginRoutingWorkflow();
+		if (workflow == null) return;
+		bool selectedPlaybackMatches = SelectedPlaybackDevice is { } playback
+			&& BluetoothDeviceRemoval.MatchesModel(playback.FriendlyName, modelName);
+		StopRoutingHeadroomMonitor();
 		BtnRemoveBluetooth.IsEnabled = false;
 		try
 		{
-			(bool Success, string Message) result = await BluetoothDeviceRemoval.RemovePairedAudioDeviceAsync(selected.Device.FriendlyName);
+			var result = await BluetoothDeviceRemoval.RemovePairedDevicesForModelAsync(modelName);
 			AppendLog("Bluetooth", result.Message);
-			ModernMessageBox.Show(Window.GetWindow((DependencyObject)this), result.Message, "Xóa thiết bị Bluetooth", (!result.Success) ? ModernMessageBox.MessageBoxType.Warning : ModernMessageBox.MessageBoxType.Info);
-			if (result.Success)
+			if (result.Removed > 0)
 			{
-				_preferredUsbPlaybackDeviceId = "";
-				SaveConfig();
+				if (selectedPlaybackMatches) _preferredUsbPlaybackDeviceId = "";
 				AutoDetectDevices();
+				SaveConfig();
 			}
+			ModernMessageBox.Show(Window.GetWindow((DependencyObject)this), result.Message, "Xóa Bluetooth của model", (!result.Success) ? ModernMessageBox.MessageBoxType.Warning : ModernMessageBox.MessageBoxType.Info);
 		}
 		catch (Exception ex)
 		{
@@ -3691,6 +3845,12 @@ public partial class AudioRouting : UserControl
 	private MMDevice? ResolvePlaybackDevice(string? configKey, string? targetKeyword, IEnumerable<MMDevice> devices, bool requireConfiguredMatch = false)
 	{
 		List<MMDevice> list = devices.ToList();
+		if ((targetKeyword ?? configKey ?? "").Contains(FastTrackDeviceSetup.Playback12Name, StringComparison.OrdinalIgnoreCase)
+			|| string.Equals(configKey, "Analog 1/2", StringComparison.OrdinalIgnoreCase))
+		{
+			var matches = list.Where(IsFastTrackPlayback12).ToList();
+			return FastTrackDeviceSetup.SelectUnique(matches, _preferredUsbPlaybackDeviceId, _ => true);
+		}
 		if (requireConfiguredMatch)
 		{
 			string expected = !string.IsNullOrWhiteSpace(targetKeyword) ? targetKeyword : configKey ?? "";
@@ -3866,6 +4026,11 @@ public partial class AudioRouting : UserControl
 
 	public void ApplyTestCaseConfig(TestConfig? testConfig)
 	{
+		ApplyTestCaseConfigCore(testConfig, selectDevices: true);
+	}
+
+	private void ApplyTestCaseConfigCore(TestConfig? testConfig, bool selectDevices)
+	{
 		if (testConfig == null)
 		{
 			return;
@@ -3894,7 +4059,7 @@ public partial class AudioRouting : UserControl
 			_isApplyingMeasurementMethod = false;
 			_testRunner.UseLogSweepFrequencyResponse = flag;
 		}
-		if (_activeInOutConfig?.Devices != null)
+		if (selectDevices && _activeInOutConfig?.Devices != null)
 		{
 			string text = testConfig.PlaybackOut ?? "";
 			string value = "";
@@ -3908,10 +4073,15 @@ public partial class AudioRouting : UserControl
 			{
 				_activeInOutConfig.Devices.Output?.TryGetValue(text2, out value2);
 			}
-			List<MMDevice> playbackDevices = _audioEngine.GetPlaybackDevices();
-			List<MMDevice> recordingDevices = _audioEngine.GetRecordingDevices();
+			using var playbackLease = new DeviceEnumerationLease(_audioEngine.GetPlaybackDevices());
+			List<MMDevice> playbackDevices = playbackLease.Devices;
+			using var recordingLease = new DeviceEnumerationLease(_audioEngine.GetRecordingDevices());
+			List<MMDevice> recordingDevices = recordingLease.Devices;
 			MMDevice matchedP = ResolvePlaybackDevice(text, value, playbackDevices);
 			MMDevice matchedR = ResolveRecordingDevice(text2, value2, recordingDevices);
+			_isAutoSelectingDevices = true;
+			try
+			{
 			if (matchedP != null)
 			{
 				DeviceItem deviceItem = ComboPlayback.Items.Cast<DeviceItem>().FirstOrDefault((DeviceItem i) => i.Device.ID == matchedP.ID);
@@ -3928,8 +4098,10 @@ public partial class AudioRouting : UserControl
 					ComboRecording.SelectedItem = deviceItem2;
 				}
 			}
+			}
+			finally { _isAutoSelectingDevices = false; }
 		}
-		CheckAndLoadStandardDevice();
+		if (selectDevices) CheckAndLoadStandardDevice();
 	}
 
 	private void TestCaseItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -3978,6 +4150,13 @@ public partial class AudioRouting : UserControl
 		{
 			return;
 		}
+		if (IsModelTransitionBusy)
+		{
+			_isAutoSelectingDevices = true;
+			try { ((ComboBox)sender).SelectedItem = e.RemovedItems.Count > 0 ? e.RemovedItems[0] : null; }
+			finally { _isAutoSelectingDevices = false; }
+			return;
+		}
 		// An explicit device selection means the operator wants the live input
 		// headroom back, including after an Auto Test released all audio handles.
 		_leaveAudioReleasedAfterAutoTest = false;
@@ -3993,6 +4172,7 @@ public partial class AudioRouting : UserControl
 				RewMeterRouting?.Reset();
 				RewMeterRouting?.PrepareForLiveCapture();
 			}
+			RememberSelectedDeviceNames();
 			SaveConfig();
 		}
 		UpdateSelectedDeviceFormats();
@@ -4212,33 +4392,6 @@ public partial class AudioRouting : UserControl
 		_autoTestMicContinuityFailureStatus = "";
 		AutoDetectDevices();
 		return true;
-	}
-
-	private async Task RemoveMi30SamAfterPassAsync()
-	{
-		_audioEngine.StopAllAudio();
-		try
-		{
-			bool selectedMi30Sam = SelectedPlaybackDevice is { } selected && BluetoothDeviceRemoval.IsMi30SamName(selected.FriendlyName);
-			var result = await BluetoothDeviceRemoval.RemovePassedMi30SamDevicesAsync();
-			AppendLog("Bluetooth", result.Message);
-			TxtFailureDiagnosis.Text += "\n" + result.Message;
-			TxtFailureDiagnosis.Visibility = Visibility.Visible;
-			if (result.Success)
-			{
-				if (selectedMi30Sam) _preferredUsbPlaybackDeviceId = "";
-				AutoDetectDevices();
-				SaveConfig();
-			}
-			else
-				ModernMessageBox.ShowPersistentWarning(Window.GetWindow(this), result.Message, "Auto Test PASS — chưa gỡ được MI30 SAM");
-		}
-		catch (Exception ex)
-		{
-			AppendLog("Bluetooth", ex.Message);
-			ModernMessageBox.ShowPersistentWarning(Window.GetWindow(this), "Auto Test đã PASS nhưng Windows chưa gỡ được MI30 SAM: " + ex.Message,
-				"Cần gỡ MI30 SAM trong Windows");
-		}
 	}
 
 	private int CountSavedAutoTestPasses(AutoTestResumeSession session)
@@ -4464,7 +4617,6 @@ public partial class AudioRouting : UserControl
 			}
 		}
 		var attemptCounts = new Dictionary<int, int>();
-		bool measuredMi30Sam = false;
 		for (int testIndex = resumeIndex; testIndex < _autoTestCases.Count; testIndex++)
 		{
 			AutoTestCaseItem test2 = _autoTestCases[testIndex];
@@ -4487,7 +4639,7 @@ public partial class AudioRouting : UserControl
 			LblVerdict.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(250, 204, 21));
 			Stopwatch routeTransition = Stopwatch.StartNew();
 			_audioEngine.StopAllAudio();
-			ApplyTestCaseConfig(test2.Config);
+			ApplyTestCaseConfigCore(test2.Config, selectDevices: false);
 			bool flag = false;
 			while (!flag)
 			{
@@ -4510,7 +4662,13 @@ public partial class AudioRouting : UserControl
 				if (matchedPlayback != null && matchedRecording != null)
 				{
 					flag = true;
-					AutoDetectDevices();
+					// Refresh UI endpoint wrappers only if the current inventory is missing this route.
+					if (!ComboPlayback.Items.Cast<DeviceItem>().Any(i => i.Device.ID == matchedPlayback.ID)
+						|| !ComboRecording.Items.Cast<DeviceItem>().Any(i => i.Device.ID == matchedRecording.ID))
+						AutoDetectDevices();
+					_isAutoSelectingDevices = true;
+					try
+					{
 					DeviceItem deviceItem = ComboPlayback.Items.Cast<DeviceItem>().FirstOrDefault((DeviceItem i) => i.Device.ID == matchedPlayback.ID);
 					if (deviceItem != null)
 					{
@@ -4521,6 +4679,9 @@ public partial class AudioRouting : UserControl
 					{
 						ComboRecording.SelectedItem = deviceItem2;
 					}
+					}
+					finally { _isAutoSelectingDevices = false; }
+					UpdateSelectedDeviceFormats();
 					_audioEngine.PlaybackSampleRate = 44100;
 					_audioEngine.PlaybackChannel = ResolvePlaybackChannel(test2.Config);
 					_audioEngine.RecordingChannel = ResolveRecordingChannel(test2.Config);
@@ -4619,8 +4780,11 @@ public partial class AudioRouting : UserControl
 				test2.StatusBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(250, 204, 21));
 				AppendLog("Auto Test", "[" + test2.Id + "] Bắt đầu một lượt đo chính, không chạy sweep làm nóng.");
 			}
-			measuredMi30Sam |= BluetoothDeviceRemoval.IsMi30SamName(playbackDevice.FriendlyName);
+			test2.Acquisition = new AudioQaAcquisitionSnapshot(PlaybackLevelDbfs, _audioEngine.PlaybackSampleRate, 0,
+				_audioEngine.UseExclusivePlayback, _audioEngine.PlaybackChannel, _audioEngine.RecordingChannel,
+				playbackDevice.ID, recordingDevice.ID, _testRunner.ThdLimitPercent, DateTimeOffset.UtcNow);
 			await RunTrackedTestAsync(playbackDevice, recordingDevice);
+			test2.Acquisition = test2.Acquisition with { RecordingSampleRate = _audioEngine.RecordingSampleRate };
 			bool cancelled = _discardCurrentMeasurementRequested || !_isExecutingAutoSuite;
 			bool acquisitionInvalid = AutoTestAcquisitionInvalid;
 			string acquisitionReason = _lastTrackedTestError;
@@ -4745,8 +4909,7 @@ public partial class AudioRouting : UserControl
 		}
 		if (suitePassed)
 		{
-			if (measuredMi30Sam && AutoTestRetryPolicy.CanRemovePassedDevice(suitePassed, _discardCurrentMeasurementRequested, _autoTestCases.Select(test => test.Status)))
-				await RemoveMi30SamAfterPassAsync();
+			// Keep Bluetooth paired for the next measurement; removal is a manual action.
 			BtnStartAutoTest.IsEnabled = true;
 		}
 		if (_autoTestCases.Any(test => test.Status is "WAITING" or "RUNNING" or "RETRY" or "INVALID"))
@@ -4842,9 +5005,10 @@ public partial class AudioRouting : UserControl
 			_activeInOutConfig?.Devices?.Output?.TryGetValue(text9, out value5);
 			string value6 = ((string.IsNullOrWhiteSpace(value4) || text8.Contains(value4, StringComparison.OrdinalIgnoreCase)) ? text8 : (text8 + " (" + value4 + ")"));
 			string value7 = ((string.IsNullOrWhiteSpace(value5) || text9.Contains(value5, StringComparison.OrdinalIgnoreCase)) ? text9 : (text9 + " (" + value5 + ")"));
-			double value8 = PlaybackLevelDbfs;
-			double value9 = autoTestCaseItem.Config?.ThdLimit ?? 0.5;
-			string details = $"Out: {value6}{Environment.NewLine}In: {value7}{Environment.NewLine}FRA: {autoTestCaseItem.FreqStatus}{Environment.NewLine}THD: {autoTestCaseItem.ThdStatus}{Environment.NewLine}Noise: {autoTestCaseItem.NoiseStatus}{Environment.NewLine}Playback Out: {text8}{Environment.NewLine}Recording In: {text9}{Environment.NewLine}Signal Level: {value8:F1} dBFS{Environment.NewLine}App Sample Rate: {_audioEngine.PlaybackSampleRate} Hz{Environment.NewLine}Playback Mode: {(_audioEngine.UseExclusivePlayback ? "EXCL" : "Shared")}{Environment.NewLine}THD Limit: {value9:F1}";
+			var acquisition = autoTestCaseItem.Acquisition;
+			double value8 = acquisition?.PlaybackLevelDbfs ?? autoTestCaseItem.Config?.PlaybackLevelDbfs ?? double.NaN;
+			double value9 = acquisition?.ThdLimitPercent ?? autoTestCaseItem.Config?.ThdLimit ?? 0.5;
+			string details = $"Out: {value6}{Environment.NewLine}In: {value7}{Environment.NewLine}FRA: {autoTestCaseItem.FreqStatus}{Environment.NewLine}THD: {autoTestCaseItem.ThdStatus}{Environment.NewLine}Noise: {autoTestCaseItem.NoiseStatus}{Environment.NewLine}Playback Out: {text8}{Environment.NewLine}Recording In: {text9}{Environment.NewLine}Signal Level: {value8:F1} dBFS{Environment.NewLine}App Sample Rate: {acquisition?.PlaybackSampleRate} Hz{Environment.NewLine}Capture Sample Rate: {acquisition?.RecordingSampleRate} Hz{Environment.NewLine}Playback Mode: {(acquisition?.ExclusivePlayback == true ? "EXCL" : "Shared")}{Environment.NewLine}THD Limit: {value9:F1}{Environment.NewLine}Acquisition: {JsonSerializer.Serialize(acquisition)}";
 			return new ServerEngine.AudioQaStepResult(text7 + " - " + autoTestCaseItem.Name, autoTestCaseItem.Status, details);
 		}), product: ServerEngine.CurrentProduct, passed: suitePassed, graphImagePaths: list2, deviceReady: devicesReadyForServerUpload, uploadSessionId: uploadSessionId)))
 		{
@@ -5170,12 +5334,10 @@ public partial class AudioRouting : UserControl
 	{
 		string text = System.IO.Path.GetDirectoryName(destinationPath) ?? AppDomain.CurrentDomain.BaseDirectory;
 		Directory.CreateDirectory(text);
-		string text2 = System.IO.Path.Combine(text, $".fullscreen-{Guid.NewGuid():N}.png");
-		try
 		{
-			plot.SavePng(text2, 1920, 1080);
+			using var rendered = plot.GetImage(1920, 1080);
 			BitmapFrame bitmapFrame;
-			using (FileStream bitmapStream = File.OpenRead(text2))
+			using (var bitmapStream = new MemoryStream(rendered.GetImageBytes()))
 			{
 				bitmapFrame = new PngBitmapDecoder(bitmapStream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad).Frames[0];
 			}
@@ -5186,19 +5348,6 @@ public partial class AudioRouting : UserControl
 			pngBitmapEncoder.Frames.Add(BitmapFrame.Create(source));
 			using FileStream stream = File.Create(destinationPath);
 			pngBitmapEncoder.Save(stream);
-		}
-		finally
-		{
-			try
-			{
-				if (File.Exists(text2))
-				{
-					File.Delete(text2);
-				}
-			}
-			catch
-			{
-			}
 		}
 	}
 
@@ -5348,8 +5497,13 @@ public partial class AudioRouting : UserControl
 				PlaybackLevelDbfs = savedPlaybackLevel;
 				if (TxtFreqTolerance != null) TxtFreqTolerance.Text = savedTolerance;
 				if (TxtThdLimit != null) TxtThdLimit.Text = savedThdLimit;
-				if (ComboPlayback != null) ComboPlayback.SelectedItem = savedPlaybackItem;
-				if (ComboRecording != null) ComboRecording.SelectedItem = savedRecordingItem;
+				_isAutoSelectingDevices = true;
+				try
+				{
+					if (ComboPlayback != null) ComboPlayback.SelectedItem = savedPlaybackItem;
+					if (ComboRecording != null) ComboRecording.SelectedItem = savedRecordingItem;
+				}
+				finally { _isAutoSelectingDevices = false; }
 				_standardCurve = savedStandardCurve;
 				_standardOneKilohertzLevelDbFs = savedOneKilohertzLevel;
 				_frequencyLimits = savedFrequencyLimits;
@@ -6224,6 +6378,13 @@ public partial class AudioRouting : UserControl
 		{
 			BorderHeadroomPrompt.Visibility = (flag ? Visibility.Collapsed : Visibility.Visible);
 		}
+		BtnToggleHeadroom.Content = _routingHeadroomEnabled ? "TẠM DỪNG" : "TIẾP TỤC";
+		if (!_routingHeadroomEnabled)
+		{
+			StopRoutingHeadroomMonitor();
+			RewMeterRouting.ShowUnavailable("ĐÃ TẠM DỪNG HEADROOM");
+			return;
+		}
 		if (!flag || selectedRecordingDevice == null)
 		{
 			if (_isRoutingHeadroomRunning)
@@ -6233,29 +6394,40 @@ public partial class AudioRouting : UserControl
 		}
 		else
 		{
-			if (_isRoutingHeadroomRunning && string.Equals(_routingHeadroomRecordingId, selectedRecordingDevice.ID, StringComparison.OrdinalIgnoreCase))
+			if (_isRoutingHeadroomRunning && _audioEngine.IsContinuousCaptureActive
+				&& string.Equals(_routingHeadroomRecordingId, selectedRecordingDevice.ID, StringComparison.OrdinalIgnoreCase))
 			{
 				return;
 			}
+			if (DateTime.UtcNow < _headroomRetryAtUtc) return;
 			StopRoutingHeadroomMonitor();
 			try
 			{
 				_routingHeadroomRecordingId = selectedRecordingDevice.ID;
 				RewMeterRouting?.PrepareForLiveCapture();
+				long session = _routingMeterBuffer.Start();
+				System.Threading.Interlocked.Exchange(ref _routingMeterSession, session);
 				_audioEngine.StartContinuousCapture(selectedRecordingDevice, delegate(float[] samples, int _)
 				{
-					((DispatcherObject)this).Dispatcher.InvokeAsync((Action)delegate
+					_routingMeterBuffer.Push(samples, session);
+				}, error =>
+				{
+					_ = Dispatcher.InvokeAsync(() =>
 					{
-						RewMeterRouting?.PushSamples(samples);
-					}, (DispatcherPriority)7);
+						if (!_routingMeterBuffer.IsCurrent(session)) return;
+						StopRoutingHeadroomMonitor();
+						ScheduleHeadroomRecovery(error);
+					});
 				});
 				_isRoutingHeadroomRunning = true;
+				_headroomRetryAtUtc = DateTime.MinValue;
 			}
 			catch (Exception ex)
 			{
 				_isRoutingHeadroomRunning = false;
 				_routingHeadroomRecordingId = "";
-				AppendLog("Headroom", "Không mở được theo dõi ngõ thu: " + ex.Message);
+				_routingMeterBuffer.Stop();
+				ScheduleHeadroomRecovery(ex);
 			}
 		}
 	}
@@ -6265,6 +6437,7 @@ public partial class AudioRouting : UserControl
 		if (_isRoutingHeadroomRunning)
 		{
 			_isRoutingHeadroomRunning = false;
+			_routingMeterBuffer.Stop();
 			_routingHeadroomRecordingId = "";
 			try
 			{
@@ -6275,6 +6448,108 @@ public partial class AudioRouting : UserControl
 			}
 			RewMeterRouting?.Reset();
 		}
+	}
+
+	private void ScheduleHeadroomRecovery(Exception error)
+	{
+		_headroomFailureCount = Math.Min(5, _headroomFailureCount + 1);
+		_headroomRetryAtUtc = DateTime.UtcNow.AddSeconds(Math.Min(30, 2 << _headroomFailureCount));
+		RewMeterRouting.ShowUnavailable("MẤT TÍN HIỆU THU — ĐANG CHỜ");
+		AppendLog("Headroom", error.Message);
+	}
+
+	private void BtnToggleHeadroom_Click(object sender, RoutedEventArgs e)
+	{
+		if (IsTestingBusy) return;
+		_routingHeadroomEnabled = !_routingHeadroomEnabled;
+		_headroomRetryAtUtc = DateTime.MinValue;
+		_headroomFailureCount = 0;
+		SaveConfig();
+		MaintainRoutingHeadroomMonitor();
+	}
+
+	private async Task RefreshPendingQaAsync()
+	{
+		try
+		{
+			var pending = await Task.Run(ServerEngine.GetPendingAudioQaUploads);
+			BtnRetryQaUpload.Visibility = pending.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+			BtnRetryQaUpload.Content = $"GỬI LẠI KẾT QUẢ CHỜ ({pending.Count})";
+		}
+		catch (Exception ex) { AppendLog("Kết quả chờ gửi", ex.Message); }
+	}
+
+	private async void BtnRetryQaUpload_Click(object sender, RoutedEventArgs e)
+	{
+		using var workflow = TryBeginRoutingWorkflow();
+		if (workflow == null) return;
+		StopRoutingHeadroomMonitor();
+		BtnRetryQaUpload.IsEnabled = false;
+		try
+		{
+			var pending = await Task.Run(ServerEngine.GetPendingAudioQaUploads);
+			foreach (var item in pending)
+			{
+				bool allowUncertain = false;
+				if (!item.Result.SafeToRetry)
+				{
+					allowUncertain = ModernMessageBox.Show(Application.Current.MainWindow,
+						$"Chưa xác định server đã nhận kết quả của sản phẩm {item.Result.ProductId} hay chưa. " +
+						"Hãy kiểm tra lịch sử QA trên server trước; gửi lại có thể tạo bản ghi trùng.\n\n" +
+						"Bạn đã kiểm tra và muốn gửi lại kết quả này?", "Kiểm tra trước khi gửi lại", ModernMessageBox.MessageBoxType.Confirmation);
+					if (!allowUncertain) break;
+				}
+				if (!await ServerEngine.RetryPendingAudioQaAsync(item.Path, allowUncertain))
+				{
+					string error = ServerEngine.LastError ?? "Chưa gửi được kết quả; dữ liệu vẫn được giữ.";
+					AppendLog("Gửi lại QA", error);
+					ModernMessageBox.Show(Window.GetWindow(this), error, "Chưa gửi được kết quả QA", ModernMessageBox.MessageBoxType.Error);
+					break;
+				}
+				AppendLog("Gửi lại QA", $"Đã gửi kết quả đã lưu của sản phẩm {item.Result.ProductId}.");
+			}
+		}
+		catch (Exception ex) { AppendLog("Gửi lại QA", ex.Message); }
+		finally { BtnRetryQaUpload.IsEnabled = true; }
+	}
+
+	private void SetRoutingControlsLocked(bool locked)
+	{
+		if (locked)
+		{
+			_lockedRoutingControls = new Dictionary<UIElement, bool>();
+			foreach (string name in new[] { "ComboPlayback", "ComboRecording", "ComboRoutingPlaybackChannel",
+				"ComboRoutingRecordingChannel", "ComboPlaybackSampleRate", "ComboPlaybackMode", "ComboSweepLength",
+				"TxtFreqTolerance", "TxtThdLimit", "TxtLogSweepDuration", "TxtMultitoneDuration", "ChkUseLogSweep",
+				"ChkNormalizeOneKilohertz", "SliderPlaybackLevelDbfs", "TxtPlaybackLevelDbfs", "BtnDecreaseLevelDbfs",
+				"BtnIncreaseLevelDbfs", "BtnToggleHeadroom" })
+				if (FindName(name) is UIElement control)
+				{
+					_lockedRoutingControls[control] = control.IsEnabled;
+					control.IsEnabled = false;
+				}
+		}
+		else if (_lockedRoutingControls != null)
+		{
+			foreach (var item in _lockedRoutingControls) item.Key.IsEnabled = item.Value;
+			_lockedRoutingControls = null;
+		}
+	}
+
+	public void ReleaseDeviceItems()
+	{
+		_isAutoSelectingDevices = true;
+		try { DisposeRoutingDeviceItems(); }
+		finally { _isAutoSelectingDevices = false; }
+	}
+
+	private void DisposeRoutingDeviceItems(IEnumerable<MMDevice>? extraDevices = null)
+	{
+		var devices = ComboPlayback.Items.Cast<DeviceItem>().Concat(ComboRecording.Items.Cast<DeviceItem>())
+			.Select(item => item.Device).Concat(extraDevices ?? Array.Empty<MMDevice>()).Distinct().ToArray();
+		ComboPlayback.Items.Clear();
+		ComboRecording.Items.Clear();
+		foreach (MMDevice device in devices) try { device.Dispose(); } catch { }
 	}
 
 	private async void ComboRoutingPlaybackChannel_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -6321,6 +6596,11 @@ public partial class AudioRouting : UserControl
 	{
 		if (ComboRoutingRecordingChannel == null || _audioEngine == null || _isUpdatingChannelSelectors)
 		{
+			return;
+		}
+		if (IsModelTransitionBusy)
+		{
+			SyncChannelSelectionsFromEngine();
 			return;
 		}
 		if (GetDeviceChannelCount(SelectedRecordingDevice) < 2)

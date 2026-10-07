@@ -14,7 +14,4 @@ public static class AutoTestRetryPolicy
         // not evidence of an unstable audio device needing a USB reconnect.
         return acquisitionInvalid && attempt == 1 ? AutoTestAttemptDecision.AwaitReconnect : AutoTestAttemptDecision.Fail;
     }
-
-    public static bool CanRemovePassedDevice(bool suitePassed, bool cancelled, IEnumerable<string> statuses) =>
-        suitePassed && !cancelled && statuses.Any() && statuses.All(status => status == "PASS");
 }

@@ -9,69 +9,65 @@ internal static class BluetoothDeviceRemoval
     private static string Normalize(string value) =>
         new(value.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
 
-    internal static bool IsMi30SamName(string endpointName)
+    internal static bool MatchesModel(string deviceName, string modelName)
     {
-        // Windows may prefix an endpoint with its instance number. Do not use
-        // substring matching: MI30 SAMPLE and other speaker models are unrelated.
-        string name = Regex.Match(endpointName, @"\(([^)]+)\)\s*$").Groups[1].Value;
-        if (string.IsNullOrWhiteSpace(name)) name = endpointName;
-        name = Regex.Replace(name.Trim(), @"^\d+\s*-\s*", "");
-        return Normalize(name) == "MI30SAM";
+        static string ModelKey(string name)
+        {
+            string endpointName = Regex.Match(name, @"\(([^)]+)\)\s*$").Groups[1].Value;
+            if (!string.IsNullOrWhiteSpace(endpointName)) name = endpointName;
+            name = Regex.Replace(name.Trim(), @"^\d+\s*-\s*", "");
+            string key = Normalize(name);
+            return key is "MISAM" or "MI30SAM" ? "MI30SAM" : key;
+        }
+
+        string modelKey = ModelKey(modelName);
+        return modelKey.Length >= 4 && ModelKey(deviceName) == modelKey;
     }
 
-    internal static async Task<(bool Success, string Message)> RemovePassedMi30SamDevicesAsync()
+    internal static async Task<(bool Success, int Removed, int Matched, string Message)> RemovePairedDevicesForModelAsync(string modelName)
     {
+        // Query pairing records so disconnected devices are included. Removal is
+        // called only by the manual button, never by measurement completion.
         var paired = await DeviceInformation.FindAllAsync(
             BluetoothDevice.GetDeviceSelectorFromPairingState(true),
-            Array.Empty<string>(), DeviceInformationKind.AssociationEndpoint);
-        var targets = paired.Where(device => IsMi30SamName(device.Name)).ToArray();
+            Array.Empty<string>(),
+            DeviceInformationKind.AssociationEndpoint);
+        var byId = paired.ToDictionary(device => device.Id, StringComparer.Ordinal);
+        return await RemoveMatchingDevicesAsync(modelName,
+            paired.Select(device => new KeyValuePair<string, string>(device.Id, device.Name)),
+            async id =>
+            {
+                var result = await byId[id].Pairing.UnpairAsync();
+                if (result.Status is not (DeviceUnpairingResultStatus.Unpaired or DeviceUnpairingResultStatus.AlreadyUnpaired))
+                    throw new InvalidOperationException(result.Status.ToString());
+            });
+    }
+
+    internal static async Task<(bool Success, int Removed, int Matched, string Message)> RemoveMatchingDevicesAsync(
+        string modelName, IEnumerable<KeyValuePair<string, string>> pairedDevices, Func<string, Task> unpair)
+    {
+        if (string.IsNullOrWhiteSpace(modelName))
+            return (false, 0, 0, "Chọn model trước khi xóa thiết bị Bluetooth đã ghép.");
+
+        var targets = pairedDevices.Where(device => MatchesModel(device.Value, modelName))
+            .DistinctBy(device => device.Key).ToArray();
         if (targets.Length == 0)
-            return (true, "Không còn ghép đôi MI30 SAM trong Windows.");
+            return (true, 0, 0, $"Không còn thiết bị Bluetooth đã ghép thuộc model '{modelName}'.");
+
         int removed = 0;
         var failures = new List<string>();
         foreach (var device in targets)
         {
             try
             {
-                var result = await device.Pairing.UnpairAsync();
-                if (result.Status is DeviceUnpairingResultStatus.Unpaired or DeviceUnpairingResultStatus.AlreadyUnpaired)
-                    removed++;
-                else failures.Add($"{device.Name}: {result.Status}");
+                await unpair(device.Key);
+                removed++;
             }
-            catch (Exception ex) { failures.Add($"{device.Name}: {ex.Message}"); }
+            catch (Exception ex) { failures.Add($"{device.Value}: {ex.Message}"); }
         }
-        return (failures.Count == 0, $"Đã gỡ {removed}/{targets.Length} ghép đôi MI30 SAM."
-            + (failures.Count == 0 ? "" : " Chưa gỡ được: " + string.Join("; ", failures)));
-    }
 
-    internal static async Task<(bool Success, string Message)> RemovePairedAudioDeviceAsync(string endpointName)
-    {
-        // Audio endpoint IDs are not Bluetooth pairing IDs. Resolve the paired
-        // physical device by its distinctive name and refuse ambiguous matches.
-        string deviceName = Regex.Match(endpointName, @"\((?:\d+-)?([^)]{4,})\)").Groups[1].Value;
-        if (string.IsNullOrWhiteSpace(deviceName))
-            deviceName = endpointName;
-        string target = Normalize(deviceName);
-        if (target.Length < 4)
-            return (false, "Không xác định được tên thiết bị Bluetooth từ ngõ phát đã chọn.");
-
-        var paired = await DeviceInformation.FindAllAsync(
-            BluetoothDevice.GetDeviceSelectorFromPairingState(true),
-            Array.Empty<string>(),
-            DeviceInformationKind.AssociationEndpoint);
-        var matches = paired.Where(device =>
-        {
-            string name = Normalize(device.Name);
-            return name.Length >= 4 && (target == name || target.Contains(name, StringComparison.Ordinal));
-        }).ToList();
-        if (matches.Count != 1)
-            return (false, matches.Count == 0
-                ? $"Không tìm thấy thiết bị Bluetooth đã ghép tương ứng với '{endpointName}'."
-                : "Có nhiều thiết bị Bluetooth trùng tên. Hãy xóa thiết bị trong Windows Bluetooth & devices.");
-
-        var result = await matches[0].Pairing.UnpairAsync();
-        return result.Status == DeviceUnpairingResultStatus.Unpaired
-            ? (true, $"Đã xóa ghép đôi {matches[0].Name} khỏi Windows.")
-            : (false, $"Windows không xóa được {matches[0].Name}: {result.Status}.");
+        return (failures.Count == 0, removed, targets.Length,
+            $"Đã xóa {removed}/{targets.Length} thiết bị Bluetooth đã ghép thuộc model '{modelName}'."
+            + (failures.Count == 0 ? "" : " Chưa xóa được: " + string.Join("; ", failures)));
     }
 }

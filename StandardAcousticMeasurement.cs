@@ -457,12 +457,11 @@ public static class StandardAcousticMeasurement
             invFilter[i] = excitation[exLen - 1 - i] * Math.Exp(-t / L);
         }
         Fourier.Forward(invFilter, FourierOptions.Matlab);
-        var farnaOutputSpectrum = new Complex[fftSize];
-        for (int index = 0; index < recorded.Length; index++) farnaOutputSpectrum[index] = recorded[index];
-        Fourier.Forward(farnaOutputSpectrum, FourierOptions.Matlab);
+        // outputSpectrum is still the unmodified FFT of the clock-corrected capture.
+        // Reuse it for Farina instead of allocating and transforming the same data again.
         var farinaImpulseSpectrum = new Complex[fftSize];
         for (int bin = 0; bin < fftSize; bin++)
-            farinaImpulseSpectrum[bin] = farnaOutputSpectrum[bin] * invFilter[bin];
+            farinaImpulseSpectrum[bin] = outputSpectrum[bin] * invFilter[bin];
         Fourier.Inverse(farinaImpulseSpectrum, FourierOptions.Matlab);
         // farinaImpulseSpectrum là impulse response Farina — harmonic nằm ở chỉ số âm (wrap-around cuối mảng)
         int usefulLength = Math.Min(recorded.Length, fftSize / 2);

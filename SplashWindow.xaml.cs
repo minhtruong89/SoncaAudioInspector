@@ -63,7 +63,10 @@ namespace SoncaAudioInspector
             // Verify the app and fetch configuration concurrently. A third-party
             // connectivity probe adds latency and can fail while our server works.
             // ---------------------------------------------------------
-            Task<byte[]> configDownloadTask = DownloadCheckingConfigAsync();
+            string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
+            string? cachedConfig = ReadValidConfiguration(configPath);
+            Task<byte[]>? configDownloadTask = cachedConfig == null ? DownloadCheckingConfigAsync() : null;
+            if (cachedConfig != null) _ = RefreshConfigurationInBackgroundAsync(configPath, cachedConfig);
             Task<bool> appVerificationTask = ServerEngine.VerifyAppAsync(
                 new Progress<string>(message => LblStatus.Text = message));
             bool appVerified = await appVerificationTask;
@@ -91,7 +94,8 @@ namespace SoncaAudioInspector
             try
             {
                 string localPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
-                byte[] contentBytes = await configDownloadTask;
+                byte[] contentBytes = cachedConfig == null
+                    ? await configDownloadTask! : System.Text.Encoding.UTF8.GetBytes(cachedConfig);
                 using (var document = System.Text.Json.JsonDocument.Parse(contentBytes))
                 {
                     if (!document.RootElement.TryGetProperty("models", out var models)
@@ -100,18 +104,10 @@ namespace SoncaAudioInspector
                         throw new InvalidOperationException("File cấu hình tải về không có danh sách model hợp lệ.");
                 }
 
-                string temporaryPath = localPath + ".download";
-                try
-                {
-                    System.IO.File.WriteAllBytes(temporaryPath, contentBytes);
-                    System.IO.File.Move(temporaryPath, localPath, overwrite: true);
-                }
-                finally
-                {
-                    if (System.IO.File.Exists(temporaryPath))
-                        System.IO.File.Delete(temporaryPath);
-                }
+                if (cachedConfig == null)
+                    AtomicFile.WriteAllText(localPath, System.Text.Encoding.UTF8.GetString(contentBytes));
                 sys002Pass = true;
+                if (cachedConfig != null) sys002Error = "Đang sử dụng cấu hình cục bộ; kiểm tra cập nhật ở nền.";
             }
             catch (Exception ex)
             {
@@ -119,8 +115,7 @@ namespace SoncaAudioInspector
             }
 
             // Fallback to local file if it exists
-            string configPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
-            if (!sys002Pass && System.IO.File.Exists(configPath))
+            if (!sys002Pass && ReadValidConfiguration(configPath) != null)
             {
                 sys002Pass = true;
                 sys002Error = $"Đang sử dụng cấu hình cục bộ (cảnh báo: {sys002Error})";
@@ -204,6 +199,43 @@ namespace SoncaAudioInspector
                 "http://data.soncamedia.com/firmware/smartbox/audioInspector/checking_config.json");
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsByteArrayAsync();
+        }
+
+        internal static string? ReadValidConfiguration(string path)
+            => GetValidConfiguration(path)?.Json;
+
+        internal static (string Json, string SourcePath)? GetValidConfiguration(string path)
+        {
+            try
+            {
+                foreach (string candidate in new[] { path, path + ".bak" })
+                {
+                    try
+                    {
+                        string json = File.ReadAllText(candidate);
+                        using var document = System.Text.Json.JsonDocument.Parse(json);
+                        if (document.RootElement.TryGetProperty("models", out var models)
+                            && models.ValueKind == System.Text.Json.JsonValueKind.Array && models.GetArrayLength() > 0) return (json, candidate);
+                    }
+                    catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or UnauthorizedAccessException) { }
+                }
+                return null;
+            }
+            catch { return null; }
+        }
+
+        private static async Task RefreshConfigurationInBackgroundAsync(string path, string original)
+        {
+            try
+            {
+                byte[] content = await DownloadCheckingConfigAsync();
+                string json = System.Text.Encoding.UTF8.GetString(content);
+                using var document = System.Text.Json.JsonDocument.Parse(json);
+                if (document.RootElement.TryGetProperty("models", out var models)
+                    && models.ValueKind == System.Text.Json.JsonValueKind.Array && models.GetArrayLength() > 0)
+                    AtomicFile.WriteIfUnchanged(path, original, json);
+            }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Cập nhật cấu hình nền: " + ex.Message); }
         }
 
         private async void BtnRetry_Click(object sender, RoutedEventArgs e)

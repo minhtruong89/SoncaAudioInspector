@@ -1736,6 +1736,8 @@ namespace SoncaAudioInspector
             };
             
             _historyItems.Insert(0, historyItem); // Add to top of history
+            // Keep the live view bounded; the server remains the full QA history.
+            while (_historyItems.Count > 300) _historyItems.RemoveAt(_historyItems.Count - 1);
             
             if (HistoryList.ItemsSource == null)
             {

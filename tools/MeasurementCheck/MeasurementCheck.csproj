@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="obj\**\*.cs;bin\**\*.cs" />
     <Compile Include="..\..\AdvancedAudioMeasurement.cs" Link="AdvancedAudioMeasurement.cs" />
     <Compile Include="..\..\SpeakerMeasurementDiagnosis.cs" Link="SpeakerMeasurementDiagnosis.cs" />
     <Compile Include="..\..\DspProcessor.cs" Link="DspProcessor.cs" />

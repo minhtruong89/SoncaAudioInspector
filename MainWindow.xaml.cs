@@ -196,6 +196,7 @@ namespace SoncaAudioInspector
 
     public class AppConfig
     {
+        public bool HeadroomEnabled { get; set; } = true;
         public double PlaybackVolume { get; set; } = 60.0;
         public double RecordingVolume { get; set; } = 50.0;
         public double PlaybackLevelDbfs { get; set; } = 0.0;
@@ -214,6 +215,9 @@ namespace SoncaAudioInspector
         public string UsbPlaybackDeviceId { get; set; } = "";
         public string BluetoothPlaybackDeviceId { get; set; } = "";
         public string RecordingDeviceId { get; set; } = "";
+        public string UsbPlaybackDeviceName { get; set; } = "";
+        public string RecordingDeviceName { get; set; } = "";
+        public string FastTrackPlayback12Identity { get; set; } = "";
         public int? LastPlaybackChannel { get; set; } = null;
         public int? LastRecordingChannel { get; set; } = null;
     }
@@ -259,6 +263,7 @@ namespace SoncaAudioInspector
         private MMDeviceEnumerator? _deviceNotificationEnumerator;
         private IMMNotificationClient? _deviceNotificationClient;
         private bool _selectedModelDeviceCheckPending;
+        private DateTime _audioDeviceRefreshAtUtc;
         private InOutConfig? _pendingDeviceConfig;
         private string _pendingDeviceModel = "";
         private string? _pendingDeviceMissing;
@@ -273,7 +278,6 @@ namespace SoncaAudioInspector
             InitializeComponent();
             StateChanged += (_, _) => ResizeHandles.Visibility = WindowState == WindowState.Normal
                 ? Visibility.Visible : Visibility.Collapsed;
-            Loaded += async (_, _) => await WarnAboutExternalAudioAsync();
             
             _audioEngine = new AudioEngine();
             _testRunner = new TestRunner(_audioEngine);
@@ -300,23 +304,32 @@ namespace SoncaAudioInspector
 
             // Load configurations for models selection
             LoadCheckingConfig();
-            ComboModels.SelectedIndex = ComboModels.Items.Count > 0 ? 0 : -1;
+            ComboModels.SelectedIndex = -1;
+            _audioRoutingView.ClearModelSelection();
             // Audio Routing only: do not restore serial/QR state or query product models.
         }
 
         private bool _audioUsageChecked;
+        private int _modelSelectionVersion;
 
         private async Task WarnAboutExternalAudioAsync()
         {
-            if (_audioUsageChecked) return;
+            if (_audioUsageChecked || _selectedModelDeviceConfig == null || _selectedModelDeviceIds.Count == 0
+                || _deviceConnectionWindow != null || _audioRoutingView.IsTestingBusy || _isLoggingOut) return;
+            int version = _modelSelectionVersion;
+            string model = _selectedModelDeviceName;
+            var endpointIds = new HashSet<string>(_selectedModelDeviceIds, StringComparer.OrdinalIgnoreCase);
             _audioUsageChecked = true;
             try
             {
-                // Scan now: a report from before login may no longer describe active sessions.
-                AudioUsageReport report = await Task.Run(AudioSessionDiagnostics.Scan);
-                if (report.Sessions.Count > 0 && IsVisible)
-                    ModernMessageBox.ShowPersistentWarning(this, report.Details,
-                        "Ứng dụng khác đang dùng ngõ phát/thu âm thanh");
+                // Only inspect endpoints required by the model the operator selected.
+                AudioUsageReport report = await Task.Run(() => AudioSessionDiagnostics.Scan(endpointIds));
+                if (version != _modelSelectionVersion || _isLoggingOut
+                    || !string.Equals(ComboModels.SelectedItem?.ToString(), model, StringComparison.Ordinal)) return;
+                System.Diagnostics.Trace.WriteLine($"Kiểm tra ngõ model {model}: {report.Summary}\n{report.Details}");
+                if (report.AttentionSessions.Count > 0 && IsVisible && !_audioRoutingView.IsTestingBusy)
+                    ModernMessageBox.ShowPersistentWarning(this, $"Model: {model}\n\n{report.WarningDetails}",
+                        "Ứng dụng khác đang mở luồng âm thanh trên ngõ đo");
             }
             catch (Exception ex) { System.Diagnostics.Trace.WriteLine("Kiểm tra phiên âm thanh: " + ex); }
         }
@@ -335,10 +348,9 @@ namespace SoncaAudioInspector
             try
             {
                 string configPath = GetCheckingConfigReadPath();
-                if (File.Exists(configPath))
+                if (File.Exists(configPath) || File.Exists(configPath + ".bak"))
                 {
-                    string json = File.ReadAllText(configPath);
-                    _checkingConfig = JsonSerializer.Deserialize<CheckingConfig>(json) ?? new CheckingConfig();
+                    _checkingConfig = AtomicFile.ReadJson<CheckingConfig>(configPath) ?? new CheckingConfig();
                     
                     if (_checkingConfig != null && _checkingConfig.models != null)
                     {
@@ -412,13 +424,13 @@ namespace SoncaAudioInspector
                 {
                     WriteIndented = true
                 });
-                File.WriteAllText(configPath, json);
+                AtomicFile.WriteAllText(configPath, json);
                 try
                 {
                     string portablePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
                     if (!string.Equals(portablePath, configPath, StringComparison.OrdinalIgnoreCase))
                     {
-                        File.WriteAllText(portablePath, json);
+                        AtomicFile.WriteAllText(portablePath, json);
                     }
                 }
                 catch { }
@@ -431,28 +443,33 @@ namespace SoncaAudioInspector
             }
         }
 
-        private static string GetUserCheckingConfigPath() => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "SoncaAudioInspector",
-            "checking_config.json");
+        private static string GetUserCheckingConfigPath()
+        {
+            string? overridePath = Environment.GetEnvironmentVariable("SONCA_AUDIO_INSPECTOR_DATA_DIR");
+            string dataDirectory = string.IsNullOrWhiteSpace(overridePath)
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoncaAudioInspector")
+                : Path.GetFullPath(overridePath);
+            return Path.Combine(dataDirectory, "checking_config.json");
+        }
 
         private static string GetCheckingConfigReadPath()
         {
             string appDirConfig = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "checking_config.json");
             string userPath = GetUserCheckingConfigPath();
-            if (File.Exists(appDirConfig))
+            var portable = SplashWindow.GetValidConfiguration(appDirConfig);
+            if (portable != null)
             {
                 try
                 {
-                    if (!File.Exists(userPath) || File.GetLastWriteTimeUtc(appDirConfig) > File.GetLastWriteTimeUtc(userPath))
+                    if (!File.Exists(userPath) || File.GetLastWriteTimeUtc(portable.Value.SourcePath) > File.GetLastWriteTimeUtc(userPath))
                     {
                         Directory.CreateDirectory(Path.GetDirectoryName(userPath)!);
-                        File.Copy(appDirConfig, userPath, overwrite: true);
+                        AtomicFile.WriteAllText(userPath, portable.Value.Json);
                     }
                 }
                 catch { }
             }
-            return File.Exists(userPath) ? userPath : appDirConfig;
+            return File.Exists(userPath) || File.Exists(userPath + ".bak") ? userPath : appDirConfig;
         }
 
         private IReadOnlyList<ItemSlotConfig> GetItemSlotsForModel(string? modelName)
@@ -535,6 +552,9 @@ namespace SoncaAudioInspector
 
         private async void ComboModels_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
+            _modelSelectionVersion++;
+            int version = _modelSelectionVersion;
+            _audioUsageChecked = false;
             StopSelectedModelDeviceMonitor();
             CloseDeviceConnectionWindow();
             string selectedModelName = ComboModels.SelectedItem?.ToString() ?? "";
@@ -545,7 +565,8 @@ namespace SoncaAudioInspector
                 while (_audioRoutingView.IsModelTransitionBusy)
                     await Task.Delay(50);
             }
-            if (!string.Equals(ComboModels.SelectedItem?.ToString() ?? "", selectedModelName, StringComparison.Ordinal)) return;
+            if (version != _modelSelectionVersion ||
+                !string.Equals(ComboModels.SelectedItem?.ToString() ?? "", selectedModelName, StringComparison.Ordinal)) return;
             if (string.IsNullOrWhiteSpace(selectedModelName))
             {
                 _audioRoutingView.ClearModelSelection();
@@ -560,8 +581,7 @@ namespace SoncaAudioInspector
                 string configPath = GetCheckingConfigReadPath();
                 if (File.Exists(configPath))
                 {
-                    string json = File.ReadAllText(configPath);
-                    var newConfig = JsonSerializer.Deserialize<CheckingConfig>(json) ?? new CheckingConfig();
+                    var newConfig = AtomicFile.ReadJson<CheckingConfig>(configPath) ?? new CheckingConfig();
                     // Merge new values into existing object to not break references or replace entirely
                     _checkingConfig = newConfig;
                 }
@@ -581,6 +601,7 @@ namespace SoncaAudioInspector
             bool success = _audioRoutingView.ApplyModelDevices(modelConfig.testItems.InOut, out string? missingMessage);
             StartSelectedModelDeviceMonitor(selectedModelName, modelConfig.testItems.InOut);
             if (!success) ShowDeviceConnectionWindow(selectedModelName, modelConfig.testItems.InOut, missingMessage);
+            else await WarnAboutExternalAudioAsync();
         }
 
         private void StartSelectedModelDeviceMonitor(string model, InOutConfig config)
@@ -597,29 +618,29 @@ namespace SoncaAudioInspector
 
         private void StopSelectedModelDeviceMonitor()
         {
-            _selectedModelDeviceTimer?.Stop();
             _selectedModelDeviceConfig = null;
             _selectedModelDeviceName = "";
             _selectedModelDeviceIds.Clear();
-            _selectedModelDeviceCheckPending = false;
         }
 
         private void SelectedModelDeviceTimer_Tick(object? sender, EventArgs e)
         {
-            if (_selectedModelDeviceConfig == null ||
-                !string.Equals(ComboModels.SelectedItem?.ToString(), _selectedModelDeviceName, StringComparison.Ordinal)) return;
-            if (!_selectedModelDeviceCheckPending || _audioRoutingView.IsModelTransitionBusy) return;
+            if (!_selectedModelDeviceCheckPending || DateTime.UtcNow < _audioDeviceRefreshAtUtc
+                || _audioRoutingView == null || _audioRoutingView.IsTestingBusy || IsStandardMeasurementBusy) return;
             _selectedModelDeviceCheckPending = false;
             try
             {
+                _audioRoutingView.RefreshDevicesAfterConnection();
+                if (_selectedModelDeviceConfig == null ||
+                    !string.Equals(ComboModels.SelectedItem?.ToString(), _selectedModelDeviceName, StringComparison.Ordinal)) return;
                 if (_audioRoutingView.CheckModelDevices(_selectedModelDeviceConfig, out string? missing))
                 {
                     CaptureSelectedModelDeviceIds(_selectedModelDeviceConfig);
                     if (_deviceConnectionWindow != null)
                     {
-                        _audioRoutingView.RefreshDevicesAfterConnection();
                         CloseDeviceConnectionWindow();
                     }
+                    _ = WarnAboutExternalAudioAsync();
                 }
                 else
                 {
@@ -642,6 +663,9 @@ namespace SoncaAudioInspector
                 _deviceNotificationEnumerator = new MMDeviceEnumerator();
                 _deviceNotificationClient = new AudioDeviceNotificationClient(OnAudioEndpointChanged);
                 _deviceNotificationEnumerator.RegisterEndpointNotificationCallback(_deviceNotificationClient);
+                _selectedModelDeviceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+                _selectedModelDeviceTimer.Tick += SelectedModelDeviceTimer_Tick;
+                _selectedModelDeviceTimer.Start();
             }
             catch (Exception ex)
             {
@@ -653,32 +677,21 @@ namespace SoncaAudioInspector
         {
             Dispatcher.BeginInvoke((Action)(() =>
             {
-                if (_selectedModelDeviceConfig == null) return;
-                if (disconnected && _selectedModelDeviceIds.Contains(deviceId) && _audioRoutingView.IsModelTransitionBusy)
+                if (_isLoggingOut || _audioRoutingView == null) return;
+                bool selected = _selectedModelDeviceIds.Contains(deviceId)
+                    || _audioRoutingView.SelectedPlaybackDevice?.ID == deviceId
+                    || _audioRoutingView.SelectedRecordingDevice?.ID == deviceId;
+                if (disconnected && selected && _audioRoutingView.IsModelTransitionBusy)
                     _audioRoutingView.CancelAndDiscardCurrentMeasurement();
                 _selectedModelDeviceCheckPending = true;
+                _audioDeviceRefreshAtUtc = DateTime.UtcNow.AddMilliseconds(750);
             }));
         }
 
         private void CaptureSelectedModelDeviceIds(InOutConfig config)
         {
             _selectedModelDeviceIds.Clear();
-            List<MMDevice> playback = _audioEngine.GetPlaybackDevices();
-            List<MMDevice> recording = _audioEngine.GetRecordingDevices();
-            try
-            {
-                foreach (string name in config.Devices?.Input?.Values ?? Enumerable.Empty<string>())
-                    foreach (MMDevice device in playback.Where(device => device.FriendlyName.Contains(name, StringComparison.OrdinalIgnoreCase)))
-                        _selectedModelDeviceIds.Add(device.ID);
-                foreach (string name in config.Devices?.Output?.Values ?? Enumerable.Empty<string>())
-                    foreach (MMDevice device in recording.Where(device => device.FriendlyName.Contains(name, StringComparison.OrdinalIgnoreCase)))
-                        _selectedModelDeviceIds.Add(device.ID);
-            }
-            finally
-            {
-                foreach (MMDevice device in playback) try { device.Dispose(); } catch { }
-                foreach (MMDevice device in recording) try { device.Dispose(); } catch { }
-            }
+            _selectedModelDeviceIds.UnionWith(_audioRoutingView.GetModelDeviceIds(config));
         }
 
         private sealed class AudioDeviceNotificationClient(Action<string, bool> changed) : IMMNotificationClient
@@ -687,11 +700,17 @@ namespace SoncaAudioInspector
             public void OnDeviceAdded(string deviceId) => changed(deviceId, false);
             public void OnDeviceRemoved(string deviceId) => changed(deviceId, true);
             public void OnDefaultDeviceChanged(DataFlow flow, Role role, string defaultDeviceId) => changed(defaultDeviceId, false);
-            public void OnPropertyValueChanged(string deviceId, PropertyKey key) { }
+            public void OnPropertyValueChanged(string deviceId, PropertyKey key)
+            {
+                if (key.Equals(PropertyKeys.PKEY_Device_FriendlyName) || key.Equals(PropertyKeys.PKEY_Device_DeviceDesc)
+                    || key.Equals(PropertyKeys.PKEY_AudioEngine_DeviceFormat))
+                    changed(deviceId, false);
+            }
         }
 
         private void ShowDeviceConnectionWindow(string model, InOutConfig config, string? missing)
         {
+            if (_isLoggingOut || !string.Equals(ComboModels.SelectedItem?.ToString(), model, StringComparison.Ordinal)) return;
             _pendingDeviceModel = model;
             _pendingDeviceConfig = config;
             _pendingDeviceMissing = missing;
@@ -2002,6 +2021,8 @@ namespace SoncaAudioInspector
 
         protected override void OnClosed(EventArgs e)
         {
+            _modelSelectionVersion++;
+            _selectedModelDeviceTimer?.Stop();
             try
             {
                 if (_deviceNotificationEnumerator != null && _deviceNotificationClient != null)
@@ -2012,6 +2033,8 @@ namespace SoncaAudioInspector
             _deviceNotificationEnumerator?.Dispose();
             _deviceNotificationEnumerator = null;
             _audioEngine?.Dispose();
+            _audioRoutingView?.ReleaseDeviceItems();
+            _standardMeasurementView?.ReleaseDeviceItems();
             base.OnClosed(e);
         }
     }

@@ -3,6 +3,10 @@ using System.Windows.Media;
 
 namespace SoncaAudioInspector;
 
+public sealed record AudioQaAcquisitionSnapshot(double PlaybackLevelDbfs, int PlaybackSampleRate, int RecordingSampleRate,
+	bool ExclusivePlayback, int? PlaybackChannel, int? RecordingChannel, string PlaybackDeviceId, string RecordingDeviceId,
+	double ThdLimitPercent, DateTimeOffset CapturedUtc);
+
 public class AutoTestCaseItem : INotifyPropertyChanged
 {
 	private string _status = "WAITING";
@@ -28,6 +32,8 @@ public class AutoTestCaseItem : INotifyPropertyChanged
 	public string DistortionText { get; set; } = "CHƯA CÓ DỮ LIỆU DISTORTION";
 
 	public string ResponseLevelUnit { get; set; } = "dBFS";
+
+	public AudioQaAcquisitionSnapshot? Acquisition { get; set; }
 
 	public double[] ResponseFrequencies { get; set; } = Array.Empty<double>();
 

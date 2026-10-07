@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
@@ -14,17 +15,45 @@ internal static class StartupWorkflowChecks
         Require(AutoTestRetryPolicy.Decide(1, true, true, false, false) == AutoTestAttemptDecision.Pass, "First pass retried unnecessarily.");
         Require(AutoTestRetryPolicy.Decide(1, false, false, false, false) == AutoTestAttemptDecision.InvalidConfiguration, "Missing reference counted as hardware failure.");
         Require(AutoTestRetryPolicy.Decide(1, false, true, true, true) == AutoTestAttemptDecision.Cancelled, "Cancellation counted as fail.");
-        foreach (var status in new[] { "RETRY", "FAIL", "INVALID", "WAITING" })
-            Require(!AutoTestRetryPolicy.CanRemovePassedDevice(true, false, new[] { "PASS", status }), "Bluetooth removed before entire suite passed.");
-        Require(!AutoTestRetryPolicy.CanRemovePassedDevice(true, true, new[] { "PASS" }), "Bluetooth removed after cancel.");
-        Require(!AutoTestRetryPolicy.CanRemovePassedDevice(true, false, Array.Empty<string>()), "Empty suite removed devices.");
-        Require(AutoTestRetryPolicy.CanRemovePassedDevice(true, false, new[] { "PASS", "PASS", "PASS" }), "Completed passing suite did not allow cleanup.");
-        var nameCheck = typeof(AudioEngine).Assembly.GetType("SoncaAudioInspector.BluetoothDeviceRemoval")!
-            .GetMethod("IsMi30SamName", BindingFlags.NonPublic | BindingFlags.Static)!;
-        foreach (string name in new[] { "MI30 SAM", "Headphones (MI30 SAM)", "Headphones (2- MI30 SAM)", "MI30_SAM" })
-            Require((bool)nameCheck.Invoke(null, new object[] { name })!, $"Missed MI30 SAM: {name}");
-        foreach (string name in new[] { "MI30 SAMPLE", "FastTrack Pro", "MI30 SAM OTHER", "D'AURIS 500", "Headphones (Realtek)" })
-            Require(!(bool)nameCheck.Invoke(null, new object[] { name })!, $"Unrelated Bluetooth candidate accepted: {name}");
+        var removalType = typeof(AudioEngine).Assembly.GetType("SoncaAudioInspector.BluetoothDeviceRemoval")!;
+        var matchMethod = removalType.GetMethod("MatchesModel", BindingFlags.NonPublic | BindingFlags.Static)!;
+        bool Matches(string deviceName, string modelName) => (bool)matchMethod.Invoke(null, new object[] { deviceName, modelName })!;
+        foreach (string name in new[] { "MI30 SAM", "MISAM", "MI_SAM", "Headphones (4- MI30 SAM)", "2- MI30 SAM" })
+            Require(Matches(name, "MI SAM"), $"Missed Bluetooth model alias: {name}");
+        foreach (string name in new[] { "MI30 SAMPLE", "Mi30S", "MI30 SAM OTHER", "FastTrack Pro", "Headphones (Realtek)" })
+            Require(!Matches(name, "MI SAM"), $"Unrelated paired device matched MI SAM: {name}");
+        Require(!Matches("MI30 SAM", ""), "No model selection matched a paired device.");
+        Require(Matches("D'AURIS 500", "D'AURIS 500") && !Matches("D'AURIS 500", "MI SAM"), "Other model matching crossed model boundaries.");
+
+        var removeMethod = removalType.GetMethod("RemoveMatchingDevicesAsync", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var pairedDevices = new[]
+        {
+            new KeyValuePair<string, string>("current", "MI30 SAM"),
+            new KeyValuePair<string, string>("old-disconnected", "MISAM"),
+            new KeyValuePair<string, string>("old-disconnected", "MISAM"),
+            new KeyValuePair<string, string>("another-old", "MI_SAM"),
+            new KeyValuePair<string, string>("other-model", "Mi30S"),
+            new KeyValuePair<string, string>("similar-name", "MI30 SAMPLE")
+        };
+        Task<(bool Success, int Removed, int Matched, string Message)> Remove(string model, Func<string, Task> unpair) =>
+            (Task<(bool Success, int Removed, int Matched, string Message)>)removeMethod.Invoke(null, new object[] { model, pairedDevices, unpair })!;
+        var attempted = new List<string>();
+        var removed = await Remove("MI SAM", id => { attempted.Add(id); return Task.CompletedTask; });
+        Require(removed.Success && removed.Removed == 3 && removed.Matched == 3
+            && attempted.SequenceEqual(new[] { "current", "old-disconnected", "another-old" }), "Bulk removal omitted old devices, repeated a pairing ID or removed another model.");
+        attempted.Clear();
+        var partial = await Remove("MI SAM", id =>
+        {
+            attempted.Add(id);
+            return id == "current" ? Task.FromException(new IOException("fake-unpair-failure")) : Task.CompletedTask;
+        });
+        Require(!partial.Success && partial.Removed == 2 && partial.Matched == 3 && attempted.Count == 3
+            && partial.Message.Contains("fake-unpair-failure"), "One failed unpair blocked the remaining devices or hid the partial result.");
+        attempted.Clear();
+        var noMatches = await Remove("D'AURIS 500", id => { attempted.Add(id); return Task.CompletedTask; });
+        var noModel = await Remove("", id => { attempted.Add(id); return Task.CompletedTask; });
+        Require(noMatches.Success && noMatches.Matched == 0 && !noModel.Success && attempted.Count == 0, "Empty or unmatched model changed pairings.");
+        Console.WriteLine("Bluetooth model removal checks passed (fake pairing records only; no device changes).");
 
         using var recovering = new ScriptedHandler(HttpStatusCode.ServiceUnavailable, HttpStatusCode.BadGateway, HttpStatusCode.OK);
         using var recoveringClient = new HttpClient(recovering);
@@ -74,7 +103,7 @@ internal static class StartupWorkflowChecks
         catch (OperationCanceledException) { Require(transport.Calls == priorCalls, "Cancelled request was sent."); }
         Require(AudioSessionDiagnostics.IsDeviceInUse(new Exception("Wrapper", new System.Runtime.InteropServices.COMException("Busy", unchecked((int)0x8889000A)))), "Nested WASAPI busy error was hidden.");
         Require(!AudioSessionDiagnostics.IsDeviceInUse(new Exception("Different error")), "Unrelated device error marked as exclusive busy.");
-        Console.WriteLine("Retry/cleanup and startup network checks passed (fake HTTP only; no unpair operation).");
+        Console.WriteLine("Auto Test retry and startup network checks passed (fake HTTP only; no unpair operation).");
     }
 
     private static HttpRequestMessage Request() => new(HttpMethod.Post, "https://unit-test.invalid/login");

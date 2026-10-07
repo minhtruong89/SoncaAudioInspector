@@ -1425,7 +1425,10 @@ public class TestRunner
 				lastSweepSettings = settings;
 				float[] excitation = ((recordingSampleRate == playbackSampleRate) ? generatedExcitation : StandardAcousticMeasurement.GenerateLogSweep(settings));
 				double? preSweepFloor = SuiteSharedNoiseFloorDbFs ?? LastNoiseAssessment?.DutMicrophone?.TotalRmsDb;
-				capturedSweepResult = StandardAcousticMeasurement.AnalyzeLogSweep(excitation, array3, settings, FeqMicrophoneCalibration, preSweepFloor);
+				var sweepCalibration = FeqMicrophoneCalibration;
+				capturedSweepResult = await Task.Run(() => StandardAcousticMeasurement.AnalyzeLogSweep(
+					excitation, array3, settings, sweepCalibration, preSweepFloor));
+				if (_isCancelled) return;
 				StandardAcousticResult sweepResult = capturedSweepResult;
 				string clockState = sweepResult.ClockDriftCorrectionApplied
 					? $"đã bù {sweepResult.EstimatedClockDriftPpm:+0.0;-0.0;0.0} ppm"

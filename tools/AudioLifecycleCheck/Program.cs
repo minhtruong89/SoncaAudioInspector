@@ -12,6 +12,15 @@ string Option(string key, string fallback) => args.FirstOrDefault(a => a.StartsW
 int cycles = int.Parse(Option("--cycles", "0"));
 int continuousSeconds = int.Parse(Option("--continuous-seconds", "0"));
 bool verifyFixes = args.Contains("--verify-fixes");
+if (args.Contains("--model-startup-check")) { ModelStartupChecks.Run(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory)), Path.GetFullPath(Option("--dependency-directory", AppContext.BaseDirectory))); return; }
+if (args.Contains("--audio-session-check")) { ModelStartupChecks.AudioSessions(); return; }
+if (args.Contains("--fasttrack-logic")) { FastTrackReconnectChecks.Logic(); return; }
+if (args.Contains("--fasttrack-snapshot")) { FastTrackReconnectChecks.Hardware(apply: false); return; }
+if (args.Contains("--fasttrack-apply")) { FastTrackReconnectChecks.Hardware(apply: true); return; }
+if (args.Contains("--fasttrack-ui")) { FastTrackReconnectChecks.Ui(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory)), Path.GetFullPath(Option("--dependency-directory", AppContext.BaseDirectory))); return; }
+if (args.Contains("--long-run-check")) { await LongRunChecks.RunAsync(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory))); return; }
+if (args.Contains("--sweep-benchmark")) { SweepPerformanceChecks.Run(); return; }
+if (args.Contains("--clock-equivalence")) { SweepPerformanceChecks.CheckClockCorrection(); return; }
 if (args.Contains("--startup-check")) { await StartupWorkflowChecks.RunAsync(); return; }
 if (args.Contains("--login-owner-guard"))
 {
@@ -112,6 +121,22 @@ if (args.Contains("--ui-guards"))
             typeof(AudioRouting).GetField("_audioEngine", flags)!.SetValue(routing, guardEngine);
             var guardRunner = new TestRunner(guardEngine);
             typeof(AudioRouting).GetField("_testRunner", flags)!.SetValue(routing, guardRunner);
+            string graphDirectory = Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory));
+            Directory.CreateDirectory(graphDirectory);
+            string graphPath = Path.Combine(graphDirectory, "server-graph-contract.png");
+            object plotControl = routing.FindName("PlotFreqResponse");
+            object plot = plotControl.GetType().GetProperty("Plot")!.GetValue(plotControl)!;
+            typeof(AudioRouting).GetMethod("SaveServerGraphPng", BindingFlags.Static | BindingFlags.NonPublic)!
+                .Invoke(null, new[] { plot, graphPath });
+            using (var graphStream = File.OpenRead(graphPath))
+            {
+                var decoder = new System.Windows.Media.Imaging.PngBitmapDecoder(graphStream,
+                    System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat, System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                Require(decoder.Frames[0].PixelWidth == 800 && decoder.Frames[0].PixelHeight == 450,
+                    "PNG upload dimensions changed.");
+            }
+            Require(!Directory.EnumerateFiles(graphDirectory, ".fullscreen-*.png").Any(), "PNG render left a temporary disk file.");
+            Console.WriteLine("Server graph: WPF decoded 800x450 PNG; no fullscreen temporary file.");
             foreach (double level in new[] { -60.0, -20.0, -1.0, -0.5, 0.0 })
             {
                 routing.PlaybackLevelDbfs = level;
@@ -121,6 +146,8 @@ if (args.Contains("--ui-guards"))
                     "A level allowed by Audio Routing cannot produce a valid sweep.");
                 Require(guardRunner.PlaybackLevelDbFs == level, "UI silently changed the requested excitation level.");
             }
+            if (!args.Contains("--skip-scope-endpoints"))
+            {
             using (var scopeEnumerator = new MMDeviceEnumerator())
             using (var scopeOutput = scopeEnumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia))
             using (var scopeInput = scopeEnumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Multimedia))
@@ -164,6 +191,8 @@ if (args.Contains("--ui-guards"))
                     && guardEngine.PlaybackSampleRate == rateBefore && guardEngine.UseExclusivePlayback == exclusiveBefore
                     && guardRunner.PlaybackLevelDbFs == levelBefore, "Closing scope changed the next measurement settings.");
             }
+            }
+            else Console.WriteLine("Scope endpoint checks skipped explicitly; this host has no default capture endpoint.");
             string standardKey = (string)typeof(AudioRouting).GetMethod("GetStandardDeviceKey", flags)!.Invoke(routing, null)!;
             Require(standardKey.Contains(TestRunner.FrequencyResponseLevelBasis), "Old normalized standards can collide with dBFS standards.");
             typeof(AudioRouting).GetMethod("RenderLocalMeasurementDiagnosis", flags)!.Invoke(routing, null);
@@ -175,6 +204,18 @@ if (args.Contains("--ui-guards"))
             var begin = typeof(AudioRouting).GetMethod("TryBeginRoutingWorkflow", flags)!;
             using var workflow = (IDisposable)begin.Invoke(routing, null)!;
             Require(routing.IsTestingBusy, "Workflow is not marked busy.");
+            var headroomEnabled = typeof(AudioRouting).GetField("_routingHeadroomEnabled", flags)!;
+            var toggleHeadroom = typeof(AudioRouting).GetMethod("BtnToggleHeadroom_Click", flags)!;
+            bool initialHeadroom = (bool)headroomEnabled.GetValue(routing)!;
+            toggleHeadroom.Invoke(routing, new object[] { routing, new System.Windows.RoutedEventArgs() });
+            Require((bool)headroomEnabled.GetValue(routing)! == initialHeadroom, "Headroom setting changed during measurement.");
+            foreach (string name in new[] { "ComboPlayback", "ComboRecording", "ComboRoutingRecordingChannel", "ComboPlaybackSampleRate", "BtnToggleHeadroom" })
+                Require(!((System.Windows.UIElement)routing.FindName(name)).IsEnabled, "Measurement configuration is editable during a workflow: " + name);
+            var guardedDevice = (System.Windows.Controls.ComboBox)routing.FindName("ComboPlayback");
+            guardedDevice.Items.Add("synthetic selection");
+            guardedDevice.SelectedIndex = 0;
+            Require(guardedDevice.SelectedItem == null, "Programmatic endpoint change bypassed the workflow guard.");
+            guardedDevice.Items.Remove("synthetic selection");
             Require(begin.Invoke(routing, null) == null, "Overlapping UI workflow accepted.");
             typeof(AudioRouting).GetField("_isExecutingAutoSuite", flags)!.SetValue(routing, false);
             Require(routing.IsTestingBusy, "Cancel cleared busy before workflow cleanup.");
@@ -185,6 +226,14 @@ if (args.Contains("--ui-guards"))
             Require(typeof(AudioRouting).GetField("_routingScopeWindow", flags)!.GetValue(routing) == null,
                 "Scope opened during an active workflow.");
             workflow.Dispose();
+            Require(((System.Windows.UIElement)routing.FindName("BtnToggleHeadroom")).IsEnabled,
+                "Workflow did not restore configuration controls.");
+            toggleHeadroom.Invoke(routing, new object[] { routing, new System.Windows.RoutedEventArgs() });
+            string configPath = (string)typeof(AudioRouting).GetMethod("GetRoutingConfigPath", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, null)!;
+            Require((bool)headroomEnabled.GetValue(routing)! != initialHeadroom
+                && AtomicFile.ReadJson<AppConfig>(configPath)!.HeadroomEnabled != initialHeadroom,
+                "Pause/continue state was not applied and persisted.");
+            toggleHeadroom.Invoke(routing, new object[] { routing, new System.Windows.RoutedEventArgs() });
             using var nextWorkflow = (IDisposable)begin.Invoke(routing, null)!;
             Require(nextWorkflow != null, "UI workflow did not release after cleanup.");
         }

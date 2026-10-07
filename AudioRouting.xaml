@@ -80,11 +80,11 @@
                                     </Style>
                                 </ComboBox.Resources>
                             </ComboBox>
-                            <Button Name="BtnRemoveBluetooth" Content="Xóa Bluetooth đã ghép"
+                            <Button Name="BtnRemoveBluetooth" Content="Xóa tất cả Bluetooth của model"
                                     Click="BtnRemoveBluetooth_Click"
                                     Style="{StaticResource ModernButtonStyle}"
                                     HorizontalAlignment="Right" Padding="8,3" Margin="0,2,0,5"
-                                    ToolTip="Remove device trong Windows Bluetooth &amp; devices"/>
+                                    ToolTip="Xóa toàn bộ thiết bị Bluetooth đã ghép có tên thuộc model đang chọn, kể cả thiết bị cũ không kết nối"/>
                             <TextBlock Name="TxtPlaybackFormat" Text="Định dạng: chưa chọn thiết bị"
                                        FontSize="10" Foreground="#71717A" Margin="0,0,0,8"/>
 
@@ -220,6 +220,10 @@
                                 <StackPanel>
                                     <Grid Margin="0,0,0,5">
                                         <TextBlock Text="HEADROOM NGÕ THU" FontSize="10" FontWeight="Bold" Foreground="#22D3EE" VerticalAlignment="Center"/>
+                                        <Button x:Name="BtnToggleHeadroom" Content="TẠM DỪNG" HorizontalAlignment="Right"
+                                                Click="BtnToggleHeadroom_Click" Style="{StaticResource ModernButtonStyle}"
+                                                Padding="6,2" FontSize="9"
+                                                ToolTip="Tạm dừng theo dõi mức thu. Phiên thiết bị dùng cho phép đo có thể vẫn mở."/>
                                     </Grid>
                                     <local:RewRealtimeLevelMeter x:Name="RewMeterRouting" Height="135"/>
                                 </StackPanel>
@@ -494,6 +498,8 @@
                         </Grid>
 
                         <!-- Current Product Info -->
+                        <Button Name="BtnRetryQaUpload" Content="GỬI LẠI KẾT QUẢ CHỜ" Click="BtnRetryQaUpload_Click"
+                                Style="{StaticResource ModernButtonStyle}" Visibility="Collapsed" Margin="0,0,0,8"/>
                         <StackPanel Name="PanelProductInfo" Orientation="Horizontal" HorizontalAlignment="Left" Margin="0,0,0,4">
                             <TextBlock Text="SẢN PHẨM: " FontSize="12" FontWeight="Bold" Foreground="#A1A1AA" VerticalAlignment="Center"/>
                             <TextBlock Name="TxtProductSerial" Text="TỰ ĐỘNG TẠO KHI BẮT ĐẦU ĐO" FontSize="13" FontWeight="Bold" Foreground="#3B82F6" VerticalAlignment="Center"/>
