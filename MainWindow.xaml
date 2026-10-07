@@ -87,6 +87,7 @@
 
                     <!-- Tab Buttons (Left side) -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Name="BtnTabDevice" Content="Device" Style="{StaticResource TabButtonStyle}" Click="BtnTabDevice_Click" Margin="0,0,6,0"/>
                         <Button Name="BtnTabAudioRouting" Content="Audio Routing" Style="{StaticResource TabButtonStyle}" Click="BtnTabAudioRouting_Click"/>
                         <Button Name="BtnScanQr" Content="Quét Barcode" Style="{StaticResource TabButtonStyle}" Click="BtnScanQr_Click" Margin="6,0,0,0" ToolTip="Mở khu vực quét barcode và đồng bộ item lên server" Visibility="Collapsed"/>
                     </StackPanel>

@@ -244,6 +244,7 @@ namespace SoncaAudioInspector
         private TestRunner _testRunner;
 
         private AudioRouting _audioRoutingView;
+        private DeviceView _deviceView;
         private QrScanWindow? _qrScanView;
         private StandardMeasurementWindow? _standardMeasurementView;
         private CheckingConfig _checkingConfig = new CheckingConfig();
@@ -284,6 +285,7 @@ namespace SoncaAudioInspector
             StartAudioDeviceNotifications();
 
             // Instantiate views
+            _deviceView = new DeviceView();
             _audioRoutingView = new AudioRouting();
             _audioRoutingView.InitializeRouting(_audioEngine, _testRunner);
 
@@ -297,8 +299,8 @@ namespace SoncaAudioInspector
                 TxtStaffWelcome.Text = "Xin chào, Nhân viên";
             }
 
-            // Default to Audio Routing tab
-            SwitchToTab("AudioRouting");
+            // Default to Device tab
+            SwitchToTab("Device");
             _audioRoutingView.SetSetupVisibility(false);
             UpdateSettingsToggleIcon(false);
 
@@ -1816,14 +1818,62 @@ namespace SoncaAudioInspector
 
         private void SwitchToTab(string tabName)
         {
-            // This build intentionally exposes the complete Audio Routing workspace only.
-            // Auto Test, reference-line capture, Scope and all routing measurements live
-            // inside AudioRouting and remain available.
-            MainContentArea.Content = _audioRoutingView;
-            BtnToggleSettings.Visibility = Visibility.Visible;
-            BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
-            BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
-            BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
+            if (tabName == "Device")
+            {
+                MainContentArea.Content = _deviceView;
+                BtnToggleSettings.Visibility = Visibility.Collapsed;
+
+                BtnTabDevice.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+                BtnTabDevice.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+                BtnTabDevice.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
+
+                BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
+                BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
+                BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
+            }
+            else if (tabName == "AudioRouting")
+            {
+                MainContentArea.Content = _audioRoutingView;
+                BtnToggleSettings.Visibility = Visibility.Visible;
+
+                BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+                BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+                BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
+
+                BtnTabDevice.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
+                BtnTabDevice.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
+                BtnTabDevice.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
+            }
+            else if (tabName == "QrScan")
+            {
+                if (_qrScanView == null)
+                {
+                    _qrScanView = new QrScanWindow(GetItemSlotsForModel(ComboModels.SelectedItem?.ToString()));
+                    _qrScanView.ScanCompleted += QrScanView_ScanCompleted;
+                    _qrScanView.AddItemRequested += QrScanView_AddItemRequested;
+                    _qrScanView.ShowProductDetails(ServerEngine.CurrentProduct, ServerEngine.CurrentProduct?.ProductCode);
+                    UpdateQrBarcode();
+                }
+                MainContentArea.Content = _qrScanView;
+                BtnToggleSettings.Visibility = Visibility.Collapsed;
+
+                BtnScanQr.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(167, 139, 250));
+                BtnScanQr.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(139, 92, 246));
+                BtnScanQr.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
+
+                BtnTabDevice.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
+                BtnTabDevice.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
+                BtnTabDevice.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
+
+                BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
+                BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
+                BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
+            }
+        }
+
+        private void BtnTabDevice_Click(object sender, RoutedEventArgs e)
+        {
+            SwitchToTab("Device");
         }
 
         private void BtnTabAudioRouting_Click(object sender, RoutedEventArgs e)

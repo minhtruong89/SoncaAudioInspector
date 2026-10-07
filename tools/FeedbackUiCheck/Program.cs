@@ -33,6 +33,8 @@ internal static class Program
             if (models.SelectedItem != null)
                 throw new Exception("Clicking the selected model cannot clear the selection.");
             var toggleRouting = (UserControl)((ContentControl)window.FindName("MainContentArea")).Content;
+            if (toggleRouting == null || toggleRouting.GetType().FullName != "SoncaAudioInspector.AudioRouting")
+                toggleRouting = (UserControl)mainType.GetField("_audioRoutingView", privateInstance)!.GetValue(window)!;
             if (((Button)toggleRouting.FindName("BtnStartAutoTest")).IsEnabled)
                 throw new Exception("Auto Test remains enabled after clearing Model.");
             if (mainType.GetField("_selectedModelDeviceConfig", privateInstance)!.GetValue(window) != null)
@@ -53,6 +55,8 @@ internal static class Program
             var window = (Window)Activator.CreateInstance(mainType)!;
             app.MainWindow = window;
             var resumeRouting = (UserControl)((ContentControl)window.FindName("MainContentArea")).Content;
+            if (resumeRouting == null || resumeRouting.GetType().FullName != "SoncaAudioInspector.AudioRouting")
+                resumeRouting = (UserControl)mainType.GetField("_audioRoutingView", privateInstance)!.GetValue(window)!;
             var resumeRoutingType = resumeRouting.GetType();
             ((TextBox)window.FindName("TxtSerialNumber")).Text = "RESUME_CHECK";
             ((TextBox)resumeRouting.FindName("TxtFreqTolerance")).Text = "3.0";
@@ -122,6 +126,8 @@ internal static class Program
                 || audioOnlyWindowType.GetField("_qrScanView", instanceFields)!.GetValue(window) != null)
                 throw new Exception("A removed module was initialized by the Audio Routing build.");
             var content = ((ContentControl)window.FindName("MainContentArea")).Content as FrameworkElement;
+            if (content?.GetType().FullName != "SoncaAudioInspector.AudioRouting")
+                content = audioOnlyWindowType.GetField("_audioRoutingView", instanceFields)?.GetValue(window) as FrameworkElement;
             if (content?.GetType().FullName != "SoncaAudioInspector.AudioRouting")
                 throw new Exception("Main content is not Audio Routing.");
             if (content.FindName("BtnStartAutoTest") is not Button)
