@@ -81,6 +81,7 @@ public sealed partial class SoncaBleManager
             var info = await _infoReply.Task.WaitAsync(TimeSpan.FromSeconds(6));
             SupportsMixerControls = SoncaBleMixerProfile.SupportsInfo(info);
             _protocolReady = true;
+            _mixerReadNotBefore = DateTime.UtcNow.AddMilliseconds(1500);
             LogMessage?.Invoke($"[BLE] INFO được loa xác nhận: {info.Payload.Length} byte.");
             CheckCurrent();
             LogMessage?.Invoke($"[BLE] Sẵn sàng: service {service.Uuid}, write {_writeCharacteristic.Uuid}, notify {_notifyCharacteristic.Uuid}. Gửi thành công qua GATT chưa thay thế việc đọc lại trạng thái DSP.");

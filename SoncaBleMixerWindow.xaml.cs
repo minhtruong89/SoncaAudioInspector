@@ -73,6 +73,7 @@ public partial class SoncaBleMixerWindow : Window
         _ble.ConnectionStatusChanged += OnConnectionStatusChanged;
         _ble.LogMessage += AppendLog;
         _ble.MixerStateReceived += OnMixerStateReceived;
+        _ble.MixerParametersReceived += OnMixerParametersReceived;
 
         UpdateConnectionUi(_ble.IsConnected, _ble.IsConnected ? $"Đã kết nối: {_ble.ConnectedDeviceName}" : "Chưa kết nối");
 
@@ -108,6 +109,7 @@ public partial class SoncaBleMixerWindow : Window
         _ble.ConnectionStatusChanged -= OnConnectionStatusChanged;
         _ble.LogMessage -= AppendLog;
         _ble.MixerStateReceived -= OnMixerStateReceived;
+        _ble.MixerParametersReceived -= OnMixerParametersReceived;
         _ble.StopScanning();
         _sliderDebounceTimer.Stop();
         ClearPendingCommands();
@@ -139,7 +141,7 @@ public partial class SoncaBleMixerWindow : Window
         // CHÍNH SÁCH BẢO VỆ PHẦN CỨNG:
         // Chỉ cho phép tăng/giảm âm lượng của MIC trên app Sonca Mixer.
         // Tất cả các kênh khác (ECHO, REVERB, MUSIC, MASTER, LIVE) chỉ được bật/tắt tiếng,
-        // nếu muốn tăng/giảm âm lượng bắt buộc phải chỉnh trực tiếp nút vặn trên loa!
+        // nếu muốn tăng/giảm âm lượng bắt buộc phải chỉnh trực tiếp nút trên loa!
         if (sender == SliderMicVol)
         {
             TxtMicVal.Text = SliderMicVol.Value.ToString("F0");

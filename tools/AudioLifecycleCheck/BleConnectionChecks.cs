@@ -46,7 +46,17 @@ internal static class BleConnectionChecks
         var ack = Convert.FromHexString("000302012D");
         if (decoder.Push(ack.Concat(config).Concat(ack).ToArray()).Count != 3) throw new Exception("Coalesced frames failed.");
         if (!SoncaAudioInspector.SoncaBleProtocol.BuildReadMixerPacket().AsSpan().SequenceEqual(Convert.FromHexString("028002046209000199"))) throw new Exception("GET config wire packet mismatch.");
-        if (SoncaAudioInspector.SoncaBleMixerProfile.VolumeToRaw(100) != 4096 || SoncaAudioInspector.SoncaBleMixerProfile.VolumeFromRaw(8192) != 200
+        var updates = new SoncaAudioInspector.SoncaBleReply(0x84, 0, new byte[] { 0x61, 0x02, 0x20, 0 });
+        if (!SoncaAudioInspector.SoncaBleMixerProfile.TryReadParameterUpdate(updates, out var live) || live[0x6102] != 8192
+            || SoncaAudioInspector.SoncaBleMixerProfile.TryReadParameterUpdate(updates with { Status = 1 }, out _))
+            throw new Exception("Live parameter update framing/status failed.");
+        decoder.Clear();
+        var buttonPress = decoder.Push(Convert.FromHexString("00070300610319C021")).Single();
+        if (!SoncaAudioInspector.SoncaBleMixerProfile.TryReadParameterUpdate(buttonPress, out var musicUpdate)
+            || musicUpdate[0x6103] != 6592 || Math.Round(SoncaAudioInspector.SoncaBleMixerProfile.VolumeFromRaw(musicUpdate[0x6103])) != 80)
+            throw new Exception("Captured C360 MUSIC button feedback was lost or scaled incorrectly.");
+        if (SoncaAudioInspector.SoncaBleMixerProfile.VolumeToRaw(100) != 8192 || SoncaAudioInspector.SoncaBleMixerProfile.VolumeFromRaw(8192) != 100
+            || SoncaAudioInspector.SoncaBleMixerProfile.VolumeFromRaw(4096) != 50
             || SoncaAudioInspector.SoncaBleMixerProfile.CanWrite(0x3140, 50) || SoncaAudioInspector.SoncaBleMixerProfile.CanWrite(0x6400, 8193)
             || SoncaAudioInspector.SoncaBleMixerProfile.CanWrite(0x6448, 2)) throw new Exception("Unsafe legacy address or gain encoding accepted.");
         Console.WriteLine("PASS captured 216-parameter C360 frame at every split, coalesced packets, CRC recovery, config query and control bounds.");

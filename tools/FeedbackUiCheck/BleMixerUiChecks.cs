@@ -54,6 +54,16 @@ internal static class BleMixerUiChecks
         if (writer.Packets.Count != 0 || states["Music"]) throw new Exception("Offline mute changed state or sent a packet.");
         writer.Connected = true; update.Invoke(window, new object[] { true, "Fake GATT ready" });
         var readback = type.GetMethod("ApplyParameterReadback", hidden)!;
+        var masterText = (TextBlock)window.FindName("TxtMasterVal");
+        var masterSlider = (Slider)window.FindName("SliderMasterVol");
+        readback.Invoke(window, new object[] { (ushort)0x6102, (ushort)0 });
+        if (masterText.Text == "0" || masterSlider.Visibility == Visibility.Visible)
+            throw new Exception("Unverified config zero was shown as the speaker's physical Master level.");
+        type.GetMethod("OnMixerParametersReceived", hidden)!.Invoke(window, new object[] { new Dictionary<ushort, ushort> { [0x6102] = 8192 } });
+        window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        if (masterText.Text != "100" || masterSlider.Value != 100) throw new Exception("Live Master update did not display 100.");
+        readback.Invoke(window, new object[] { (ushort)0x6102, (ushort)0 });
+        if (masterText.Text != "100") throw new Exception("Cached zero overwrote live Master feedback.");
         if (mute.IsEnabled) throw new Exception("Mute enabled before the speaker state was read.");
         readback.Invoke(window, new object[] { (ushort)0x6448, (ushort)0 });
         string? before = mute.Content.ToString();
@@ -74,7 +84,7 @@ internal static class BleMixerUiChecks
             throw new Exception("Echo unmute did not use the dedicated enable register; level must stay untouched.");
         readback.Invoke(window, new object[] { (ushort)0x6400, (ushort)4096 });
         var slider = (Slider)window.FindName("SliderMicVol");
-        if (slider.Value != 100 || slider.Maximum != 200) throw new Exception("MIC Q12 volume readback scaled incorrectly.");
+        if (slider.Value != 50 || slider.Maximum != 100) throw new Exception("C360 fader display does not match the 0..100 mobile scale.");
         type.GetMethod("QueueCommand", hidden)!.Invoke(window, new object[] { "MicVol", (byte)2, (ushort)0x6400, (ushort)1515, "Mic" });
         writer.Connected = false; update.Invoke(window, new object[] { false, "Disconnected" });
         if (((System.Collections.IDictionary)type.GetField("_pendingCommands", hidden)!.GetValue(window)!).Count != 0)

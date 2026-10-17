@@ -4,6 +4,7 @@ public sealed partial class SoncaBleManager
 {
     private readonly SemaphoreSlim _transactionGate = new(1, 1);
     private TaskCompletionSource<IReadOnlyDictionary<ushort, ushort>>? _stateReply;
+    private DateTime _mixerReadNotBefore;
     public bool SupportsMixerControls { get; private set; }
     public IReadOnlyDictionary<ushort, ushort> MixerState { get; private set; } = new Dictionary<ushort, ushort>();
 
@@ -44,6 +45,9 @@ public sealed partial class SoncaBleManager
 
     private async Task<bool> ReadStateCoreAsync(int generation)
     {
+        var settle = _mixerReadNotBefore - DateTime.UtcNow;
+        if (settle > TimeSpan.Zero) await Task.Delay(settle);
+        if (generation != _connectionGeneration || !IsConnected) return false;
         var pending = new TaskCompletionSource<IReadOnlyDictionary<ushort, ushort>>(TaskCreationOptions.RunContinuationsAsynchronously);
         _stateReply = pending;
         try

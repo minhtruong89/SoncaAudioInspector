@@ -14,8 +14,21 @@ public static class SoncaBleMixerProfile
     public static bool CanWrite(ushort register, ushort value) => register == MicVolume ? value <= 8192
         : register is MicMute or MusicMute or MasterMute or EchoEnable or ReverbEnable or LiveMute && value <= 1;
 
-    public static ushort VolumeToRaw(double level) => (ushort)(Math.Clamp(level, 0, 200) * 4096 / 100);
-    public static double VolumeFromRaw(ushort raw) => raw * 100.0 / 4096;
+    // C360's mobile fader has 201 internal steps but labels step / 2:
+    // raw 4096 is displayed as 50, raw 8192 as 100.
+    public static ushort VolumeToRaw(double level) => (ushort)(Math.Clamp(level, 0, 100) * 8192 / 100);
+    public static double VolumeFromRaw(ushort raw) => raw * 100.0 / 8192;
+
+    public static bool TryReadParameterUpdate(SoncaBleReply reply, out IReadOnlyDictionary<ushort, ushort> parameters)
+    {
+        var result = new Dictionary<ushort, ushort>();
+        parameters = result;
+        if (reply.Command is not (0x03 or 0x84) || reply.Status != 0 || reply.Payload.Length == 0 || reply.Payload.Length % 4 != 0) return false;
+        var data = reply.Payload;
+        for (int i = 0; i < data.Length; i += 4)
+            result[(ushort)((data[i] << 8) | data[i + 1])] = (ushort)((data[i + 2] << 8) | data[i + 3]);
+        return true;
+    }
 
     public static bool TryMuteRegister(string channel, out ushort register, out bool inverted)
     {

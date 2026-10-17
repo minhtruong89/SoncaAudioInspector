@@ -14,6 +14,7 @@ public partial class SoncaBleMixerWindow
     private readonly Dictionary<ulong, DateTime> _autoAttempted = new();
     private readonly HashSet<string> _knownMuteChannels = new(), _busyMuteChannels = new();
     private ushort? _knownMicLevel;
+    private bool _hasLiveMasterLevel;
 
     private async Task RefreshAudioPeersAsync()
     {
@@ -24,6 +25,9 @@ public partial class SoncaBleMixerWindow
             _audioPeers = await SoncaBleManager.ConnectedAudioPeersAsync();
             TxtAudioConnection.Text = _audioPeers.Count > 0 ? "Bluetooth Windows: " + string.Join(", ", _audioPeers.Select(p => p.Name))
                 : "Bluetooth Windows: chưa thấy loa Sonca đang kết nối.";
+            var windowsLevels = SoncaBluetoothPlaybackState.Read(_audioPeers);
+            TxtPlaybackLevel.Text = windowsLevels.Count > 0 ? "Windows BT: " + string.Join(" / ", windowsLevels.Select(p => $"{p.Percent:F0}%{(p.Muted ? " (mute)" : "")}")) : "Windows BT: —";
+            if (windowsLevels.Count > 0) TxtAudioConnection.Text += "\nÂm lượng phát Windows: " + string.Join("; ", windowsLevels.Select(p => $"{p.Name}: {p.Percent:F0}%{(p.Muted ? " (mute)" : "")}"));
             await TryAutoConnectAsync();
             if (_writer.IsConnected && _writer.SupportsMixerControls) await ReadMixerStateAsync();
         }
@@ -65,12 +69,17 @@ public partial class SoncaBleMixerWindow
             SliderMicBass, SliderMicMid, SliderMicTreble, BtnSaveSpeakerConfig, BtnResetSpeakerConfig })
         {
             control.IsEnabled = false;
+            control.Opacity = 0.4;
             control.ToolTip = "Chức năng này chưa được xác minh cho firmware đang nối.";
+            if (control is CheckBox toggle) toggle.IsChecked = null;
+            if (control is RadioButton input) input.IsChecked = false;
         }
         if (!connected)
         {
             _commandEpoch++;
             _knownMuteChannels.Clear(); _knownMicLevel = null;
+            _hasLiveMasterLevel = false;
+            SliderMasterVol.Visibility = Visibility.Hidden;
             foreach (var text in new[] { TxtMicVal, TxtMusicVal, TxtMasterVal, TxtEchoVal, TxtReverbVal, TxtLiveVal }) text.Text = "—";
             foreach (var channel in _channelMuted.Keys.ToArray()) _channelMuted[channel] = false;
             foreach (var button in new[] { BtnMuteMic, BtnMuteMusic, BtnMuteMaster, BtnMuteEcho, BtnMuteReverb, BtnMuteLive }) button.Content = "?";
@@ -108,9 +117,37 @@ public partial class SoncaBleMixerWindow
         }));
     }
 
-    private void ApplyParameterReadback(ushort register, ushort value)
+    private void OnMixerParametersReceived(IReadOnlyDictionary<ushort, ushort> updates)
+    {
+        int epoch = _commandEpoch;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_windowClosing || epoch != _commandEpoch || !_writer.IsConnected) return;
+            foreach (var pair in updates)
+            {
+                if (pair.Key == SoncaBleMixerProfile.MasterVolume && pair.Value <= 8192)
+                    _hasLiveMasterLevel = true;
+                ApplyParameterReadbackCore(pair.Key, pair.Value, liveUpdate: true);
+            }
+        }));
+    }
+
+    private void ApplyParameterReadback(ushort register, ushort value) => ApplyParameterReadbackCore(register, value, liveUpdate: false);
+
+    private void ApplyParameterReadbackCore(ushort register, ushort value, bool liveUpdate)
     {
         if (_windowClosing) return;
+        if (register == SoncaBleMixerProfile.MasterVolume && !liveUpdate)
+        {
+            if (_hasLiveMasterLevel) return; // Do not overwrite MCU updates with a config cache.
+            if (value == 0)
+            {
+                TxtMasterVal.Text = "—";
+                TxtMasterVal.ToolTip = "Chưa có mức Master đồng bộ từ loa. Giá trị cấu hình 0 chưa xác nhận vị trí nút Master.";
+                SliderMasterVol.Visibility = Visibility.Hidden;
+                return;
+            }
+        }
         var volume = register switch
         {
             SoncaBleMixerProfile.MicVolume => (SliderMicVol, TxtMicVal), SoncaBleMixerProfile.MusicVolume => (SliderMusicVol, TxtMusicVal),
@@ -125,9 +162,14 @@ public partial class SoncaBleMixerWindow
             if (!deferMic)
             {
                 _suppressSliderEvents = true;
-                volume.Item1.Maximum = 200;
+                volume.Item1.Maximum = 100;
                 volume.Item1.Value = SoncaBleMixerProfile.VolumeFromRaw(value);
                 volume.Item2!.Text = volume.Item1.Value.ToString("F0");
+                if (register == SoncaBleMixerProfile.MasterVolume)
+                {
+                    SliderMasterVol.Visibility = Visibility.Visible;
+                    TxtMasterVal.ToolTip = liveUpdate ? "Mức Master cập nhật từ loa." : "Mức Master trong cấu hình loa.";
+                }
                 _suppressSliderEvents = false;
             }
         }

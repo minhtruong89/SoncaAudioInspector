@@ -58,6 +58,7 @@ public sealed partial class SoncaBleManager : IDisposable, ISoncaMixerWriter
     public event Action<byte[], string>? DataReceived;
     public event Action<SoncaBleReply>? ReplyReceived;
     public event Action<IReadOnlyDictionary<ushort, ushort>>? MixerStateReceived;
+    public event Action<IReadOnlyDictionary<ushort, ushort>>? MixerParametersReceived;
     public event Action<string>? LogMessage;
 
     public IReadOnlyCollection<BleDeviceInfo> DiscoveredDevices => _discoveredDevices.Values.ToList();
@@ -159,6 +160,7 @@ public sealed partial class SoncaBleManager : IDisposable, ISoncaMixerWriter
                 // status=01 used by parameter replies. Validate its signature.
                 if (reply.Command == SoncaBleProtocol.CmdInfo && reply.Payload.AsSpan().StartsWith("SCA_"u8)) _infoReply?.TrySetResult(reply);
                 if (SoncaBleMixerProfile.TryReadSnapshot(reply, out var state)) _stateReply?.TrySetResult(state);
+                if (IsConnected && SoncaBleMixerProfile.TryReadParameterUpdate(reply, out var updates)) MixerParametersReceived?.Invoke(updates);
                 ReplyReceived?.Invoke(reply);
             }
         }

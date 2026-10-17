@@ -241,15 +241,15 @@
                         </Grid.ColumnDefinitions>
                         <!-- Scale Numbers & Ticks -->
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="200" FontSize="10" Foreground="#64748B" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="150" FontSize="10" Foreground="#64748B" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="100" FontSize="10" Foreground="#64748B" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#64748B" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#64748B" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="75" FontSize="10" Foreground="#64748B" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#64748B" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="25" FontSize="10" Foreground="#64748B" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#64748B" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderMicVol" Grid.Column="1" Style="{StaticResource VerticalFaderStyle}"
-                                Minimum="0" Maximum="200" Value="50" ValueChanged="Slider_ValueChanged"
-                                ToolTip="Mức Micro 0–200; 100 tương ứng gain 0 dB"/>
+                                Minimum="0" Maximum="100" Value="50" ValueChanged="Slider_ValueChanged"
+                                ToolTip="Mức Micro 0–100 theo thang Sonca Mixer"/>
                     </Grid>
                 </Grid>
 
@@ -262,7 +262,7 @@
 
                     <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="ECHO 🔒" FontSize="13" FontWeight="Bold" Foreground="#94A3B8" HorizontalAlignment="Center"
-                                   ToolTip="Khóa phần mềm: Chỉ chỉnh tăng/giảm âm lượng bằng nút xoay trên loa"/>
+                                   ToolTip="Khóa phần mềm: Chỉ chỉnh tăng/giảm âm lượng bằng nút trên loa"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
                             <TextBlock x:Name="TxtEchoVal" Text="46" FontSize="12" FontWeight="SemiBold" Foreground="#64748B" Margin="0,0,4,0"/>
                             <Button x:Name="BtnMuteEcho" Content="🔊" Width="20" Height="18" Padding="0" FontSize="10"
@@ -277,14 +277,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="200" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="150" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="75" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="25" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderEcho" Grid.Column="1" Style="{StaticResource LockedVerticalFaderStyle}"
-                                Minimum="0" Maximum="200" Value="46"/>
+                                Minimum="0" Maximum="100" Value="46"/>
                     </Grid>
                 </Grid>
 
@@ -297,7 +297,7 @@
 
                     <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="REVERB 🔒" FontSize="13" FontWeight="Bold" Foreground="#94A3B8" HorizontalAlignment="Center"
-                                   ToolTip="Khóa phần mềm: Chỉ chỉnh tăng/giảm âm lượng bằng nút xoay trên loa"/>
+                                   ToolTip="Khóa phần mềm: Chỉ chỉnh tăng/giảm âm lượng bằng nút trên loa"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
                             <TextBlock x:Name="TxtReverbVal" Text="45" FontSize="12" FontWeight="SemiBold" Foreground="#64748B" Margin="0,0,4,0"/>
                             <Button x:Name="BtnMuteReverb" Content="🔊" Width="20" Height="18" Padding="0" FontSize="10"
@@ -312,14 +312,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="200" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="150" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="75" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="25" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderReverb" Grid.Column="1" Style="{StaticResource LockedVerticalFaderStyle}"
-                                Minimum="0" Maximum="200" Value="45"/>
+                                Minimum="0" Maximum="100" Value="45"/>
                     </Grid>
                 </Grid>
 
@@ -332,7 +332,7 @@
 
                     <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="MUSIC 🔒" FontSize="13" FontWeight="Bold" Foreground="#94A3B8" HorizontalAlignment="Center"
-                                   ToolTip="Khóa phần mềm: Chỉ chỉnh tăng/giảm âm lượng bằng nút xoay trên loa"/>
+                                   ToolTip="Khóa phần mềm: Chỉ chỉnh tăng/giảm âm lượng bằng nút trên loa"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
                             <TextBlock x:Name="TxtMusicVal" Text="70" FontSize="12" FontWeight="SemiBold" Foreground="#64748B" Margin="0,0,4,0"/>
                             <Button x:Name="BtnMuteMusic" Content="🔊" Width="20" Height="18" Padding="0" FontSize="10"
@@ -347,14 +347,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="200" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="150" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="75" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="25" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderMusicVol" Grid.Column="1" Style="{StaticResource LockedVerticalFaderStyle}"
-                                Minimum="0" Maximum="200" Value="70"/>
+                                Minimum="0" Maximum="100" Value="70"/>
                     </Grid>
                 </Grid>
 
@@ -366,8 +366,8 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="MASTER 🔒" FontSize="13" FontWeight="Bold" Foreground="#FFB830" HorizontalAlignment="Center"
-                                   ToolTip="Khóa phần mềm: Chỉ chỉnh tăng/giảm âm lượng bằng nút xoay trên loa"/>
+                        <TextBlock Text="MASTER DSP 🔒" FontSize="12" FontWeight="Bold" Foreground="#FFB830" HorizontalAlignment="Center"
+                                   ToolTip="Khóa phần mềm: Chỉ chỉnh tăng/giảm âm lượng bằng nút trên loa"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
                             <TextBlock x:Name="TxtMasterVal" Text="60" FontSize="12" FontWeight="SemiBold" Foreground="#64748B" Margin="0,0,4,0"/>
                             <Button x:Name="BtnMuteMaster" Content="🔊" Width="20" Height="18" Padding="0" FontSize="10"
@@ -382,14 +382,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="200" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="150" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="75" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="25" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderMasterVol" Grid.Column="1" Style="{StaticResource LockedVerticalFaderStyle}"
-                                Minimum="0" Maximum="200" Value="60"/>
+                                Minimum="0" Maximum="100" Value="60"/>
                     </Grid>
                 </Grid>
 
@@ -402,7 +402,7 @@
 
                     <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock Text="LIVE 🔒" FontSize="13" FontWeight="Bold" Foreground="#00E5FF" HorizontalAlignment="Center"
-                                   ToolTip="Khóa phần mềm: Chỉ chỉnh tăng/giảm âm lượng bằng nút xoay trên loa"/>
+                                   ToolTip="Khóa phần mềm: Chỉ chỉnh tăng/giảm âm lượng bằng nút trên loa"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,2,0,0">
                             <TextBlock x:Name="TxtLiveVal" Text="75" FontSize="12" FontWeight="SemiBold" Foreground="#64748B" Margin="0,0,4,0"/>
                             <Button x:Name="BtnMuteLive" Content="🔊" Width="20" Height="18" Padding="0" FontSize="10"
@@ -417,14 +417,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="200" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="150" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="75" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="25" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderLiveVol" Grid.Column="1" Style="{StaticResource LockedVerticalFaderStyle}"
-                                Minimum="0" Maximum="200" Value="75"/>
+                                Minimum="0" Maximum="100" Value="75"/>
                     </Grid>
                 </Grid>
             </Grid>
@@ -504,9 +504,12 @@
 
                 <!-- Bottom: Settings Button -->
                 <Border Grid.Row="2" BorderBrush="#1E2433" BorderThickness="0,1,0,0" Padding="14,10">
+                    <StackPanel>
+                    <TextBlock x:Name="TxtPlaybackLevel" Text="Windows BT: —" Foreground="#94A3B8" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
                     <Button x:Name="BtnOpenSettings" Content="⚙ Cài đặt" Height="32"
                             Background="#181D29" Foreground="#CBD5E1" BorderBrush="#2A3245" BorderThickness="1"
                             FontSize="12" Cursor="Hand" Click="BtnToggleSettings_Click"/>
+                    </StackPanel>
                 </Border>
             </Grid>
 
