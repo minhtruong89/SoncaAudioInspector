@@ -96,14 +96,13 @@ internal static class OctaveEffectsUiChecks
             if (!all.Contains(expected)) throw new Exception("Measurement details missing " + expected);
         var details = (Window)Activator.CreateInstance(assembly.GetType("SoncaAudioInspector.MeasurementDetailsWindow")!)!;
         details.GetType().GetMethod("Update")!.Invoke(details, new object[] { "Synthetic echo 200 ms + reverb · same sweep", rows, comparison, result });
+        var detailsTabs = ((DockPanel)details.Content).Children.OfType<TabControl>().Single();
+        if (!((TabItem)detailsTabs.Items[0]).Header.ToString()!.Contains("Impulse")
+            || ((ContentControl)((TabItem)detailsTabs.Items[0]).Content).Content.GetType().Name != "ImpulseAnalysisView")
+            throw new Exception("Ctrl+Shift+I details do not open directly on the current Impulse graph.");
         Render(details, Path.Combine(output, "measurement-details.png"), 1020, 690);
-        var impulse = (Window)Activator.CreateInstance(assembly.GetType("SoncaAudioInspector.ImpulseAnalysisWindow")!, result)!;
-        Render(impulse, Path.Combine(output, "impulse-window.png"), 1050, 640);
-        var dock = (DockPanel)impulse.Content;
-        var tabs = dock.Children.OfType<TabControl>().Single();
-        dynamic impulsePlot = ((TabItem)tabs.Items[0]).Content;
-        using (dynamic bitmap = impulsePlot.Plot.GetImage(1100, 600)) File.WriteAllBytes(Path.Combine(output, "impulse-plot.png"), (byte[])bitmap.GetImageBytes());
-        impulse.Close(); details.Close();
+        ImpulseGraphUiChecks.Check(assembly, result, output);
+        details.Close();
         Console.WriteLine("PASS complete measurement table, same-sweep IR/ETC/decay window and rendered UI evidence.");
     }
 

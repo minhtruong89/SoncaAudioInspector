@@ -284,9 +284,9 @@
                             </Grid>
                             <TextBlock Text="Thu noise floor 1 giây trước sweep · phát guard 18 Hz → 22 kHz · cùng bản thu phân tích đáp tuyến, H2–H9 và THD"
                                        Foreground="#71717A" FontSize="10" Margin="22,5,0,0" TextWrapping="Wrap"/>
-                            <CheckBox Name="ChkDistortionCalibration" Content="Distortion: áp dụng calibration mic" IsChecked="False"
+                            <CheckBox Name="ChkDistortionCalibration" Content="Distortion: bù đáp tuyến mic khi tính THD" IsChecked="False"
                                       Checked="DistortionOptions_Changed" Unchecked="DistortionOptions_Changed" Foreground="#D4D4D8" Margin="22,8,0,0"
-                                      IsEnabled="{Binding IsEnabled, ElementName=BtnStart}" ToolTip="Khớp tùy chọn Use cal files của REW. Mặc định tắt; calibration đáp tuyến không bị thay đổi."/>
+                                      IsEnabled="{Binding IsEnabled, ElementName=BtnStart}" ToolTip="Bù độ nhạy mic tại fundamental và các tần số hài bằng file calibration đang nạp. Tương ứng Apply cal files to distortion của REW; cần đặt giống nhau khi đối chiếu. Độc lập với chuẩn hóa 1 kHz và calibration FFT. Không khử méo riêng của mic. Ngõ FastTrack đo điện không áp file mic. Thay đổi có hiệu lực ở lượt đo tiếp theo."/>
                             <CheckBox Name="ChkDistortionHarmonicReference" Content="Distortion: tham chiếu tại tần số hài" IsChecked="False"
                                       Checked="DistortionOptions_Changed" Unchecked="DistortionOptions_Changed" Foreground="#D4D4D8" Margin="22,6,0,0"
                                       IsEnabled="{Binding IsEnabled, ElementName=BtnStart}" ToolTip="Khớp Use harmonic frequency as ref của REW. Mặc định chia cho fundamental tại tần số đang xét."/>

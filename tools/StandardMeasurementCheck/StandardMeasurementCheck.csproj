@@ -10,6 +10,7 @@
     <Compile Remove="obj\**\*.cs" />
     <Compile Include="..\..\StandardAcousticMeasurement.cs" Link="StandardAcousticMeasurement.cs" />
     <Compile Include="..\..\ImpulseEffects.cs" Link="ImpulseEffects.cs" />
+    <Compile Include="..\..\ImpulsePlotAnalysis.cs" Link="ImpulsePlotAnalysis.cs" />
     <Compile Include="..\..\ResponseSmoothing.cs" Link="ResponseSmoothing.cs" />
     <Compile Include="..\..\SweepDistortionSummary.cs" Link="SweepDistortionSummary.cs" />
     <Compile Include="..\..\MicrophoneCalibration.cs" Link="MicrophoneCalibration.cs" />

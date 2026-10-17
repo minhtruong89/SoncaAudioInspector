@@ -2,6 +2,12 @@ using System.Numerics;
 using MathNet.Numerics.IntegralTransforms;
 using SoncaAudioInspector;
 
+if (args.Contains("--impulse-plot"))
+{
+    ImpulsePlotChecks.Run();
+    return;
+}
+
 if (args.Contains("--impulse-effects"))
 {
     ImpulseEffectsChecks.Run(Path.GetFullPath(args[Array.IndexOf(args, "--impulse-effects") + 1]));
@@ -365,6 +371,9 @@ foreach (float bad in new[] { float.NaN, float.PositiveInfinity })
     if (!rejected) throw new Exception("Nonfinite sweep accepted");
 }
 StandardAcousticResult noAudio = StandardAcousticMeasurement.AnalyzeLogSweep(sweep, silence, settings);
+if (noAudio.ImpulsePlot == null || !double.IsNaN(noAudio.ImpulsePlot.ClarityC20Db)
+    || !double.IsNaN(noAudio.ImpulsePlot.CentreTimeSeconds))
+    throw new InvalidOperationException("Invalid acquisition exposed numeric C20 / centre time.");
 if (noAudio.Validity != "INVALID" || noAudio.Polarity != "UNKNOWN"
     || noAudio.Diagnostics.All(item => item.Code != "NO_AUDIO_CAPTURED"))
     throw new InvalidOperationException("No-audio acquisition feedback failed.");

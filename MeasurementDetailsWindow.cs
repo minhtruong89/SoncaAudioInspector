@@ -14,19 +14,18 @@ public sealed class MeasurementDetailsWindow : Window
     private readonly DataGrid _decays = Table();
     private readonly DataGrid _phase = Table();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8) };
-    private readonly Button _impulse = new() { Content = "Mở Impulse / ETC", Margin = new Thickness(8), Padding = new Thickness(12, 6, 12, 6), IsEnabled = false };
+    private readonly ContentControl _impulse = new() { Content = new TextBlock { Text = "Chưa có bản thu sweep. Đồ thị Impulse sẽ xuất hiện sau khi đo.", Margin = new Thickness(20), Foreground = Brushes.White } };
     private StandardAcousticResult? _result;
 
     public MeasurementDetailsWindow()
     {
-        Title = "Toàn bộ thông số — Line / Line chuẩn"; Width = 1050; Height = 780; MinWidth = 750; MinHeight = 480;
+        Title = "Impulse / Thông số — Line / Line chuẩn"; Width = 1200; Height = 820; MinWidth = 900; MinHeight = 600;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = new SolidColorBrush(Color.FromRgb(18, 18, 20)); Foreground = Brushes.White;
         var layout = new DockPanel { Margin = new Thickness(10) }; Content = layout;
         DockPanel.SetDock(_status, Dock.Top); layout.Children.Add(_status);
-        DockPanel.SetDock(_impulse, Dock.Bottom); layout.Children.Add(_impulse);
-        _impulse.Click += (_, _) => { if (_result != null) new ImpulseAnalysisWindow(_result) { Owner = this }.Show(); };
         var tabs = new TabControl(); layout.Children.Add(tabs);
+        tabs.Items.Add(new TabItem { Header = "Impulse / ETC / Schroeder", Content = _impulse });
         tabs.Items.Add(new TabItem { Header = "Tổng quan / Thu / Effect", Content = _summary });
         tabs.Items.Add(new TabItem { Header = "Đáp tuyến 1/24", Content = _response });
         tabs.Items.Add(new TabItem { Header = "THD / H2–H9", Content = _harmonics });
@@ -36,7 +35,10 @@ public sealed class MeasurementDetailsWindow : Window
 
     public void Update(string status, IReadOnlyList<MeasurementValue> summary, IReadOnlyDictionary<double, double> response, StandardAcousticResult? result)
     {
-        _status.Text = status; _summary.ItemsSource = summary; _result = result; _impulse.IsEnabled = result != null;
+        _status.Text = status; _summary.ItemsSource = summary;
+        if (!ReferenceEquals(_result, result))
+            _impulse.Content = result == null ? new TextBlock { Text = "Đang đo / chưa có bản thu sweep.", Margin = new Thickness(20), Foreground = Brushes.White } : new ImpulseAnalysisView(result);
+        _result = result;
         static string Value(double value, string format = "0.000") => double.IsFinite(value) ? value.ToString(format) : "Không khả dụng";
         _response.ItemsSource = response.Where(p => p.Key >= 50 && p.Key <= 18000).OrderBy(p => p.Key)
             .Select(p => new { Hz = Value(p.Key, "0.###"), Level = Value(p.Value, "0.0000") }).ToArray();

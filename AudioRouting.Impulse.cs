@@ -5,7 +5,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using ScottPlot.WPF;
 
 namespace SoncaAudioInspector;
 
@@ -73,7 +72,9 @@ public partial class AudioRouting
         Add("Thời gian thu đuôi yêu cầu", $"{_testRunner.ImpulseEffectsSettings.CaptureTailSeconds:0.000} s");
         Add("Mức phát / Recording Gain số", $"{PlaybackLevelDbfs:0.00} dBFS peak / {_audioEngine.RecordingGain:0.00}x");
         Add("Chế độ / đơn vị / so sánh", $"{(_audioEngine.UseExclusivePlayback ? "Exclusive" : "WASAPI Shared")} / {(_testRunner.NormalizeFrequencyResponseToOneKilohertz ? "dBr chuẩn hóa 1k" : "dBFS không chuẩn hóa")} / 1/24, 50–18000 Hz");
-        Add("Calibration đáp tuyến / Distortion", $"{_testRunner.FeqMicrophoneCalibration?.Name ?? "Không"} / {(_testRunner.ApplyDistortionCalibration ? "Áp dụng" : "Không áp dụng")}");
+        string distortionCalibration = !_testRunner.ApplyDistortionCalibration ? "Không áp dụng"
+            : _testRunner.FeqMicrophoneCalibration is { } mic ? "Áp dụng " + mic.Name : "Đã bật nhưng không có file mic cho ngõ thu — không bù";
+        Add("Calibration đáp tuyến / Distortion", $"{_testRunner.FeqMicrophoneCalibration?.Name ?? "Không"} / {distortionCalibration}");
         Add("Tham chiếu THD", _testRunner.UseHarmonicFrequencyAsDistortionReference ? "Tại tần số hài" : "Tại fundamental");
         return rows;
     }
@@ -103,6 +104,7 @@ public partial class AudioRouting
         Add("IR trái / phải / FDW", N(sweep?.ImpulseWindowLeftMs, " ms") + " / " + N(sweep?.ImpulseWindowRightMs, " ms") + " / " + N(sweep?.FrequencyDependentWindowCycles, " chu kỳ"));
         Add("Tần số thấp nhất tin cậy theo IR", N(sweep?.GatedMinimumFrequencyHz, " Hz"));
         Add("C50 / C80 / D50", N(sweep?.ClarityC50Db, " dB") + " / " + N(sweep?.ClarityC80Db, " dB") + " / " + N(sweep?.DefinitionD50Percent, "%"));
+        Add("C20 / Centre time TS", N(sweep?.ImpulsePlot?.ClarityC20Db, " dB") + " / " + N(sweep?.ImpulsePlot?.CentreTimeSeconds, " s"));
         foreach (var decay in sweep?.DecayEstimates ?? Array.Empty<DecayEstimate>()) Add(decay.Name, N(decay.Rt60Seconds, " s") + $" · R² {decay.RSquared:0.000} · {decay.Status}");
         foreach (var band in sweep?.OctaveBandRt60 ?? Array.Empty<BandRt60Result>()) Add($"Decay band {band.FrequencyHz:0} Hz", $"EDT {N(band.EdtSeconds, " s")} / T20 {N(band.T20Seconds, " s")} / T30 {N(band.T30Seconds, " s")} · hợp lệ {band.IsValid}");
         if (sweep?.ImpulseEffects is { } effects)
@@ -191,42 +193,5 @@ public partial class AudioRouting
                 _standardImpulseEffects = effects.Deserialize<ImpulseEffectReference>();
         }
         catch (Exception ex) { AppendLog("Line gốc", "Không đọc được dữ liệu trước làm mượt: " + ex.Message); }
-    }
-}
-
-public sealed class ImpulseAnalysisWindow : Window
-{
-    public ImpulseAnalysisWindow(StandardAcousticResult result)
-    {
-        Title = "Impulse / Echo / Reverb — cùng lượt log-sweep";
-        Width = 1100; Height = 720; MinWidth = 750; MinHeight = 500;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = new SolidColorBrush(Color.FromRgb(18, 18, 20)); Foreground = Brushes.White;
-        var layout = new DockPanel { Margin = new Thickness(12) }; Content = layout;
-        var text = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(6, 4, 6, 12),
-            Text = (result.ImpulseEffects?.Describe() ?? "Chưa có dữ liệu chẩn đoán hiệu ứng.")
-                + "\nIR/ETC dùng toàn đuôi thu, trước cửa sổ FDW. dBr theo đỉnh IR; T60 đuôi là hồi quy đuôi hiệu ứng, không phải chứng nhận RT60 phòng." };
-        DockPanel.SetDock(text, Dock.Top); layout.Children.Add(text);
-        var tabs = new TabControl(); layout.Children.Add(tabs);
-        var impulse = new WpfPlot();
-        var irLine = impulse.Plot.Add.Scatter(result.ImpulseResponse.Select(p => p.TimeSeconds * 1000).ToArray(),
-            result.ImpulseResponse.Select(p => 20 * Math.Log10(Math.Max(1e-9, Math.Abs(p.Value)))).ToArray());
-        irLine.LegendText = "Impulse"; irLine.MarkerSize = 0;
-        var etcLine = impulse.Plot.Add.Scatter(result.EnergyTimeCurve.Select(p => p.TimeSeconds * 1000).ToArray(),
-            result.EnergyTimeCurve.Select(p => p.Value).ToArray());
-        etcLine.LegendText = "ETC"; etcLine.MarkerSize = 0;
-        if (result.ImpulseEffects != null)
-            foreach (var tap in result.ImpulseEffects.EchoTaps)
-                impulse.Plot.Add.VerticalLine(tap.DelayMs).LegendText = $"Echo {tap.DelayMs:0} ms";
-        impulse.Plot.Axes.Bottom.Label.Text = "Thời gian từ direct (ms)";
-        impulse.Plot.Axes.Left.Label.Text = "dBr theo đỉnh IR";
-        impulse.Plot.Axes.SetLimits(-10, Math.Max(100, result.ImpulseResponse.LastOrDefault()?.TimeSeconds * 1000 ?? 1000), -110, 5);
-        impulse.Plot.ShowLegend();
-        tabs.Items.Add(new TabItem { Header = "Impulse / ETC", Content = impulse });
-        var decay = new WpfPlot();
-        decay.Plot.Add.Scatter(result.EnergyDecayCurve.Select(p => p.TimeSeconds * 1000).ToArray(), result.EnergyDecayCurve.Select(p => p.LevelDb).ToArray());
-        decay.Plot.Axes.Bottom.Label.Text = "Thời gian từ direct (ms)"; decay.Plot.Axes.Left.Label.Text = "Schroeder (dB)";
-        decay.Plot.Axes.SetLimits(0, Math.Max(100, result.ImpulseResponse.LastOrDefault()?.TimeSeconds * 1000 ?? 1000), -80, 2);
-        tabs.Items.Add(new TabItem { Header = "Schroeder decay", Content = decay });
     }
 }

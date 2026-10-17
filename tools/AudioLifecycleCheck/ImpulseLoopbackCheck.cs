@@ -59,10 +59,9 @@ internal static class ImpulseLoopbackCheck
             var analogInputs = inputs.Where(d => d.FriendlyName.Contains("analog", StringComparison.OrdinalIgnoreCase)).ToArray();
             if (analogOutputs.Length == 0 || analogInputs.Length == 0)
             {
-                using var enumerator = new MMDeviceEnumerator();
-                var known = enumerator.EnumerateAudioEndPoints(DataFlow.All, DeviceState.All).ToList();
-                try { Console.WriteLine(JsonSerializer.Serialize(new { stage = "analog-unavailable-no-stimulus", known = known.Where(d => d.FriendlyName.Contains("analog", StringComparison.OrdinalIgnoreCase) || d.FriendlyName.Contains("FastTrack", StringComparison.OrdinalIgnoreCase)).Select(d => new { name = d.FriendlyName, state = d.State.ToString() }) })); }
-                finally { foreach (var device in known) device.Dispose(); }
+                // Removed USB endpoints may throw even when reading FriendlyName.
+                // The active snapshot above is sufficient: do not probe stale devices.
+                Console.WriteLine(JsonSerializer.Serialize(new { stage = "analog-unavailable-no-stimulus" }));
                 return;
             }
             using var endpointEnumerator = new MMDeviceEnumerator();

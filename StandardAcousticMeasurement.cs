@@ -177,6 +177,7 @@ public sealed record StandardAcousticResult(
     public IReadOnlyList<BandRt60Result> OctaveBandRt60 { get; init; } = Array.Empty<BandRt60Result>();
     public RewDistortionStats? RewDistortion { get; init; }
     public ImpulseEffectResult? ImpulseEffects { get; init; }
+    public ImpulsePlotData? ImpulsePlot { get; init; }
 }
 
 public sealed record ComplexTransferAverage(
@@ -660,6 +661,14 @@ public static class StandardAcousticMeasurement
         (IReadOnlyList<TimeDomainPoint> impulseResponse,
             IReadOnlyList<TimeDomainPoint> stepResponse,
             IReadOnlyList<TimeDomainPoint> energyTimeCurve) = BuildTimeDomainViews(alignedImpulse, settings.SampleRate, preRoll);
+        // Keep the analysis gate unchanged. The display additionally needs up to
+        // one second of the circular deconvolution before t=0, like REW's IR view.
+        int displayPostCount = alignedImpulse.Length - preRoll;
+        int displayPreCount = Math.Min(settings.SampleRate, fftSize - displayPostCount);
+        var displayImpulse = new double[displayPreCount + displayPostCount];
+        for (int index = 0; index < displayImpulse.Length; index++)
+            displayImpulse[index] = impulseComplex[Mod(directSample - displayPreCount + index, fftSize)].Real;
+        ImpulsePlotData impulsePlot = ImpulsePlotAnalysis.Build(displayImpulse, settings.SampleRate, displayPreCount);
         var decayEstimates = new List<DecayEstimate>
         {
             FitDecay(decayCurve, "EDT", 0, -10),
@@ -772,6 +781,7 @@ public static class StandardAcousticMeasurement
         if (acquisitionInvalid)
         {
             c50 = c80 = d50 = double.NaN;
+            impulsePlot = impulsePlot with { ClarityC20Db = double.NaN, CentreTimeSeconds = double.NaN };
 			sweepHarmonics = Array.Empty<SweepHarmonicPoint>();
 			harmonicTransferFunctions = Array.Empty<Complex[]>();
             decayEstimates = decayEstimates.Select(item => item with
@@ -811,6 +821,7 @@ public static class StandardAcousticMeasurement
             ImpulsePeakToBackgroundDb = impulsePeakToBackgroundDb,
             SweepCorrelation = sweepCorrelation,
             HasPlausibleDirectArrival = hasPlausibleDirectArrival,
+            ImpulsePlot = impulsePlot,
             ImpulseEffects = global::SoncaAudioInspector.ImpulseEffects.Analyze(measurementImpulse,
                 settings.SampleRate, preRoll, !acquisitionInvalid && hasPlausibleDirectArrival, settings.EffectsSettings),
             Diagnostics = diagnostics,
@@ -2062,7 +2073,7 @@ public static class StandardAcousticMeasurement
         int directIndex)
     {
         int stride = Math.Max(1, impulse.Length / 12000);
-        double peakEnergy = impulse.Select(value => value * value).DefaultIfEmpty(Tiny).Max();
+        double[] envelopeDb = ImpulsePlotAnalysis.EnvelopeDb(impulse);
         var cumulative = new double[impulse.Length];
         double running = 0;
         for (int index = 0; index < impulse.Length; index++)
@@ -2082,8 +2093,10 @@ public static class StandardAcousticMeasurement
             double time = (index - directIndex) / (double)sampleRate;
             impulsePoints.Add(new TimeDomainPoint(time, impulse[index]));
             stepPoints.Add(new TimeDomainPoint(time, cumulative[index]));
-            etcPoints.Add(new TimeDomainPoint(time, 10.0 * Math.Log10(
-                (impulse[index] * impulse[index] + Tiny) / (peakEnergy + Tiny))));
+            int envelopeIndex = start;
+            for (int candidate = start + 1; candidate < end; candidate++)
+                if (envelopeDb[candidate] > envelopeDb[envelopeIndex]) envelopeIndex = candidate;
+            etcPoints.Add(new TimeDomainPoint((envelopeIndex - directIndex) / (double)sampleRate, envelopeDb[envelopeIndex]));
         }
         return (impulsePoints, stepPoints, etcPoints);
     }

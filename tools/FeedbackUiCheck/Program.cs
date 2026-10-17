@@ -20,6 +20,22 @@ internal static class Program
         var assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.Combine(directory, "SoncaAudioInspector.dll"));
         var app = (Application)Activator.CreateInstance(assembly.GetType("SoncaAudioInspector.App")!)!;
         app.GetType().GetMethod("InitializeComponent")!.Invoke(app, null);
+        // A UI check may pump rendering but must not launch the app's splash/login
+        // workflow or turn a dispatcher error into a modal warning that hides failure.
+        typeof(Application).GetField("_startupUri", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(app, null);
+        app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        app.Dispatcher.UnhandledExceptionFilter += (_, e) =>
+        {
+            Console.Error.WriteLine(e.Exception);
+            e.RequestCatch = false;
+        };
+        if (args.Length > 1 && args[1] == "--impulse-view-only")
+        {
+            var options = new System.Text.Json.JsonSerializerOptions { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
+            object result = System.Text.Json.JsonSerializer.Deserialize(File.ReadAllText(args[3]), assembly.GetType("SoncaAudioInspector.StandardAcousticResult")!, options)!;
+            ImpulseGraphUiChecks.Check(assembly, result, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
         if (args.Length > 1 && args[1] == "--manual-line-ui")
         {
             ManualLineUiChecks.Run(assembly, directory, Path.GetFullPath(args[2])); app.Shutdown(); return;
