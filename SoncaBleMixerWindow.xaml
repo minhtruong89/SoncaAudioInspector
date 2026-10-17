@@ -241,15 +241,15 @@
                         </Grid.ColumnDefinitions>
                         <!-- Scale Numbers & Ticks -->
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="100" FontSize="10" Foreground="#64748B" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="75" FontSize="10" Foreground="#64748B" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#64748B" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="25" FontSize="10" Foreground="#64748B" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="200" FontSize="10" Foreground="#64748B" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="150" FontSize="10" Foreground="#64748B" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#64748B" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#64748B" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#64748B" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderMicVol" Grid.Column="1" Style="{StaticResource VerticalFaderStyle}"
-                                Minimum="0" Maximum="100" Value="50" ValueChanged="Slider_ValueChanged"
-                                ToolTip="Kéo để tăng/giảm âm lượng Micro"/>
+                                Minimum="0" Maximum="200" Value="50" ValueChanged="Slider_ValueChanged"
+                                ToolTip="Mức Micro 0–200; 100 tương ứng gain 0 dB"/>
                     </Grid>
                 </Grid>
 
@@ -277,14 +277,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="75" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="25" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="200" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="150" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderEcho" Grid.Column="1" Style="{StaticResource LockedVerticalFaderStyle}"
-                                Minimum="0" Maximum="100" Value="46"/>
+                                Minimum="0" Maximum="200" Value="46"/>
                     </Grid>
                 </Grid>
 
@@ -312,14 +312,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="75" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="25" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="200" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="150" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderReverb" Grid.Column="1" Style="{StaticResource LockedVerticalFaderStyle}"
-                                Minimum="0" Maximum="100" Value="45"/>
+                                Minimum="0" Maximum="200" Value="45"/>
                     </Grid>
                 </Grid>
 
@@ -347,14 +347,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="75" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="25" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="200" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="150" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderMusicVol" Grid.Column="1" Style="{StaticResource LockedVerticalFaderStyle}"
-                                Minimum="0" Maximum="100" Value="70"/>
+                                Minimum="0" Maximum="200" Value="70"/>
                     </Grid>
                 </Grid>
 
@@ -382,14 +382,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="75" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="25" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="200" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="150" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderMasterVol" Grid.Column="1" Style="{StaticResource LockedVerticalFaderStyle}"
-                                Minimum="0" Maximum="100" Value="60"/>
+                                Minimum="0" Maximum="200" Value="60"/>
                     </Grid>
                 </Grid>
 
@@ -417,14 +417,14 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <Grid Grid.Column="0" VerticalAlignment="Stretch" Margin="0,11,4,11">
-                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
-                            <TextBlock Text="75" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
-                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                            <TextBlock Text="25" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
+                            <TextBlock Text="200" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right"/>
+                            <TextBlock Text="150" FontSize="10" Foreground="#475569" VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,68,0,0"/>
+                            <TextBlock Text="100" FontSize="10" Foreground="#475569" VerticalAlignment="Center" HorizontalAlignment="Right"/>
+                            <TextBlock Text="50" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,68"/>
                             <TextBlock Text="0" FontSize="10" Foreground="#475569" VerticalAlignment="Bottom" HorizontalAlignment="Right"/>
                         </Grid>
                         <Slider x:Name="SliderLiveVol" Grid.Column="1" Style="{StaticResource LockedVerticalFaderStyle}"
-                                Minimum="0" Maximum="100" Value="75"/>
+                                Minimum="0" Maximum="200" Value="75"/>
                     </Grid>
                 </Grid>
             </Grid>
@@ -532,6 +532,8 @@
                             <Border Background="#161A24" BorderBrush="#222A3A" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
                                 <StackPanel>
                                     <TextBlock Text="KẾT NỐI BLUETOOTH LE" FontSize="12" FontWeight="Bold" Foreground="#FFB830" Margin="0,0,0,8"/>
+                                    <TextBlock x:Name="TxtAudioConnection" Text="Bluetooth Windows: đang kiểm tra..." Foreground="#CBD5E1" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                    <TextBlock Text="Kết nối âm thanh Bluetooth và ngõ BLE điều khiển là hai kết nối riêng. Loa không phát tên vẫn được nhận qua dịch vụ Sonca 5343." Foreground="#94A3B8" TextWrapping="Wrap" FontSize="11" Margin="0,0,0,8"/>
                                     <Grid Margin="0,0,0,8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*"/>
@@ -631,9 +633,9 @@
                                 <StackPanel>
                                     <TextBlock Text="BỘ NHỚ LOA (EEPROM)" FontSize="12" FontWeight="Bold" Foreground="#FFB830" Margin="0,0,0,8"/>
                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                        <Button Content="💾 Lưu vào loa" Width="100" Height="28" Margin="0,0,6,0"
+                                        <Button x:Name="BtnSaveSpeakerConfig" Content="💾 Lưu vào loa" Width="100" Height="28" Margin="0,0,6,0"
                                                 Background="#2563EB" Foreground="White" BorderThickness="0" Cursor="Hand" Click="BtnSaveConfig_Click"/>
-                                        <Button Content="↺ Khôi phục gốc" Width="110" Height="28"
+                                        <Button x:Name="BtnResetSpeakerConfig" Content="↺ Khôi phục gốc" Width="110" Height="28"
                                                 Background="#475569" Foreground="White" BorderThickness="0" Cursor="Hand" Click="BtnFactoryReset_Click"/>
                                     </StackPanel>
                                 </StackPanel>

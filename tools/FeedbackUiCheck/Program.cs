@@ -36,6 +36,14 @@ internal static class Program
             object result = System.Text.Json.JsonSerializer.Deserialize(File.ReadAllText(args[3]), assembly.GetType("SoncaAudioInspector.StandardAcousticResult")!, options)!;
             ImpulseGraphUiChecks.Check(assembly, result, Path.GetFullPath(args[2])); app.Shutdown(); return;
         }
+        if (args.Length > 1 && args[1] == "--ble-mixer-ui")
+        {
+            BleMixerUiChecks.Run(assembly, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--ble-mixer-live-ui")
+        {
+            BleMixerUiChecks.Live(assembly, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
         if (args.Length > 1 && args[1] == "--manual-line-ui")
         {
             ManualLineUiChecks.Run(assembly, directory, Path.GetFullPath(args[2])); app.Shutdown(); return;

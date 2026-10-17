@@ -22,9 +22,9 @@ public static class SoncaBleProtocol
     public const byte Marker = 0x80;
 
     // Command Codes
-    public const byte CmdSetParam = 0x01;
+    public const byte CmdSetParam = 0x04;
     public const byte CmdGetParam = 0x02;
-    public const byte CmdInfo = 0x04;
+    public const byte CmdInfo = 0x01;
 
     // Channel Types
     public const byte ChannelMusic = 0x01;
@@ -32,29 +32,30 @@ public static class SoncaBleProtocol
     public const byte ChannelMaster = 0x00;
     public const byte ChannelEffect = 0x03;
 
-    // Base Register Addresses (0x3000 base)
-    public const ushort RegMasterVol = 0x3000;
+    // Fader/mute constants below refer to the verified C360 profile. Legacy
+    // input/tone/FBX/PEQ addresses are unverified and rejected by the manager.
+    public const ushort RegMasterVol = SoncaBleMixerProfile.MasterVolume;
     public const ushort RegInputSource = 0x3048; // 0: BT, 1: USB, 2: Optical, 3: HDMI, 4: Line IN, 5: Karaoke
-    public const ushort RegMasterMute = 0x3049;  // 0: Unmute, 1: Mute
+    public const ushort RegMasterMute = SoncaBleMixerProfile.MasterMute;
     public const ushort RegBassBoost = 0x304A;   // 0: Off, 1: On
     public const ushort RegEnhancer = 0x304B;    // 0: Off, 1: On
-    public const ushort RegLiveVol = 0x3540;     // 0..100 Live Stream / Record Vol
+    public const ushort RegLiveVol = SoncaBleMixerProfile.LiveVolume;
 
-    public const ushort RegMusicMasterVol = 0x3040; // 12352
+    public const ushort RegMusicMasterVol = SoncaBleMixerProfile.MusicVolume;
     public const ushort RegMusicBass = 0x3041;
     public const ushort RegMusicMid = 0x3042;
     public const ushort RegMusicTreble = 0x3043;
-    public const ushort RegMusicMute = 0x3044;
+    public const ushort RegMusicMute = SoncaBleMixerProfile.MusicMute;
 
-    public const ushort RegMicMasterVol = 0x3140; // 12608
+    public const ushort RegMicMasterVol = SoncaBleMixerProfile.MicVolume;
     public const ushort RegMicBass = 0x3141;
     public const ushort RegMicMid = 0x3142;
     public const ushort RegMicTreble = 0x3143;
     public const ushort RegFbxLevel = 0x3148; // 0: Off, 1: Cấp 1, 2: Cấp 2, 3: Cấp 3
-    public const ushort RegMicMute = 0x3149;
+    public const ushort RegMicMute = SoncaBleMixerProfile.MicMute;
 
-    public const ushort RegEchoLevel = 0x3440; // 13376
-    public const ushort RegReverbLevel = 0x3441;
+    public const ushort RegEchoLevel = SoncaBleMixerProfile.EchoVolume;
+    public const ushort RegReverbLevel = SoncaBleMixerProfile.ReverbVolume;
     public const ushort RegEchoDelay = 0x3442;
     public const ushort RegEchoRepeat = 0x3443;
     public const ushort RegReverbDecay = 0x3444;
@@ -142,9 +143,10 @@ public static class SoncaBleProtocol
     /// </summary>
     public static byte[] BuildParamPacket(byte channelType, ushort regAddr, ushort value)
     {
-        byte[] payload = new byte[5]
+        // The NRPN address already identifies the channel. The wire payload is
+        // a big-endian address/value pair, without an extra channel byte.
+        byte[] payload = new byte[4]
         {
-            channelType,
             (byte)((regAddr >> 8) & 0xFF),
             (byte)(regAddr & 0xFF),
             (byte)((value >> 8) & 0xFF),
@@ -153,6 +155,10 @@ public static class SoncaBleProtocol
 
         return BuildPacket(CmdSetParam, payload);
     }
+
+    // GET reads the current config through 0x6209=1; arbitrary NRPN GETs
+    // return empty acknowledgements on C360 and do not read that parameter.
+    public static byte[] BuildReadMixerPacket() => BuildPacket(CmdGetParam, new byte[] { 0x62, 0x09, 0x00, 0x01 });
 
     /// <summary>
     /// Chuyển đổi ngõ vào phần cứng (0: Bluetooth, 1: USB/MP3, 2: Optical, 3: Line IN, 4: Guitar).

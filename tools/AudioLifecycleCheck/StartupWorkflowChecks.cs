@@ -58,14 +58,13 @@ internal static class StartupWorkflowChecks
         // Test Sonca BLE protocol packet construction & CRC8
         byte[] infoPacket = SoncaBleProtocol.BuildInfoPacket();
         Require(infoPacket.Length == 13, "SCA=INFO packet length should be 13.");
-        Require(infoPacket[0] == 0x02 && infoPacket[1] == 0x80 && infoPacket[2] == 0x04 && infoPacket[3] == 0x08, "SCA=INFO header incorrect.");
-        Require(infoPacket[^1] == 0x3E, $"SCA=INFO CRC8 should be 0x3E, was 0x{infoPacket[^1]:X2}");
+        Require(infoPacket.AsSpan().SequenceEqual(Convert.FromHexString("028001085343413D494E464FF1")), "SCA=INFO captured wire packet mismatch.");
         Require(SoncaBleProtocol.TryParsePacket(infoPacket, out byte parsedCmd, out byte[] parsedPayload)
-            && parsedCmd == 0x04 && System.Text.Encoding.ASCII.GetString(parsedPayload) == "SCA=INFO", "Failed to parse info packet.");
+            && parsedCmd == 0x01 && System.Text.Encoding.ASCII.GetString(parsedPayload) == "SCA=INFO", "Failed to parse info packet.");
 
         byte[] paramPacket = SoncaBleProtocol.BuildParamPacket(SoncaBleProtocol.ChannelMusic, SoncaBleProtocol.RegMusicMasterVol, 75);
         Require(SoncaBleProtocol.TryParsePacket(paramPacket, out byte setCmd, out byte[] setPayload)
-            && setCmd == 0x01 && setPayload.Length == 5, "Param packet parse failed.");
+            && setCmd == 0x04 && setPayload.Length == 4 && setPayload[0] == 0x61 && setPayload[1] == 0x03, "Param packet parse failed.");
 
         // Test Ctrl+Shift+H shortcut handler
         int mixerOpenedCount = 0;

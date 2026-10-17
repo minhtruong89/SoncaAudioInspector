@@ -11,6 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="obj\**\*.cs" />
+    <Content Include="Fixtures\C360-config.hex" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Resource Include="..\..\Assets\app_icon.ico" Link="Assets\app_icon.ico" />

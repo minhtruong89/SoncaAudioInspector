@@ -19,6 +19,7 @@ public sealed record BleDeviceInfo(
     bool IsLikelySonca,
     DateTime LastSeen)
 {
+    public IReadOnlyList<Guid> ServiceUuids { get; init; } = Array.Empty<Guid>();
     public string FormattedAddress =>
         string.Join(":", Enumerable.Range(0, 6).Select(i => ((Address >> (8 * (5 - i))) & 0xFF).ToString("X2")));
 
@@ -26,7 +27,7 @@ public sealed record BleDeviceInfo(
         $"{Name} (RSSI: {Rssi} dBm) [{FormattedAddress}]" + (IsLikelySonca ? " ★ [Sonca/Acnos]" : "");
 }
 
-public sealed class SoncaBleManager : IDisposable
+public sealed partial class SoncaBleManager : IDisposable, ISoncaMixerWriter
 {
     private static readonly Lazy<SoncaBleManager> _instance = new(() => new SoncaBleManager());
     public static SoncaBleManager Instance => _instance.Value;
@@ -38,7 +39,8 @@ public sealed class SoncaBleManager : IDisposable
     private readonly ConcurrentDictionary<ulong, BleDeviceInfo> _discoveredDevices = new();
 
     public bool IsScanning => _watcher?.Status == BluetoothLEAdvertisementWatcherStatus.Started;
-    public bool IsConnected => _connectedDevice != null && _connectedDevice.ConnectionStatus == BluetoothConnectionStatus.Connected;
+    private bool CanWriteTransport => _controlReady && _writeCharacteristic != null && _connectedDevice?.ConnectionStatus == BluetoothConnectionStatus.Connected;
+    public bool IsConnected => _protocolReady && CanWriteTransport;
 
     public string ConnectedDeviceName => _connectedDevice?.Name ?? "";
     public string ConnectedDeviceAddress => _connectedDevice != null
@@ -54,6 +56,8 @@ public sealed class SoncaBleManager : IDisposable
     public event Action<bool, string>? ConnectionStatusChanged;
     public event Action<byte[], string>? DataSent;
     public event Action<byte[], string>? DataReceived;
+    public event Action<SoncaBleReply>? ReplyReceived;
+    public event Action<IReadOnlyDictionary<ushort, ushort>>? MixerStateReceived;
     public event Action<string>? LogMessage;
 
     public IReadOnlyCollection<BleDeviceInfo> DiscoveredDevices => _discoveredDevices.Values.ToList();
@@ -105,167 +109,33 @@ public sealed class SoncaBleManager : IDisposable
 
     private void OnAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
     {
-        string name = args.Advertisement.LocalName?.Trim() ?? "";
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            // Bỏ qua thiết bị không phát tên để tránh spam danh sách
-            return;
-        }
-
-        bool isSonca = SoncaBleProtocol.IsLikelySoncaDevice(name);
-        var info = new BleDeviceInfo(args.BluetoothAddress, name, args.RawSignalStrengthInDBm, isSonca, DateTime.Now);
-
+        _discoveredDevices.TryGetValue(args.BluetoothAddress, out var previous);
+        var info = SoncaBleDiscovery.Merge(args.BluetoothAddress, args.Advertisement.LocalName,
+            args.RawSignalStrengthInDBm, args.Advertisement.ServiceUuids, previous);
+        if (info == null) return;
         _discoveredDevices[args.BluetoothAddress] = info;
         DeviceDiscovered?.Invoke(info);
     }
 
-    public async Task<bool> ConnectAsync(ulong bluetoothAddress)
-    {
-        Disconnect();
-        StopScanning();
-
-        ConnectionStatusChanged?.Invoke(false, "Đang kết nối tới thiết bị...");
-        LogMessage?.Invoke($"[BLE] Bắt đầu kết nối tới 0x{bluetoothAddress:X12}...");
-
-        try
-        {
-            _connectedDevice = await BluetoothLEDevice.FromBluetoothAddressAsync(bluetoothAddress);
-            if (_connectedDevice == null)
-            {
-                ConnectionStatusChanged?.Invoke(false, "Không thể mở đối tượng BluetoothLEDevice.");
-                LogMessage?.Invoke("[BLE] Kết nối thất bại: thiết bị không phản hồi.");
-                return false;
-            }
-
-            _connectedDevice.ConnectionStatusChanged += OnDeviceConnectionStatusChanged;
-
-            // Truy vấn GATT Services
-            var servicesResult = await _connectedDevice.GetGattServicesAsync(BluetoothCacheMode.Uncached);
-            if (servicesResult.Status != GattCommunicationStatus.Success)
-            {
-                ConnectionStatusChanged?.Invoke(false, $"Lỗi truy vấn Services ({servicesResult.Status})");
-                LogMessage?.Invoke($"[BLE] Không đọc được GATT Services: {servicesResult.Status}");
-                return false;
-            }
-
-            var services = servicesResult.Services;
-            LogMessage?.Invoke($"[BLE] Tìm thấy {services.Count} GATT Service(s).");
-
-            GattDeviceService? targetService = null;
-
-            // Ưu tiên 1: Service có UUID Sonca 5343 hoặc standard 0xFFF0
-            targetService = services.FirstOrDefault(s => s.Uuid == SoncaBleProtocol.PrimaryServiceUuid)
-                         ?? services.FirstOrDefault(s => s.Uuid == SoncaBleProtocol.StandardUartServiceUuid)
-                         ?? services.FirstOrDefault(s => s.Uuid.ToString().StartsWith("0000fff0", StringComparison.OrdinalIgnoreCase))
-                         ?? services.FirstOrDefault(s => s.Uuid.ToString().StartsWith("00005343", StringComparison.OrdinalIgnoreCase));
-
-            // Nếu không có, tìm service đầu tiên chứa characteristic có cờ Write
-            if (targetService == null)
-            {
-                foreach (var s in services)
-                {
-                    var chars = await s.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
-                    if (chars.Status == GattCommunicationStatus.Success && chars.Characteristics.Any(c =>
-                        c.CharacteristicProperties.HasFlag(GattCharacteristicProperties.Write) ||
-                        c.CharacteristicProperties.HasFlag(GattCharacteristicProperties.WriteWithoutResponse)))
-                    {
-                        targetService = s;
-                        break;
-                    }
-                }
-            }
-
-            if (targetService == null && services.Count > 0)
-            {
-                targetService = services[0];
-            }
-
-            if (targetService == null)
-            {
-                ConnectionStatusChanged?.Invoke(false, "Không tìm thấy Service phù hợp trên thiết bị.");
-                return false;
-            }
-
-            LogMessage?.Invoke($"[BLE] Sử dụng Service: {targetService.Uuid}");
-
-            var charResult = await targetService.GetCharacteristicsAsync(BluetoothCacheMode.Uncached);
-            if (charResult.Status != GattCommunicationStatus.Success)
-            {
-                ConnectionStatusChanged?.Invoke(false, "Không đọc được Characteristics.");
-                return false;
-            }
-
-            var characteristics = charResult.Characteristics;
-
-            // Tìm Write Characteristic
-            _writeCharacteristic = characteristics.FirstOrDefault(c => c.Uuid == SoncaBleProtocol.WriteCharacteristicUuid1)
-                               ?? characteristics.FirstOrDefault(c => c.Uuid == SoncaBleProtocol.WriteCharacteristicUuid2)
-                               ?? characteristics.FirstOrDefault(c => c.CharacteristicProperties.HasFlag(GattCharacteristicProperties.WriteWithoutResponse))
-                               ?? characteristics.FirstOrDefault(c => c.CharacteristicProperties.HasFlag(GattCharacteristicProperties.Write));
-
-            // Tìm Notify/Read Characteristic
-            _notifyCharacteristic = characteristics.FirstOrDefault(c => c.Uuid == SoncaBleProtocol.NotifyCharacteristicUuid1)
-                                ?? characteristics.FirstOrDefault(c => c.Uuid == SoncaBleProtocol.NotifyCharacteristicUuid2)
-                                ?? characteristics.FirstOrDefault(c => c.CharacteristicProperties.HasFlag(GattCharacteristicProperties.Notify))
-                                ?? characteristics.FirstOrDefault(c => c.CharacteristicProperties.HasFlag(GattCharacteristicProperties.Indicate));
-
-            if (_writeCharacteristic == null)
-            {
-                ConnectionStatusChanged?.Invoke(false, "Không tìm thấy Characteristic ghi (Write).");
-                return false;
-            }
-
-            LogMessage?.Invoke($"[BLE] Write Char: {_writeCharacteristic.Uuid} (Properties: {_writeCharacteristic.CharacteristicProperties})");
-
-            // Kích hoạt nhận thông báo (Notification)
-            if (_notifyCharacteristic != null)
-            {
-                try
-                {
-                    _notifyCharacteristic.ValueChanged += OnCharacteristicValueChanged;
-                    var cccdValue = _notifyCharacteristic.CharacteristicProperties.HasFlag(GattCharacteristicProperties.Indicate)
-                        ? GattClientCharacteristicConfigurationDescriptorValue.Indicate
-                        : GattClientCharacteristicConfigurationDescriptorValue.Notify;
-
-                    var status = await _notifyCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(cccdValue);
-                    LogMessage?.Invoke($"[BLE] Đăng ký lắng nghe Notify Char: {_notifyCharacteristic.Uuid} (Kết quả: {status})");
-                }
-                catch (Exception ex)
-                {
-                    LogMessage?.Invoke($"[BLE] Cảnh báo kích hoạt Notify: {ex.Message}");
-                }
-            }
-
-            ConnectionStatusChanged?.Invoke(true, $"Đã kết nối: {_connectedDevice.Name}");
-            LogMessage?.Invoke($"[BLE] ★ Kết nối thành công tới {_connectedDevice.Name}!");
-
-            // Tự động gửi gói SCA=INFO để bắt tay và đọc trạng thái loa
-            _ = Task.Run(async () =>
-            {
-                await Task.Delay(300);
-                await SendInfoQueryAsync();
-            });
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            ConnectionStatusChanged?.Invoke(false, $"Lỗi kết nối: {ex.Message}");
-            LogMessage?.Invoke($"[BLE] Ngoại lệ khi kết nối: {ex}");
-            Disconnect();
-            return false;
-        }
-    }
-
     private void OnDeviceConnectionStatusChanged(BluetoothLEDevice sender, object args)
     {
-        bool connected = sender.ConnectionStatus == BluetoothConnectionStatus.Connected;
-        ConnectionStatusChanged?.Invoke(connected, connected ? $"Đang kết nối: {sender.Name}" : "Thiết bị đã ngắt kết nối.");
+        if (!ReferenceEquals(sender, _connectedDevice)) return;
+        if (sender.ConnectionStatus == BluetoothConnectionStatus.Disconnected)
+        {
+            // A later Windows reconnection must handshake/read state again;
+            // old config and in-flight commands cannot carry across it.
+            Disconnect();
+            return;
+        }
+        bool connected = IsConnected;
+        ConnectionStatusChanged?.Invoke(connected, connected ? $"BLE sẵn sàng: {sender.Name}"
+            : IsConnecting ? "Đang mở dịch vụ điều khiển BLE..." : "BLE chưa sẵn sàng / đã ngắt kết nối.");
         LogMessage?.Invoke($"[BLE] Trạng thái kết nối đổi: {sender.ConnectionStatus}");
     }
 
     private void OnCharacteristicValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
     {
+        if (!ReferenceEquals(sender, _notifyCharacteristic)) return;
         try
         {
             var reader = DataReader.FromBuffer(args.CharacteristicValue);
@@ -283,6 +153,14 @@ public sealed class SoncaBleManager : IDisposable
 
             DataReceived?.Invoke(bytes, desc);
             LogMessage?.Invoke($"[RX] {desc}");
+            foreach (var reply in _replyDecoder.Push(bytes))
+            {
+                // INFO's first data byte is an info flag (00 on C360), not the
+                // status=01 used by parameter replies. Validate its signature.
+                if (reply.Command == SoncaBleProtocol.CmdInfo && reply.Payload.AsSpan().StartsWith("SCA_"u8)) _infoReply?.TrySetResult(reply);
+                if (SoncaBleMixerProfile.TryReadSnapshot(reply, out var state)) _stateReply?.TrySetResult(state);
+                ReplyReceived?.Invoke(reply);
+            }
         }
         catch (Exception ex)
         {
@@ -290,25 +168,32 @@ public sealed class SoncaBleManager : IDisposable
         }
     }
 
-    public async Task<bool> SendPacketAsync(byte[] data, string? description = null)
+    private async Task<bool> WriteTransportAsync(byte[] data, string? description = null)
     {
-        if (_writeCharacteristic == null || _connectedDevice == null)
+        bool infoQuery = data.AsSpan().SequenceEqual(SoncaBleProtocol.BuildInfoPacket());
+        if (!CanWriteTransport || (!IsConnected && !infoQuery) || _writeCharacteristic == null)
         {
             LogMessage?.Invoke("[BLE TX] Chưa kết nối tới loa hoặc thiếu Write Characteristic.");
             return false;
         }
-
+        int generation = _connectionGeneration;
+        var characteristic = _writeCharacteristic;
+        bool writeLockTaken = false;
         try
         {
-            var writer = new DataWriter();
+            await _writeGate.WaitAsync();
+            writeLockTaken = true;
+            if (generation != _connectionGeneration || !CanWriteTransport || (!IsConnected && !infoQuery) || !ReferenceEquals(characteristic, _writeCharacteristic)) return false;
+            using var writer = new DataWriter();
             writer.WriteBytes(data);
             var buffer = writer.DetachBuffer();
 
-            var writeOption = _writeCharacteristic.CharacteristicProperties.HasFlag(GattCharacteristicProperties.WriteWithoutResponse)
+            var writeOption = characteristic.CharacteristicProperties.HasFlag(GattCharacteristicProperties.WriteWithoutResponse)
                 ? GattWriteOption.WriteWithoutResponse
                 : GattWriteOption.WriteWithResponse;
 
-            var result = await _writeCharacteristic.WriteValueWithResultAsync(buffer, writeOption);
+            var result = await characteristic.WriteValueWithResultAsync(buffer, writeOption).AsTask().WaitAsync(TimeSpan.FromSeconds(8));
+            if (generation != _connectionGeneration) return false;
             if (result.Status == GattCommunicationStatus.Success)
             {
                 string hex = BitConverter.ToString(data).Replace("-", " ");
@@ -328,6 +213,7 @@ public sealed class SoncaBleManager : IDisposable
             LogMessage?.Invoke($"[BLE TX Error] {ex.Message}");
             return false;
         }
+        finally { if (writeLockTaken) _writeGate.Release(); }
     }
 
     public async Task<bool> SendInfoQueryAsync()
@@ -344,6 +230,14 @@ public sealed class SoncaBleManager : IDisposable
 
     public void Disconnect()
     {
+        Interlocked.Increment(ref _connectionGeneration);
+        _controlReady = false;
+        _protocolReady = false;
+        _infoReply?.TrySetCanceled(); _infoReply = null;
+        _stateReply?.TrySetCanceled(); _stateReply = null;
+        SupportsMixerControls = false;
+        MixerState = new Dictionary<ushort, ushort>();
+        _replyDecoder.Clear();
         if (_notifyCharacteristic != null)
         {
             try
@@ -355,6 +249,7 @@ public sealed class SoncaBleManager : IDisposable
         }
 
         _writeCharacteristic = null;
+        ReleaseGattServices();
 
         if (_connectedDevice != null)
         {

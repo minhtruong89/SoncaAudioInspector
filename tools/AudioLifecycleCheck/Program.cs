@@ -12,6 +12,10 @@ string Option(string key, string fallback) => args.FirstOrDefault(a => a.StartsW
 int cycles = int.Parse(Option("--cycles", "0"));
 int continuousSeconds = int.Parse(Option("--continuous-seconds", "0"));
 bool verifyFixes = args.Contains("--verify-fixes");
+if (args.Contains("--ble-snapshot")) { await BleConnectionChecks.SnapshotAsync(); return; }
+if (args.Contains("--ble-logic")) { BleConnectionChecks.Logic(); return; }
+if (args.Contains("--ble-connect-check")) { await BleConnectionChecks.ConnectControlAsync(); return; }
+if (args.Contains("--ble-control-check")) { await BleConnectionChecks.ConnectControlAsync(exerciseControls: true); return; }
 if (args.Contains("--manual-line-check")) { await ManualInputCheck.Line(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory))); return; }
 if (args.Contains("--manual-input-check")) { await ManualInputCheck.Run(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory))); return; }
 if (args.Contains("--sync-standard-rates")) { ImpulseLoopbackCheck.SyncStandardRates(); return; }
