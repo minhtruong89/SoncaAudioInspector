@@ -2,6 +2,18 @@ using System.Numerics;
 using MathNet.Numerics.IntegralTransforms;
 using SoncaAudioInspector;
 
+if (args.Contains("--impulse-effects"))
+{
+    ImpulseEffectsChecks.Run(Path.GetFullPath(args[Array.IndexOf(args, "--impulse-effects") + 1]));
+    return;
+}
+
+if (args.Contains("--rew-regression"))
+{
+    RewRegressionChecks.Run();
+    return;
+}
+
 const int sampleRate = 48000;
 var settings = new LogSweepSettings(
     SampleRate: sampleRate,

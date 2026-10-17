@@ -20,10 +20,14 @@ namespace SoncaAudioInspector
 {
     public class CheckingConfig
     {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? Extra { get; set; }
         public List<ModelConfig> models { get; set; } = new List<ModelConfig>();
     }
     public class ModelConfig
     {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? Extra { get; set; }
         public string model { get; set; } = "";
         public TestItems testItems { get; set; } = new TestItems();
         
@@ -42,6 +46,8 @@ namespace SoncaAudioInspector
     }
     public class ProductIdLayoutConfig
     {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? Extra { get; set; }
         public double? layoutX { get; set; }
         public double? layoutY { get; set; }
         public double? layoutXRatio { get; set; }
@@ -52,6 +58,8 @@ namespace SoncaAudioInspector
     }
     public class ItemSlotConfig
     {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? Extra { get; set; }
         public int slot { get; set; }
         public string name { get; set; } = "";
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
@@ -68,16 +76,22 @@ namespace SoncaAudioInspector
     }
     public class TestItems
     {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? Extra { get; set; }
         public InOutConfig InOut { get; set; } = new InOutConfig();
     }
     public class InOutConfig
     {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? Extra { get; set; }
         public string Description { get; set; } = "";
         public DevicesConfig Devices { get; set; } = new DevicesConfig();
         public List<TestConfig> Tests { get; set; } = new List<TestConfig>();
     }
     public class DevicesConfig
     {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? Extra { get; set; }
         public Dictionary<string, string> Input { get; set; } = new Dictionary<string, string>();
         public Dictionary<string, string> Output { get; set; } = new Dictionary<string, string>();
     }
@@ -104,8 +118,10 @@ namespace SoncaAudioInspector
             else writer.WriteNullValue();
         }
     }
-    public class TestConfig
+    public class TestConfig : System.Text.Json.Serialization.IJsonOnDeserialized
     {
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? Extra { get; set; }
         public string id { get; set; } = "";
         public string name { get; set; } = "";
         
@@ -183,9 +199,29 @@ namespace SoncaAudioInspector
         public string? AmbientRecordingIn { get; set; }
         public bool? NoiseDiagnostics { get; set; }
         public List<CriticalZoneConfig>? CriticalZones { get; set; }
+        public ImpulseEffectSettings? ImpulseEffects { get; set; }
 
         [System.Text.Json.Serialization.JsonPropertyName("Minimum Input Signal dBFS")]
         public double? MinimumInputSignalDbFs { get; set; }
+
+        void System.Text.Json.Serialization.IJsonOnDeserialized.OnDeserialized()
+        {
+            // Older model files use names such as "Bass THD Frequency" and
+            // "Frequency Response Method". Resolve those aliases so editing a
+            // visible JSON setting actually changes the test configuration.
+            if (Extra == null) return;
+            static string Key(string value) => string.Concat(value.Where(char.IsLetterOrDigit));
+            var properties = typeof(TestConfig).GetProperties().Where(p => p.CanWrite && p.Name != nameof(Extra)).ToArray();
+            foreach (var entry in Extra.ToArray())
+            {
+                var property = properties.FirstOrDefault(p => string.Equals(Key(p.Name), Key(entry.Key), StringComparison.OrdinalIgnoreCase));
+                if (property == null) continue;
+                object? current = property.GetValue(this);
+                if (current == null || current is string text && text.Length == 0)
+                    property.SetValue(this, entry.Value.Deserialize(property.PropertyType));
+                Extra.Remove(entry.Key);
+            }
+        }
     }
 
     public class CriticalZoneConfig
@@ -208,7 +244,9 @@ namespace SoncaAudioInspector
         public string LastSerialNumber { get; set; } = "";
         public bool SendToServer { get; set; } = true;
         public bool UseLogSweepFrequencyResponse { get; set; }
-        public bool NormalizeFrequencyResponseToOneKilohertz { get; set; } = true;
+        public bool NormalizeFrequencyResponseToOneKilohertz { get; set; }
+        public bool ApplyDistortionCalibration { get; set; }
+        public bool UseHarmonicFrequencyAsDistortionReference { get; set; }
         public double LogSweepDurationSeconds { get; set; } = 65536.0 / 44100.0;
         public double MultitoneDurationSeconds { get; set; } = 10.0;
         public string AmbientRecordingDeviceId { get; set; } = "";
@@ -239,7 +277,6 @@ namespace SoncaAudioInspector
 
     public partial class MainWindow : Window
     {
-        private const string SupportedModelName = "MI SAM";
         private AudioEngine _audioEngine;
         private TestRunner _testRunner;
 
@@ -356,7 +393,7 @@ namespace SoncaAudioInspector
                     {
                         _checkingConfig.models = _checkingConfig.models
                             .Where(model => IsSupportedModel(model.model))
-                            .Take(1)
+                            .DistinctBy(model => model.model.Trim(), StringComparer.OrdinalIgnoreCase)
                             .ToList();
                         ComboModels.Items.Clear();
                         foreach (var m in _checkingConfig.models)
@@ -496,7 +533,7 @@ namespace SoncaAudioInspector
                     .OfType<string>()
                     .Where(v => !string.IsNullOrWhiteSpace(v))
                     .Where(IsSupportedModel)
-                    .Select(_ => SupportedModelName)
+                    .Select(value => value.Trim())
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
@@ -1598,14 +1635,12 @@ namespace SoncaAudioInspector
                 }
             }
 
-            ComboModels.Items.Add(SupportedModelName);
-            ComboModels.SelectedItem = SupportedModelName;
+            ComboModels.Items.Add(model!.Trim());
+            ComboModels.SelectedItem = model.Trim();
         }
 
         private static bool IsSupportedModel(string? model) =>
-            !string.IsNullOrWhiteSpace(model)
-            && string.Equals(BomCsvParser.NormalizeModelKey(model),
-                BomCsvParser.NormalizeModelKey(SupportedModelName), StringComparison.OrdinalIgnoreCase);
+            !string.IsNullOrWhiteSpace(model);
 
         private void BtnAddProduct_Click(object sender, RoutedEventArgs e)
         {
@@ -1833,6 +1868,21 @@ namespace SoncaAudioInspector
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            if (TryHandleBleMixerShortcut(e.Key, Keyboard.Modifiers, e.IsRepeat, OpenBleMixerController))
+            {
+                e.Handled = true;
+                return;
+            }
+            if (TryHandleShortcutsHelpShortcut(e.Key, Keyboard.Modifiers, e.IsRepeat, OpenShortcutsHelp))
+            {
+                e.Handled = true;
+                return;
+            }
+            if (TryHandleModelShortcut(e.Key, Keyboard.Modifiers, e.IsRepeat, OpenModelEditor))
+            {
+                e.Handled = true;
+                return;
+            }
             if (e.Key == Key.Escape)
             {
                 if (_audioRoutingView != null && (_audioRoutingView.IsFreqExpanded || _audioRoutingView.IsThdExpanded))
@@ -1841,6 +1891,126 @@ namespace SoncaAudioInspector
                     e.Handled = true;
                 }
             }
+        }
+
+        public static bool TryHandleBleMixerShortcut(Key key, ModifierKeys modifiers, bool isRepeat, Action openMixer)
+        {
+            if (modifiers != (ModifierKeys.Control | ModifierKeys.Shift) || key != Key.H) return false;
+            if (!isRepeat) openMixer();
+            return true;
+        }
+
+        public static bool TryHandleShortcutsHelpShortcut(Key key, ModifierKeys modifiers, bool isRepeat, Action showHelp)
+        {
+            bool isCtrl = (modifiers & ModifierKeys.Control) == ModifierKeys.Control && (modifiers & ModifierKeys.Alt) == 0;
+            bool isSlash = key == Key.OemQuestion || key == Key.Divide;
+            if (!isCtrl || !isSlash) return false;
+            if (!isRepeat) showHelp();
+            return true;
+        }
+
+        private ShortcutsHelpWindow? _shortcutsHelpWindow;
+
+        private void OpenShortcutsHelp()
+        {
+            if (_shortcutsHelpWindow != null && _shortcutsHelpWindow.IsLoaded)
+            {
+                if (_shortcutsHelpWindow.WindowState == WindowState.Minimized)
+                {
+                    _shortcutsHelpWindow.WindowState = WindowState.Normal;
+                }
+                if (_shortcutsHelpWindow.IsActive)
+                {
+                    _shortcutsHelpWindow.Close();
+                    _shortcutsHelpWindow = null;
+                    return;
+                }
+                _shortcutsHelpWindow.Activate();
+                _shortcutsHelpWindow.Focus();
+                return;
+            }
+
+            _shortcutsHelpWindow = new ShortcutsHelpWindow
+            {
+                Owner = this
+            };
+            _shortcutsHelpWindow.Closed += (_, _) => _shortcutsHelpWindow = null;
+            _shortcutsHelpWindow.Show();
+        }
+
+        private SoncaBleMixerWindow? _bleMixerWindow;
+
+        private void OpenBleMixerController()
+        {
+            try
+            {
+                string? selectedModel = ComboModels.SelectedItem?.ToString();
+                if (_bleMixerWindow != null && _bleMixerWindow.IsLoaded)
+                {
+                    _bleMixerWindow.SetTargetModel(selectedModel);
+                    if (_bleMixerWindow.WindowState == WindowState.Minimized)
+                    {
+                        _bleMixerWindow.WindowState = WindowState.Normal;
+                    }
+                    _bleMixerWindow.Activate();
+                    _bleMixerWindow.Focus();
+                    return;
+                }
+
+                _bleMixerWindow = new SoncaBleMixerWindow(selectedModel)
+                {
+                    Owner = this
+                };
+                _bleMixerWindow.Closed += (_, _) => _bleMixerWindow = null;
+                _bleMixerWindow.Show();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine("Lỗi khởi tạo cửa sổ SoncaBleMixerWindow: " + ex);
+                MessageBox.Show(this, "Không thể mở bộ điều khiển Sonca BLE Mixer:\n" + ex.Message, "Lỗi khởi tạo", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        internal static bool TryHandleModelShortcut(Key key, ModifierKeys modifiers, bool isRepeat, Action<bool> openEditor)
+        {
+            if (modifiers != (ModifierKeys.Control | ModifierKeys.Shift) || (key != Key.M && key != Key.N)) return false;
+            if (!isRepeat) openEditor(key == Key.N);
+            return true;
+        }
+
+        private void OpenModelEditor(bool createNew)
+        {
+            if (_audioRoutingView?.IsModelTransitionBusy == true || IsStandardMeasurementBusy)
+            {
+                ModernMessageBox.Show(this, "Hãy dừng phép đo trước khi sửa cấu hình model.", "Cấu hình model", ModernMessageBox.MessageBoxType.Warning);
+                return;
+            }
+            string? selected = ComboModels.SelectedItem?.ToString();
+            ModelConfig? original = createNew ? null : _checkingConfig.models.FirstOrDefault(m => string.Equals(m.model, selected, StringComparison.OrdinalIgnoreCase));
+            if (!createNew && original == null)
+            {
+                ModernMessageBox.Show(this, "Chọn model cần sửa, hoặc nhấn Ctrl+Shift+N để thêm model.", "Cấu hình model", ModernMessageBox.MessageBoxType.Warning);
+                return;
+            }
+            var editor = new ModelConfigEditorWindow(createNew ? null : original) { Owner = this };
+            editor.SaveModel = candidate =>
+            {
+                if (_checkingConfig.models.Any(m => !ReferenceEquals(m, original) && string.Equals(m.model.Trim(), candidate.model, StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidDataException("Tên model đã tồn tại.");
+                var previous = _checkingConfig.models.ToList();
+                if (!createNew && original != null) _checkingConfig.models[_checkingConfig.models.IndexOf(original)] = candidate;
+                else _checkingConfig.models.Add(candidate);
+                if (!SaveCheckingConfig())
+                {
+                    _checkingConfig.models = previous;
+                    throw new IOException("Không ghi được checking_config.json; cấu hình cũ được giữ nguyên.");
+                }
+                StopSelectedModelDeviceMonitor();
+                ComboModels.Items.Clear();
+                foreach (var model in _checkingConfig.models) ComboModels.Items.Add(model.model);
+                SelectModel(candidate.model);
+            };
+            editor.ShowDialog();
         }
 
         private void BtnToggleSettings_Click(object sender, RoutedEventArgs e)

@@ -18,7 +18,10 @@ public sealed record LogSweepSettings(
     double ImpulseWindowLeftMs = 2.0,
     double ImpulseWindowRightMs = 500.0,
     double FrequencyDependentWindowCycles = 15.0,
-    IReadOnlyList<double>? DistortionEvaluationFrequenciesHz = null);
+    IReadOnlyList<double>? DistortionEvaluationFrequenciesHz = null,
+    bool ApplyDistortionCalibration = false,
+    bool UseHarmonicFrequencyAsDistortionReference = false,
+    ImpulseEffectSettings? EffectsSettings = null);
 
 public sealed record FrequencyResponsePoint(
     double FrequencyHz,
@@ -173,6 +176,7 @@ public sealed record StandardAcousticResult(
     public Complex[] AlignedTransferFunction { get; init; } = Array.Empty<Complex>();
     public IReadOnlyList<BandRt60Result> OctaveBandRt60 { get; init; } = Array.Empty<BandRt60Result>();
     public RewDistortionStats? RewDistortion { get; init; }
+    public ImpulseEffectResult? ImpulseEffects { get; init; }
 }
 
 public sealed record ComplexTransferAverage(
@@ -457,6 +461,13 @@ public static class StandardAcousticMeasurement
             invFilter[i] = excitation[exLen - 1 - i] * Math.Exp(-t / L);
         }
         Fourier.Forward(invFilter, FourierOptions.Matlab);
+        // Give the inverse filter unity linear gain. Without this factor the
+        // reported fundamental level grows with sweep length and is not dBFS.
+        int inverseReferenceBin = Math.Clamp((int)Math.Round(
+            Math.Clamp(1000.0, settings.StartFrequencyHz, settings.EndFrequencyHz)
+            * fftSize / settings.SampleRate), 1, fftSize / 2 - 1);
+        double inverseGain = Math.Max(Tiny, (inputSpectrum[inverseReferenceBin] * invFilter[inverseReferenceBin]).Magnitude);
+        for (int bin = 0; bin < fftSize; bin++) invFilter[bin] /= inverseGain;
         // outputSpectrum is still the unmodified FFT of the clock-corrected capture.
         // Reuse it for Farina instead of allocating and transforming the same data again.
         var farinaImpulseSpectrum = new Complex[fftSize];
@@ -800,6 +811,8 @@ public static class StandardAcousticMeasurement
             ImpulsePeakToBackgroundDb = impulsePeakToBackgroundDb,
             SweepCorrelation = sweepCorrelation,
             HasPlausibleDirectArrival = hasPlausibleDirectArrival,
+            ImpulseEffects = global::SoncaAudioInspector.ImpulseEffects.Analyze(measurementImpulse,
+                settings.SampleRate, preRoll, !acquisitionInvalid && hasPlausibleDirectArrival, settings.EffectsSettings),
             Diagnostics = diagnostics,
             AlignedTransferFunction = alignedTransfer,
             UngatedFrequencyResponse = ungatedResponse,
@@ -956,10 +969,12 @@ public static class StandardAcousticMeasurement
             throw new ArgumentException("Transfer function không hợp lệ.", nameof(alignedTransfer));
 		Complex[] impulse = alignedTransfer.ToArray();
 		Fourier.Inverse(impulse, FourierOptions.Matlab);
-		double[] realImpulse = impulse.Select(value => value.Real).ToArray();
-		double maximumRightMs = Math.Min(250.0, Math.Max(8.0, (realImpulse.Length - 1) * 1000.0 / sampleRate));
-		return BuildFrequencyDependentWindowResponse(realImpulse, sampleRate, 0,
-			minFrequency, maxFrequency, pointsPerOctave, micCalib, 0.0, maximumRightMs, 15.0);
+		int preRoll = Math.Max(1, (int)Math.Round(.002 * sampleRate));
+		var realImpulse = new double[impulse.Length + preRoll];
+		for (int i = 0; i < realImpulse.Length; i++) realImpulse[i] = impulse[(i - preRoll + impulse.Length) % impulse.Length].Real;
+		double maximumRightMs = Math.Min(500.0, Math.Max(8.0, (impulse.Length - 1) * 1000.0 / sampleRate));
+		return BuildFrequencyDependentWindowResponse(realImpulse, sampleRate, preRoll,
+			minFrequency, maxFrequency, pointsPerOctave, micCalib, 2.0, maximumRightMs, 15.0);
     }
 
     public static PinkNoiseResult AnalyzePinkNoise(float[] samples, int sampleRate)
@@ -1696,16 +1711,14 @@ public static class StandardAcousticMeasurement
         for (int n = 1; n <= 9; n++)
             offsets[n] = n == 1 ? 0.0 : settings.DurationSeconds * Math.Log(n) / logRatio * sampleRate;
 
-        // Window size cho mỗi order: giới hạn bởi khoảng cách đến order kề (REW approach).
-        // Dùng symmetric Hann window với độ rộng = min(gap_to_prev, gap_to_next) / 2.
-        // Để đơn giản và ổn định: window = min(half-gap, ImpulseWindowLeft/Right từ settings).
-        int defaultLeft  = Math.Max(8,  (int)Math.Round(settings.ImpulseWindowLeftMs  * sampleRate / 1000.0));
+        // Isolate orders at their predicted Farina times. Longer sweeps allow
+        // wider gates and retain more decay without merging adjacent orders.
+        int defaultLeft  = Math.Max(8, (int)Math.Round(Math.Max(50.0, settings.ImpulseWindowLeftMs) * sampleRate / 1000.0));
         // Harmonic orders need a compact, non-overlapping Farina window. The wider
         // IR/FDW limit used for frequency response must not merge adjacent orders.
-        int defaultRight = Math.Max(32, (int)Math.Round(Math.Min(20.0, settings.ImpulseWindowRightMs) * sampleRate / 1000.0));
+        int defaultRight = Math.Max(32, (int)Math.Round(settings.ImpulseWindowRightMs * sampleRate / 1000.0));
 
 	        var spectra = new Complex[10][];
-	        double impulseBackground = EstimateRobustImpulseBackground(impulse, fftSize);
 
         for (int order = 1; order <= 9; order++)
         {
@@ -1713,33 +1726,23 @@ public static class StandardAcousticMeasurement
             // gap_prev = offset[order] - offset[order-1],  gap_next = offset[order+1] - offset[order]
             double gapPrev = order > 1 ? offsets[order] - offsets[order - 1] : double.MaxValue;
             double gapNext = order < 9 ? offsets[order + 1] - offsets[order] : double.MaxValue;
-            int maxHalfLeft  = (int)Math.Floor(gapPrev * 0.45);   // 45% của gap để có margin
-            int maxHalfRight = (int)Math.Floor(gapNext * 0.45);
+            // Higher orders precede this impulse (left); lower orders follow it
+            // (right). Keep the gates disjoint, but retain the causal decay.
+            int maxHalfLeft  = order < 9 ? (int)Math.Floor(gapNext * 0.45) : defaultLeft;
+            int maxHalfRight = order > 1 ? (int)Math.Floor(gapPrev * 0.45) : defaultRight;
             int left  = Math.Clamp(defaultLeft,  8, Math.Max(8,  maxHalfLeft));
             int right = Math.Clamp(defaultRight, 8, Math.Max(8,  maxHalfRight));
 
 	            int expectedCenter = Mod((int)Math.Round(directSample - offsets[order]), fftSize);
-	            int center = order == 1
-	                ? expectedCenter
-	                : FindStrongestCircularImpulseNear(impulse, expectedCenter, left, right);
-	            double temporalPeak = Math.Abs(impulse[center].Real);
-	            bool timeCorrelated = order == 1
-	                || temporalPeak >= Math.Max(Tiny, impulseBackground * Math.Pow(10.0, 12.0 / 20.0));
-	            if (!timeCorrelated)
-	            {
-	                spectra[order] = Array.Empty<Complex>();
-	                continue;
-	            }
+	            int center = expectedCenter;
 	            var windowed = new Complex[fftSize];
 
             for (int rel = -left; rel <= right; rel++)
             {
-                // Two half-Hann tapers keep unity gain at the detected impulse even when
-                // the pre/post windows are asymmetric. A single Hann across left+right
-                // would peak after t=0 and can inflate a delayed harmonic relative to H1.
-                double w = rel <= 0
-                    ? 0.5 + 0.5 * Math.Cos(Math.PI * rel / Math.Max(1, left))
-                    : 0.5 + 0.5 * Math.Cos(Math.PI * rel / Math.Max(1, right));
+                // Flat interior preserves delayed energy; taper only the outer
+                // 10%. A half-Hann over the full gate attenuates real decay.
+                double position = rel <= 0 ? -rel / (double)left : rel / (double)right;
+                double w = position <= .9 ? 1.0 : .5 + .5 * Math.Cos(Math.PI * (position - .9) / .1);
                 int src = Mod(center + rel, fftSize);
                 int dst = rel + left;
                 if (dst < fftSize)
@@ -1775,7 +1778,8 @@ public static class StandardAcousticMeasurement
 	        double minimumFundamental = Math.Max(
             settings.StartFrequencyHz,
             1000.0 / Math.Max(1.0, settings.ImpulseWindowLeftMs + settings.ImpulseWindowRightMs));
-        double maximumFundamental = Math.Min(settings.EndFrequencyHz, settings.SampleRate * 0.48 / 2.0);
+        double harmonicBandwidth = Math.Min(settings.EndFrequencyHz, settings.SampleRate * 0.5 * 0.95);
+        double maximumFundamental = harmonicBandwidth / 2.0;
 	        int count = Math.Max(2, (int)Math.Floor(Math.Log(maximumFundamental / minimumFundamental, 2) * settings.PointsPerOctave) + 1);
 	        IEnumerable<double> exactFrequencies = settings.DistortionEvaluationFrequenciesHz
 	            ?? new[] { 80.0, 1000.0, 4000.0 };
@@ -1790,8 +1794,9 @@ public static class StandardAcousticMeasurement
 	        var output = new List<SweepHarmonicPoint>(evaluationFrequencies.Length);
 	        foreach (double frequency in evaluationFrequencies)
 	        {
-	            int fundamentalBin = Math.Clamp((int)Math.Round(frequency * fftSize / settings.SampleRate), 1, fftSize / 2 - 1);
-            double fundamental = harmonicTransfers[1][fundamentalBin].Magnitude;
+            // REW sweep distortion uses 1/24-octave spectral smoothing. This
+            // analysis bandwidth is independent of the 1/48-octave display grid.
+            double fundamental = DistortionBandMagnitude(harmonicTransfers[1], frequency, settings.SampleRate);
             if (fundamental <= 1e-5) continue;
             var levels = Enumerable.Repeat(double.NaN, 10).ToArray();
             double harmonicPower = 0;
@@ -1801,7 +1806,7 @@ public static class StandardAcousticMeasurement
 	            // An excitation at f therefore contributes at n*f in that spectrum.
 	            // Skip only harmonics that exceed Nyquist and cannot be measured.
                 double outputFrequency = order * frequency;
-                if (outputFrequency >= settings.SampleRate * 0.5)
+                if (outputFrequency > harmonicBandwidth)
 	                {
 	                    levels[order] = double.NaN;
 	                    continue;
@@ -1814,19 +1819,18 @@ public static class StandardAcousticMeasurement
 	                // The separated order-n impulse response is indexed by output
 	                // frequency. A fundamental at f therefore appears at n*f in
 	                // that spectrum (Farina swept-sine distortion mapping).
-	                int harmonicBin = Math.Clamp(
-	                    (int)Math.Round(outputFrequency * fftSize / settings.SampleRate),
-	                    1,
-	                    fftSize / 2 - 1);
-	                double ratio = harmonicTransfers[order][harmonicBin].Magnitude / fundamental;
-	                if (micCalib != null)
+                double reference = settings.UseHarmonicFrequencyAsDistortionReference
+                    ? DistortionBandMagnitude(harmonicTransfers[1], outputFrequency, settings.SampleRate) : fundamental;
+                double ratio = reference > Tiny ? DistortionBandMagnitude(harmonicTransfers[order], outputFrequency, settings.SampleRate) / reference : double.NaN;
+                if (micCalib != null && settings.ApplyDistortionCalibration)
                     ratio *= Math.Pow(10.0, -(micCalib.GetGainCorrectionDb(outputFrequency)
-                        - micCalib.GetGainCorrectionDb(frequency)) / 20.0);
+                        - micCalib.GetGainCorrectionDb(settings.UseHarmonicFrequencyAsDistortionReference ? outputFrequency : frequency)) / 20.0);
                 levels[order] = 20.0 * Math.Log10(ratio + Tiny);
                 harmonicPower += ratio * ratio;
             }
             double fundamentalLevelDb = 20.0 * Math.Log10(fundamental + Tiny)
-                - (micCalib?.GetGainCorrectionDb(frequency) ?? 0.0);
+                + 20.0 * Math.Log10(Math.Max(Tiny, Math.Abs(settings.Amplitude)) / Math.Sqrt(2))
+                - (settings.ApplyDistortionCalibration ? micCalib?.GetGainCorrectionDb(frequency) ?? 0.0 : 0.0);
 	            bool hasMeasuredHarmonic = Enumerable.Range(2, 8).Any(order => double.IsFinite(levels[order]));
 	            output.Add(new SweepHarmonicPoint(
 	                frequency, levels[2], levels[3], levels[4], levels[5],
@@ -1840,6 +1844,18 @@ public static class StandardAcousticMeasurement
             });
         }
         return output;
+    }
+
+    private static double DistortionBandMagnitude(Complex[] spectrum, double frequency, int sampleRate)
+    {
+        double bin = frequency * spectrum.Length / sampleRate;
+        double halfBand = Math.Pow(2.0, 1.0 / 48.0);
+        int first = Math.Max(1, (int)Math.Ceiling(bin / halfBand));
+        int last = Math.Min(spectrum.Length / 2 - 1, (int)Math.Floor(bin * halfBand));
+        if (first > last) return spectrum[Math.Clamp((int)Math.Round(bin), 1, spectrum.Length / 2 - 1)].Magnitude;
+        double power = 0;
+        for (int i = first; i <= last; i++) power += spectrum[i].Magnitude * spectrum[i].Magnitude;
+        return Math.Sqrt(power / (last - first + 1));
     }
 
     private static int Mod(int value, int modulus) => (value % modulus + modulus) % modulus;

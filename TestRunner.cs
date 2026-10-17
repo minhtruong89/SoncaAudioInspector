@@ -57,7 +57,7 @@ public class TestRunner
 
 	public const double LogSweepPrerollSeconds = 0.5;
 
-	public const int LogSweepPointsPerOctave = 48;
+	public const int LogSweepPointsPerOctave = 24;
 
 	public const double LogSweepPlaybackStartHz = 18.0;
 
@@ -74,7 +74,7 @@ public class TestRunner
 	public const double TrebleMin = 4000.0;
 
 	public const double TrebleMax = 20000.0;
-	public double EvaluationMaxFrequencyHz { get; set; } = 15000.0;
+	public double EvaluationMaxFrequencyHz { get; set; } = 18000.0;
 	public bool RestrictFeqToEvaluationRange { get; set; }
 
 	private readonly AudioEngine _audioEngine;
@@ -88,6 +88,11 @@ public class TestRunner
 	public double MultitoneDurationSeconds { get; set; } = 10.0;
 
 	public double LogSweepDurationSeconds { get; set; } = 65536.0 / 44100.0;
+	public bool ApplyDistortionCalibration { get; set; }
+	public bool UseHarmonicFrequencyAsDistortionReference { get; set; }
+	public ImpulseEffectSettings ImpulseEffectsSettings { get; set; } = new();
+	public IReadOnlyDictionary<double, double> LastUnsmoothedFrequencyResponse { get; private set; } = new Dictionary<double, double>();
+	public event Action<IReadOnlyDictionary<double, double>>? OnUnsmoothedResponseReady;
 
 	public double PlaybackLevelDbFs { get; set; } = 0.0;
 
@@ -223,7 +228,8 @@ public class TestRunner
 
 	public double LastFrequencyMaxDeviationDb { get; private set; }
 
-	public double LastMeasuredThdPercent { get; private set; }
+	public double LastMeasuredThdPercent { get; private set; } = double.NaN;
+	public string LastPreflightWarning { get; private set; } = "";
 
 	public ToneQualityMetrics? LastToneQuality { get; private set; }
 
@@ -289,6 +295,7 @@ public class TestRunner
 	public IReadOnlyList<SweepHarmonicPoint>? LastSweepHarmonics { get; private set; }
 
 	public StandardAcousticResult? LastSweepResult { get; private set; }
+	public event Action<StandardAcousticResult>? OnSweepResultReady;
 
 	public SweepDistortionSummary? LastSweepDistortion { get; private set; }
 
@@ -313,8 +320,6 @@ public class TestRunner
 		{
 			return new SweepDistortionSummary(targetFreq, double.NaN, new Dictionary<int, double>(), double.NaN, double.NaN, double.NaN, "N/A", false, "Chưa có kết quả sweep");
 		}
-		if (!frequencyHz.HasValue)
-			return BuildSweepWideDistortionSummary(result);
 		SweepHarmonicPoint? sweepHarmonicPoint = FindSweepDistortionPoint(result.SweepHarmonics, targetFreq);
 		Dictionary<int, double> dictionary = new Dictionary<int, double>();
 		if (sweepHarmonicPoint != null)
@@ -632,14 +637,27 @@ public class TestRunner
 		return dictionary;
 	}
 
+	private Dictionary<double, double> BuildSweepComparisonResponse(IReadOnlyList<FrequencyResponsePoint> response, double[] centers)
+	{
+		double level = PlaybackLevelDbFs - 10 * Math.Log10(2);
+		var raw = response.ToDictionary(p => p.FrequencyHz / PlaybackFrequencyScale, p => p.LevelDb + level);
+		var smoothed = ResponseSmoothing.Octave24(raw, centers);
+		double reference = 0;
+		if (NormalizeFrequencyResponseToOneKilohertz && TryGetStandardValue(smoothed, 1000, out reference))
+			raw = raw.ToDictionary(p => p.Key, p => p.Value - reference);
+		LastUnsmoothedFrequencyResponse = raw;
+		OnUnsmoothedResponseReady?.Invoke(raw);
+		return smoothed;
+	}
+
 	public static FeqRepeatabilityAssessment AssessFeqRepeatability(IReadOnlyList<Dictionary<double, double>> curves, bool highResolution, double toleranceDb, IReadOnlyList<CriticalFrequencyZone>? criticalZones = null)
 	{
-		return AssessFeqRepeatabilityInRange(curves, highResolution, toleranceDb, criticalZones, 15000.0);
+		return AssessFeqRepeatabilityInRange(curves, highResolution, toleranceDb, criticalZones, 18000.0);
 	}
 
 	public static FeqRepeatabilityAssessment AssessFeqRepeatabilityInRange(IReadOnlyList<Dictionary<double, double>> curves, bool highResolution, double toleranceDb, IReadOnlyList<CriticalFrequencyZone>? criticalZones, double maxFrequencyHz, double minFrequencyHz = 50.0)
 	{
-		double[] frequencies = (highResolution ? GenerateLogSweepEvaluationFrequencies(minFrequencyHz, maxFrequencyHz, 12) : (from result in (from num5 in curves.SelectMany((Dictionary<double, double> curve) => curve.Keys)
+		double[] frequencies = (highResolution ? GenerateLogSweepEvaluationFrequencies(minFrequencyHz, maxFrequencyHz, LogSweepPointsPerOctave) : (from result in (from num5 in curves.SelectMany((Dictionary<double, double> curve) => curve.Keys)
 					where num5 >= minFrequencyHz && num5 <= maxFrequencyHz
 				select num5).Distinct()
 			orderby result
@@ -1060,6 +1078,10 @@ public class TestRunner
 	// Optional externally owned diagnostic session; normal operation uses the engine session.
 	public SharedCaptureSession? CaptureSession { get; set; }
 
+	private static bool MustStopAtNoisePreflight(double rmsDbFs, double peak, bool strict) =>
+		!double.IsFinite(rmsDbFs) || !double.IsFinite(peak) || peak >= 0.995
+		|| (strict && (rmsDbFs > -55 || peak >= 0.05));
+
 	private async Task RunTestCoreAsync(MMDevice playbackDevice, MMDevice recordingDevice, bool runFeqThreeTimes, bool referenceAcquisition, SharedCaptureSession captureSession)
 	{
 		bool useLogSweep = UseLogSweepFrequencyResponse && !AudioEngine.flagGenerateSeperateSine;
@@ -1081,12 +1103,15 @@ public class TestRunner
 		ThdPassed = true;
 		ThdAcquisitionInvalid = false;
 		LastFrequencyMaxDeviationDb = 0.0;
-		LastMeasuredThdPercent = 0.0;
+		LastMeasuredThdPercent = double.NaN;
+		LastPreflightWarning = "";
 		LastToneQuality = null;
 		LastToneQualities = new Dictionary<double, ToneQualityMetrics>();
 		LastSweepResult = null;
 		LastSweepHarmonics = null;
 		LastSweepDistortion = null;
+		LastUnsmoothedFrequencyResponse = new Dictionary<double, double>();
+		OnUnsmoothedResponseReady?.Invoke(LastUnsmoothedFrequencyResponse);
 		LastRubBuzzMetrics = null;
 		LastSignalLevelDbFs = double.NaN;
 		LastOneKilohertzLevelDbFs = double.NaN;
@@ -1170,7 +1195,9 @@ public class TestRunner
 					OnLogMessage?.Invoke("Noise", $"Đã lưu noise floor từ bài test Left ({SuiteSharedNoiseFloorDbFs:F1} dBFS) làm chuẩn sweep cho toàn bộ bài test.");
 				}
 				var inputNoise = LastNoiseAssessment?.DutMicrophone;
-				if (inputNoise == null || !double.IsFinite(inputNoise.TotalRmsDb) || inputNoise.TotalRmsDb > -55.0 || inputNoise.PeakSample >= 0.05)
+				bool elevatedNoise = inputNoise != null && (inputNoise.TotalRmsDb > -55.0 || inputNoise.PeakSample >= 0.05);
+				if (MustStopAtNoisePreflight(inputNoise?.TotalRmsDb ?? double.NaN, inputNoise?.PeakSample ?? double.NaN,
+					AutoTestOneKilohertzOnly || referenceAcquisition))
 				{
 					ThdAcquisitionInvalid = !referenceAcquisition;
 					LastFeqInvalidReason = $"Nền ngõ thu {inputNoise?.TotalRmsDb:F1} dBFS, peak {inputNoise?.PeakSample:F4} vượt ngưỡng trước khi phát; không dùng lượt đo này.";
@@ -1181,6 +1208,11 @@ public class TestRunner
 					OnTestCompleted?.Invoke(false);
 					return;
 				}
+				if (elevatedNoise)
+				{
+					LastPreflightWarning = $"Nền đầu vào cao ({inputNoise!.TotalRmsDb:F1} dBFS). Line thủ công tiếp tục thu chẩn đoán; chỉ dùng dữ liệu khi SNR/clipping hợp lệ. Auto Test/Line chuẩn vẫn yêu cầu nền thấp.";
+					OnLogMessage?.Invoke("Cảnh báo trước đo", LastPreflightWarning);
+				}
 			}
 		}
 		OnLogMessage?.Invoke("Bước 1", "Đang kiểm tra tín hiệu ngõ thu...");
@@ -1189,7 +1221,7 @@ public class TestRunner
 		try
 		{
 			samples = await _audioEngine.PlayAndRecordAsync(playbackDevice, recordingDevice, SignalType.Sine, ScalePlaybackFrequency(probeFreq), 0.35,
-				signalSampleScale: (AutoTestOneKilohertzOnly || referenceAcquisition) ? AutoTestToneSampleScale : 1.0);
+				signalSampleScale: PlaybackAmplitude * ((AutoTestOneKilohertzOnly || referenceAcquisition) ? AutoTestToneSampleScale : 1.0));
 		}
 		catch (Exception ex)
 		{
@@ -1216,7 +1248,7 @@ public class TestRunner
 			try
 			{
 				samples = await _audioEngine.PlayAndRecordAsync(playbackDevice, recordingDevice, SignalType.Sine, ScalePlaybackFrequency(probeFreq), 0.4,
-					signalSampleScale: (AutoTestOneKilohertzOnly || referenceAcquisition) ? AutoTestToneSampleScale : 1.0);
+					signalSampleScale: PlaybackAmplitude * ((AutoTestOneKilohertzOnly || referenceAcquisition) ? AutoTestToneSampleScale : 1.0));
 				if (_isCancelled)
 				{
 					return;
@@ -1333,6 +1365,7 @@ public class TestRunner
 		int failedRuns = 0;
 		int runAttemptsUsed = 0;
 		List<Dictionary<double, double>> measuredRunResults = new List<Dictionary<double, double>>();
+		List<IReadOnlyDictionary<double, double>> rawMeasuredRunResults = new();
 		List<Complex[]> alignedComplexTransfers = new List<Complex[]>();
 		List<Complex[][]> harmonicTransfersByRun = new List<Complex[][]>();
 		LogSweepSettings? lastSweepSettings = null;
@@ -1371,9 +1404,14 @@ public class TestRunner
 			{
 				int playbackSampleRate = _audioEngine.PlaybackSampleRate;
 				double num2 = Math.Min(22000.0, (double)playbackSampleRate * 0.47);
-				LogSweepSettings logSweepSettings = new LogSweepSettings(playbackSampleRate, 18.0, num2, LogSweepDurationSeconds, PlaybackAmplitude, 48, 1.0, _audioEngine.RecordingGain);
+				ImpulseEffectsSettings.Validate();
+				LogSweepSettings logSweepSettings = new LogSweepSettings(playbackSampleRate, 18.0, num2, LogSweepDurationSeconds, PlaybackAmplitude,
+					ResponseSmoothing.SourcePointsPerOctave, ImpulseEffectsSettings.CaptureTailSeconds, _audioEngine.RecordingGain);
 				LogSweepSettings generatedSettings = logSweepSettings with
 				{
+					ApplyDistortionCalibration = ApplyDistortionCalibration,
+					UseHarmonicFrequencyAsDistortionReference = UseHarmonicFrequencyAsDistortionReference,
+					EffectsSettings = ImpulseEffectsSettings,
 					StartFrequencyHz = ScalePlaybackFrequency(18.0),
 					EndFrequencyHz = Math.Min(ScalePlaybackFrequency(num2), (double)playbackSampleRate * 0.47),
 					DistortionEvaluationFrequenciesHz = new[]
@@ -1385,10 +1423,10 @@ public class TestRunner
 				};
 				float[] generatedExcitation = StandardAcousticMeasurement.GenerateLogSweep(generatedSettings);
 				float[] array2 = generatedExcitation;
-				OnLogMessage?.Invoke("Step 2", $"Run {run} - phát log sweep chuẩn REW {generatedSettings.StartFrequencyHz:F1} Hz - {generatedSettings.EndFrequencyHz / 1000.0:F2} kHz ({(double)array2.Length / (double)playbackSampleRate:F2}s, {PlaybackLevelDbFs:F1} dBFS), phân tích theo {18.0:F0} Hz - {22.0:F0} kHz và thu thêm {1.0:F1}s...");
+				OnLogMessage?.Invoke("Step 2", $"Run {run} - phát log sweep {generatedSettings.StartFrequencyHz:F1} Hz - {generatedSettings.EndFrequencyHz / 1000.0:F2} kHz ({(double)array2.Length / playbackSampleRate:F2}s, {PlaybackLevelDbFs:F1} dBFS), so sánh 1/24 octave 50 Hz–18 kHz và thu thêm {ImpulseEffectsSettings.CaptureTailSeconds:F1}s...");
 				OnTestSubstatusChanged?.Invoke("Freq", $"Run {run} - Log sweep guard 18 Hz → 22 kHz...");
 				AudioEngine audioEngine = _audioEngine;
-				double durationSeconds = (double)array2.Length / (double)playbackSampleRate + 1.0;
+				double durationSeconds = (double)array2.Length / (double)playbackSampleRate + ImpulseEffectsSettings.CaptureTailSeconds;
 				float[] customSweepSamples = array2;
 				float[] array3 = await audioEngine.PlayAndRecordAsync(playbackDevice, recordingDevice, SignalType.Sweep, 0.0, durationSeconds, samples => OnRealTimeRecordedSamples?.Invoke(samples), forceSaveFiles: false, null, null, 1.0, default(CancellationToken), null, customSweepSamples);
 				if (array3.Length > 0)
@@ -1458,10 +1496,11 @@ public class TestRunner
 					}
 					complexTransferSampleRate = recordingSampleRate;
 				}
-				rawDbResults = StandardAcousticMeasurement.ApplyEdgeFractionalOctaveSmoothing(InterpolateScaledLogSweepResponse(sweepResult.FrequencyResponse, sweepFrequencies));
+				rawDbResults = BuildSweepComparisonResponse(sweepResult.FrequencyResponse, sweepFrequencies);
 				double num3 = 20.0 * Math.Log10(Math.Max(0.01, Math.Abs(_audioEngine.RecordingGain)));
 				sweepSignalLevelDbFs = sweepResult.SignalLevelDbFs - num3;
 				LastSweepResult = sweepResult;
+				OnSweepResultReady?.Invoke(sweepResult);
 				LastSweepHarmonics = sweepResult.SweepHarmonics;
 				LastSweepDistortion = BuildSweepDistortionSummary(sweepResult);
 				OnSweepDistortionReady?.Invoke(BuildSweepDistortionSummary(sweepResult, MidThdFrequencyHz));
@@ -1607,7 +1646,7 @@ public class TestRunner
 					OnLogMessage?.Invoke("Noise", $"FEQ attempt {run} INVALID/RETRY: {lowSnrPoints.Count}/{snrCheckedPoints} điểm có SNR < {MinimumFeqSnrDb:F0} dB. Điểm mẫu: {text}");
 				}
 			}
-			Dictionary<double, double> dictionary2 = ApplyThreePointDbSmoothing(rawDbResults);
+			Dictionary<double, double> dictionary2 = useLogSweep ? new(rawDbResults) : ApplyThreePointDbSmoothing(rawDbResults);
 			if (NormalizeFrequencyResponseToOneKilohertz)
 			{
 				dictionary2 = NormalizeAtOneKilohertz(dictionary2, out double oneKilohertzDbFs);
@@ -1709,6 +1748,7 @@ public class TestRunner
 			if (!isSilent && !flag && !sweepAcquisitionInvalid)
 			{
 				measuredRunResults.Add(dictionary3);
+				if (useLogSweep) rawMeasuredRunResults.Add(new Dictionary<double, double>(LastUnsmoothedFrequencyResponse));
 				if (useLogSweep && capturedSweepResult?.HarmonicTransferFunctions.Count >= 10)
 				{
 					harmonicTransfersByRun.Add(capturedSweepResult.HarmonicTransferFunctions.ToArray());
@@ -1853,8 +1893,8 @@ public class TestRunner
 			if (useLogSweep && alignedComplexTransfers.Count == measuredRunResults.Count && alignedComplexTransfers.Count > 0 && complexTransferSampleRate > 0)
 			{
 				ComplexTransferAverage complexAverage = StandardAcousticMeasurement.AverageComplexTransfers(alignedComplexTransfers);
-				IReadOnlyList<FrequencyResponsePoint> response = StandardAcousticMeasurement.BuildFrequencyResponseFromAlignedTransfer(complexAverage.Transfer, complexTransferSampleRate, ScalePlaybackFrequency(18.0), ScalePlaybackFrequency(22000.0), 48, FeqMicrophoneCalibration);
-				dictionary4 = ApplyThreePointDbSmoothing(StandardAcousticMeasurement.ApplyEdgeFractionalOctaveSmoothing(InterpolateScaledLogSweepResponse(response, sweepFrequencies)));
+				IReadOnlyList<FrequencyResponsePoint> response = StandardAcousticMeasurement.BuildFrequencyResponseFromAlignedTransfer(complexAverage.Transfer, complexTransferSampleRate, ScalePlaybackFrequency(18.0), ScalePlaybackFrequency(22000.0), ResponseSmoothing.SourcePointsPerOctave, FeqMicrophoneCalibration);
+				dictionary4 = BuildSweepComparisonResponse(response, sweepFrequencies);
 				if (NormalizeFrequencyResponseToOneKilohertz)
 				{
 					dictionary4 = NormalizeAtOneKilohertz(dictionary4, out double coherentOneKilohertzDbFs);
@@ -1899,6 +1939,12 @@ public class TestRunner
 			}
 			else if (measuredRunResults.Count > 0)
 			{
+				if (useLogSweep && rawMeasuredRunResults.Count > 0)
+				{
+					LastUnsmoothedFrequencyResponse = rawMeasuredRunResults[0].Keys.Where(f => rawMeasuredRunResults.All(r => r.ContainsKey(f)))
+						.ToDictionary(f => f, f => CalculateMedian(rawMeasuredRunResults.Select(r => r[f])));
+					OnUnsmoothedResponseReady?.Invoke(LastUnsmoothedFrequencyResponse);
+				}
 				double[] item = sweepFrequencies;
 				foreach (double freq5 in item)
 				{
@@ -2260,7 +2306,9 @@ public class TestRunner
 		}
 		LastToneQualities = distortionResults.ToDictionary((DistortionPointResult distortionPointResult) => distortionPointResult.FrequencyHz, (DistortionPointResult distortionPointResult) => distortionPointResult.Quality);
 		LastToneQuality = (LastToneQualities.TryGetValue(MidThdFrequencyHz, out ToneQualityMetrics value15) ? value15 : distortionResults.Select((DistortionPointResult distortionPointResult) => distortionPointResult.Quality).FirstOrDefault());
-		LastMeasuredThdPercent = distortionResults
+		LastMeasuredThdPercent = useLogSweep
+			? (LastToneQuality is { IsValid: true } ? LastToneQuality.ThdPercent : double.NaN)
+			: distortionResults
 			.Where(result => result.ValidRuns >= 1 && result.Quality.IsValid && double.IsFinite(result.Quality.ThdPercent))
 			.Select(result => result.Quality.ThdPercent)
 			.DefaultIfEmpty(double.NaN).Max();
@@ -2286,15 +2334,13 @@ public class TestRunner
 		bool flag27 = (ThdPassed = (!flag16 & flag26) && !flag21 && !flag22 && !flag23 && !flag24 && !flag25);
 		bool thdPass = flag27;
 		string text3 = string.Join(" · ", distortionResults.Select((DistortionPointResult distortionPointResult) => $"{distortionPointResult.FrequencyHz:0}Hz: {((distortionPointResult.ValidRuns >= 1 && double.IsFinite(distortionPointResult.Quality.ThdPercent)) ? (distortionPointResult.Quality.ThdPercent.ToString("F3", CultureInfo.InvariantCulture) + "%") : (double.IsFinite(distortionPointResult.DiagnosticThdPercent) ? (distortionPointResult.DiagnosticThdPercent.ToString("F3", CultureInfo.InvariantCulture) + "% tham khảo") : "N/A"))}/{distortionPointResult.LimitPercent:F3}% ({distortionPointResult.ValidRuns}/{1})"));
-		if (useLogSweep && !AutoTestOneKilohertzOnly && LastSweepDistortion is { IsValid: true } globalSummary)
-			text3 = $"Năng lượng gộp toàn sweep (tham khảo, không so với giới hạn theo điểm): {globalSummary.ThdPercent:F4}% ({globalSummary.FrequencyPointCount} điểm) · " + text3;
 		string text4 = string.Join("; ", from distortionPointResult in distortionResults
 			where distortionPointResult.AnyLowSnr && distortionPointResult.ValidRuns >= 1
 			select $"{distortionPointResult.FrequencyHz:0}Hz SNR {distortionPointResult.AcquisitionSnrDb:F1} dB < khuyến nghị {20.0 * Math.Log10(100.0 / distortionPointResult.LimitPercent) + 6.0:F1} dB");
 		if (thdPass)
 		{
 			_steps[2].Status = "Pass";
-			string thdHeader = double.IsFinite(LastMeasuredThdPercent) ? $"THD {LastMeasuredThdPercent:F3}% (ĐẠT)" : "ĐẠT";
+			string thdHeader = double.IsFinite(LastMeasuredThdPercent) ? $"THD{(useLogSweep ? $" tại {MidThdFrequencyHz:0} Hz" : "")} {LastMeasuredThdPercent:F3}% (ĐẠT)" : "ĐẠT";
 			_steps[2].Details = $"{thdHeader} · " + text3 + (string.IsNullOrWhiteSpace(text4) ? "" : (" · Cảnh báo SNR (tạm không đổi kết quả): " + text4));
 			OnLogMessage?.Invoke("Bước 3", _steps[2].Details);
 		}

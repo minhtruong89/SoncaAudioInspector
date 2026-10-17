@@ -189,7 +189,7 @@ internal static class WindowsEndpointPolicy
 
     internal static void ChangeRate(IntPtr format, int sampleRate)
     {
-        if (sampleRate != 44100) throw new ArgumentOutOfRangeException(nameof(sampleRate));
+        if (sampleRate is not (44100 or 48000)) throw new ArgumentOutOfRangeException(nameof(sampleRate));
         int blockAlign = (ushort)Marshal.ReadInt16(format, 12);
         if (blockAlign == 0) throw new InvalidOperationException("Định dạng âm thanh có block align không hợp lệ.");
         Marshal.WriteInt32(format, 4, sampleRate);

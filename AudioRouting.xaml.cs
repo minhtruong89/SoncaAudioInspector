@@ -1,4 +1,4 @@
-#define DEBUG
+﻿#define DEBUG
 using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
@@ -36,6 +36,12 @@ public partial class AudioRouting : UserControl
 	private TestRunner _testRunner;
 
 	private List<double> _freqs;
+	private bool _showUnsmoothedResponse;
+	private IReadOnlyDictionary<double, double> _rawResponse = new Dictionary<double, double>();
+	private IReadOnlyDictionary<double, double> _rawStandardCurve = new Dictionary<double, double>();
+	private ImpulseEffectReference? _standardImpulseEffects;
+	private bool _savingCompositeReference;
+	private ImpulseEffectReference? _pendingEffectsReference;
 
 	private List<double> _dbValues;
 
@@ -289,6 +295,11 @@ public partial class AudioRouting : UserControl
 		};
 		_routingMeterTimer.Tick += (_, _) =>
 		{
+			if (IsLoaded && DateTime.UtcNow - _lastSampleRateWarningPollUtc >= TimeSpan.FromSeconds(2))
+			{
+				_lastSampleRateWarningPollUtc = DateTime.UtcNow;
+				UpdateSampleRateWarning();
+			}
 			if (_routingMeterBuffer.TryRead(out double peak, out double rms, out bool clipped, out bool invalid))
 			{
 				if (invalid) RewMeterRouting.ShowUnavailable("DỮ LIỆU THU KHÔNG HỢP LỆ");
@@ -440,6 +451,15 @@ public partial class AudioRouting : UserControl
 				}
 			});
 		};
+		_testRunner.OnUnsmoothedResponseReady += raw => Dispatcher.Invoke(() =>
+		{
+			_rawResponse = new Dictionary<double, double>(raw);
+		});
+		_testRunner.OnSweepResultReady += result => Dispatcher.Invoke(() =>
+		{
+			UpdateSampleRateWarning(result.SampleRate);
+			UpdateMeasurementDetails();
+		});
 		_testRunner.OnOneKilohertzLevelMeasured += levelDbFs =>
 		{
 			Dispatcher.Invoke(() => UpdateOneKilohertzLevel(levelDbFs));
@@ -483,6 +503,7 @@ public partial class AudioRouting : UserControl
 		{
 			((DispatcherObject)this).Dispatcher.Invoke((Action)delegate
 			{
+				UpdateMeasurementDetails();
 				if (!_discardCurrentMeasurementRequested)
 				{
 					if (_isExecutingAutoSuite && _currentRunningTestCase != null)
@@ -678,9 +699,9 @@ public partial class AudioRouting : UserControl
 					_isApplyingMeasurementMethod = true;
 					ChkUseLogSweep.IsChecked = appConfig.UseLogSweepFrequencyResponse;
 					ChkNormalizeOneKilohertz.IsChecked = appConfig.NormalizeFrequencyResponseToOneKilohertz;
-					// Auto Test and reference acquisition use 64K. Old saved 128K/256K
-					// durations must not silently become the next session's default.
-					SelectLogSweepDuration(DefaultLogSweepSamples / (double)GetSelectedPlaybackSampleRate());
+					ChkDistortionCalibration.IsChecked = appConfig.ApplyDistortionCalibration;
+					ChkDistortionHarmonicReference.IsChecked = appConfig.UseHarmonicFrequencyAsDistortionReference;
+					SelectLogSweepDuration(appConfig.LogSweepDurationSeconds);
 					SelectMultitoneDuration(appConfig.MultitoneDurationSeconds);
 					_isApplyingMeasurementMethod = false;
 					_testRunner.UseLogSweepFrequencyResponse = appConfig.UseLogSweepFrequencyResponse;
@@ -717,7 +738,10 @@ public partial class AudioRouting : UserControl
 		finally
 		{
 			_isApplyingMeasurementMethod = false;
+			_audioEngine.PlaybackSampleRate = GetSelectedPlaybackSampleRate();
 			_testRunner.NormalizeFrequencyResponseToOneKilohertz = ChkNormalizeOneKilohertz.IsChecked == true;
+			_testRunner.ApplyDistortionCalibration = ChkDistortionCalibration.IsChecked == true;
+			_testRunner.UseHarmonicFrequencyAsDistortionReference = ChkDistortionHarmonicReference.IsChecked == true;
 			_isConfigLoaded = true;
 		}
 	}
@@ -751,12 +775,21 @@ public partial class AudioRouting : UserControl
 
 	public bool IsAutoTestRunning => _isExecutingAutoSuite;
 
+	private void DistortionOptions_Changed(object sender, RoutedEventArgs e)
+	{
+		if (_testRunner == null || !_isConfigLoaded) return;
+		_testRunner.ApplyDistortionCalibration = ChkDistortionCalibration.IsChecked == true;
+		_testRunner.UseHarmonicFrequencyAsDistortionReference = ChkDistortionHarmonicReference.IsChecked == true;
+		SaveConfig();
+	}
+
 	private void NormalizeOneKilohertz_Changed(object sender, RoutedEventArgs e)
 	{
 		if (_testRunner == null || !_isConfigLoaded) return;
 		_testRunner.NormalizeFrequencyResponseToOneKilohertz = ChkNormalizeOneKilohertz.IsChecked == true;
 		_freqs.Clear();
 		_dbValues.Clear();
+		_rawResponse = new Dictionary<double, double>();
 		_sessionLineFrequencies = Array.Empty<double>();
 		_sessionLineValues = Array.Empty<double>();
 		BtnSaveStandard.IsEnabled = false;
@@ -792,6 +825,10 @@ public partial class AudioRouting : UserControl
 
 	private double GetSelectedLogSweepDuration()
 	{
+		// The sequence length is authoritative; do not round-trip it through
+		// formatted seconds (especially for 512K and 1M).
+		if (ComboSweepLength?.SelectedItem is ComboBoxItem item && int.TryParse(item.Tag?.ToString(), out int length))
+			return length / (double)GetSelectedPlaybackSampleRate();
 		if (!TryReadMeasurementDuration(TxtLogSweepDuration?.Text, out var duration, 0.5, 30.0))
 		{
 			return _testRunner?.LogSweepDurationSeconds ?? DefaultLogSweepSamples / (double)GetSelectedPlaybackSampleRate();
@@ -915,7 +952,11 @@ public partial class AudioRouting : UserControl
 			_audioEngine.PlaybackSampleRate = GetSelectedPlaybackSampleRate();
 			UpdateSweepLengthLabels();
 			if (_testRunner != null && ComboSweepLength?.SelectedItem is ComboBoxItem item && int.TryParse(item.Tag?.ToString(), out int length))
+			{
 				SelectLogSweepDuration(length / (double)_audioEngine.PlaybackSampleRate);
+				_testRunner.LogSweepDurationSeconds = GetSelectedLogSweepDuration();
+			}
+			EnsureSelectedStandardSampleRates();
 			UpdateSelectedDeviceFormats();
 			if (_isConfigLoaded)
 			{
@@ -999,6 +1040,7 @@ public partial class AudioRouting : UserControl
 		}
 		UpdateChannelSelectorAvailability();
 		SyncChannelSelectionsFromEngine();
+		UpdateSampleRateWarning();
 	}
 
 	private static int GetDeviceChannelCount(MMDevice? device)
@@ -1078,6 +1120,8 @@ public partial class AudioRouting : UserControl
 			appConfig.SendToServer = ChkSendToServer.IsChecked == true;
 			appConfig.UseLogSweepFrequencyResponse = ChkUseLogSweep.IsChecked == true;
 			appConfig.NormalizeFrequencyResponseToOneKilohertz = ChkNormalizeOneKilohertz.IsChecked == true;
+			appConfig.ApplyDistortionCalibration = ChkDistortionCalibration.IsChecked == true;
+			appConfig.UseHarmonicFrequencyAsDistortionReference = ChkDistortionHarmonicReference.IsChecked == true;
 			appConfig.LogSweepDurationSeconds = GetSelectedLogSweepDuration();
 			appConfig.MultitoneDurationSeconds = GetSelectedMultitoneDuration();
 			appConfig.AmbientRecordingDeviceId = "";
@@ -1172,6 +1216,7 @@ public partial class AudioRouting : UserControl
 			AppendLog("System", "Device discovery finished.");
 			RememberSelectedDeviceNames();
 			if (_isConfigLoaded) SaveConfig();
+			EnsureSelectedStandardSampleRates();
 			UpdateSelectedDeviceFormats();
 			TxtFreqStatus.Text = ((ComboRecording.SelectedItem == null || ComboPlayback.SelectedItem == null) ? "Chưa chọn đủ ngõ phát/thu" : "");
 		}
@@ -1221,20 +1266,6 @@ public partial class AudioRouting : UserControl
 		{
 			FastTrackDeviceSetup.TryRenamePlayback12(device, _fastTrackPlayback12Identity, out string message);
 			if (!string.IsNullOrEmpty(message)) AppendLog("FastTrack", message);
-		}
-		foreach (MMDevice device in recording.Where(FastTrackDeviceSetup.IsFastTrack))
-		{
-			try
-			{
-				if (FastTrackDeviceSetup.ReadMixSampleRate(device.ID) != FastTrackDeviceSetup.RecordingSampleRate)
-				{
-					_audioEngine.StopAllAudio();
-					_audioEngine.CaptureSession.Reset();
-				}
-				FastTrackDeviceSetup.TrySetRecordingSampleRate(device, out string message);
-				if (!string.IsNullOrEmpty(message)) AppendLog("FastTrack", message);
-			}
-			catch (Exception ex) { AppendLog("FastTrack", "Chưa cấu hình được ngõ thu: " + ex.Message); }
 		}
 	}
 
@@ -1362,6 +1393,7 @@ public partial class AudioRouting : UserControl
 		{
 			_areChartsInteractionsSetup = true;
 			SetupPlotInteractions(PlotFreqResponse, isFreqLog: true);
+			SetupResponseContextMenu();
 			thdPlots = GetThdPlots();
 			WpfPlot[] array4 = thdPlots;
 			WpfPlot[] array5 = array4;
@@ -1470,7 +1502,7 @@ public partial class AudioRouting : UserControl
 		{
 			try
 			{
-				if (e.LeftButton == MouseButtonState.Pressed || e.RightButton == MouseButtonState.Pressed || e.MiddleButton == MouseButtonState.Pressed)
+				if (e.LeftButton == MouseButtonState.Pressed || e.MiddleButton == MouseButtonState.Pressed)
 				{
 					if (isFreqLog)
 					{
@@ -1687,6 +1719,13 @@ public partial class AudioRouting : UserControl
 
 	private void GetSafeFrequencySnapshots(out double[] freqs, out double[] dbValues)
 	{
+		IReadOnlyDictionary<double, double> raw = _reviewedAutoTestCase?.UnsmoothedResponse ?? _rawResponse;
+		if (_showUnsmoothedResponse && raw.Count > 0)
+		{
+			var points = raw.Where(p => p.Key >= 20 && p.Key <= 20000).OrderBy(p => p.Key).ToArray();
+			freqs = points.Select(p => p.Key).ToArray(); dbValues = points.Select(p => p.Value).ToArray();
+			return;
+		}
 		if (_reviewedAutoTestCase is { ResponseFrequencies.Length: > 0 } review &&
 			review.ResponseFrequencies.Length == review.ResponseLevels.Length)
 		{
@@ -1825,14 +1864,18 @@ public partial class AudioRouting : UserControl
 			string levelUnit = _testRunner.NormalizeFrequencyResponseToOneKilohertz ? "dBr" : "dBFS";
 			string text = $"{num10:0.#} Hz — | — Do: {num11:+0.00;-0.00;0.00} {levelUnit}";
 			double value2;
-			if (ProductionMeasurement.TryGetFrequencyLimit(_frequencyLimits, num10, out FrequencyLimitPoint point))
+			if (_showUnsmoothedResponse && TryInterpolateCurve(GetDisplayedStandardCurve(), num10, out double rawTarget))
+			{
+				text += $"\nLine gốc: {rawTarget:+0.00;-0.00;0.00} {levelUnit} | Δ {num11 - rawTarget:+0.00;-0.00;0.00} dB (xem dữ liệu; đánh giá theo 1/24)";
+			}
+			else if (!_showUnsmoothedResponse && ProductionMeasurement.TryGetFrequencyLimit(_frequencyLimits, num10, out FrequencyLimitPoint point))
 			{
 				double num14 = Math.Min(point.LowerDb, point.UpperDb);
 				double num15 = Math.Max(point.LowerDb, point.UpperDb);
 				double value = num11 - point.TargetDb;
 				text += ((Math.Abs(value) <= 0.1) ? "\nTrùng chuẩn (|Δ| ≤ 0.10 dB)  |  ĐẠT" : $"\nChuẩn: {point.TargetDb:+0.00;-0.00;0.00} {levelUnit}  |  Δ {value:+0.00;-0.00;0.00} dB  |  [{num14:+0.00;-0.00;0.00}, {num15:+0.00;-0.00;0.00}]  |  {((num11 >= num14 && num11 <= num15) ? "ĐẠT" : "LỆCH")}");
 			}
-			else if (TryInterpolateCurve(_standardCurve, num10, out value2))
+			else if (TryInterpolateCurve(GetDisplayedStandardCurve(), num10, out value2))
 			{
 				double num16 = ParseDoubleSafe(TxtFreqTolerance.Text, 3.0);
 				double value3 = num11 - value2;
@@ -1882,7 +1925,7 @@ public partial class AudioRouting : UserControl
 				HideFrequencyHover();
 				return;
 			}
-			var standardSnapshot = _standardCurve?.ToArray();
+			var standardSnapshot = GetDisplayedStandardCurve()?.ToArray();
 			if (standardSnapshot == null || standardSnapshot.Length == 0)
 			{
 				HideFrequencyHover();
@@ -2006,8 +2049,8 @@ public partial class AudioRouting : UserControl
 	{
 		try
 		{
-			double left = Math.Log10(19.5);
-			double right = Math.Log10(20500.0);
+			double left = Math.Log10(_showUnsmoothedResponse ? 19.5 : 49.0);
+			double right = Math.Log10(_showUnsmoothedResponse ? 20500.0 : 18500.0);
 			if (!fitVerticalData)
 			{
 				PlotFreqResponse.Plot.Axes.SetLimits(left, right, _testRunner.NormalizeFrequencyResponseToOneKilohertz ? -30.0 : -100.0, _testRunner.NormalizeFrequencyResponseToOneKilohertz ? 30.0 : 0.0);
@@ -2020,7 +2063,7 @@ public partial class AudioRouting : UserControl
 			{
 				list.AddRange(_sessionLineValues.Where(double.IsFinite));
 			}
-			var stdSnap = _standardCurve?.Values.ToArray();
+			var stdSnap = GetDisplayedStandardCurve()?.Values.ToArray();
 			if (stdSnap != null)
 			{
 				list.AddRange(stdSnap.Where(double.IsFinite));
@@ -2149,6 +2192,11 @@ public partial class AudioRouting : UserControl
 		//IL_00d7: Invalid comparison between Unknown and I4
 		//IL_00da: Unknown result type (might be due to invalid IL or missing references)
 		//IL_00e1: Invalid comparison between Unknown and I4
+		if (TryHandleMeasurementShortcut(e.Key, Keyboard.Modifiers, e.IsRepeat, () => ShowMeasurementDetails()))
+		{
+			e.Handled = true;
+			return;
+		}
 		if ((int)e.Key == 13 && (_isFreqExpanded || _isThdExpanded))
 		{
 			RestoreChartsLayout();
@@ -2214,6 +2262,8 @@ public partial class AudioRouting : UserControl
 			_frequencyChartRefreshTimer.Stop();
 			HideFrequencyHover();
 			PlotFreqResponse.Plot.Clear();
+			PlotFreqResponse.Plot.Title((_testRunner.NormalizeFrequencyResponseToOneKilohertz ? "Đáp tuyến dBr" : "Đáp tuyến dBFS")
+				+ (_showUnsmoothedResponse ? " — No smoothing (trước làm mượt)" : " — 1/24 octave · so sánh 50 Hz–18 kHz"));
 			bool showBandVerdict = _reviewedAutoTestCase != null || (!_isFindingStandardReference && HasComparableStandardCurve()
 				&& _testRunner?.Steps.ElementAtOrDefault(1)?.Status is "Pass" or "Fail");
 			bool bassPassed = _reviewedAutoTestCase?.BassPassed ?? _testRunner.BassPassed;
@@ -2276,11 +2326,12 @@ public partial class AudioRouting : UserControl
 			text3.LabelBold = true;
 			text3.LabelAlignment = Alignment.UpperCenter;
 
-			IReadOnlyDictionary<double, double>? standardSnapshot = _reviewedAutoTestCase?.StandardCurve ?? _standardCurve;
+			IReadOnlyDictionary<double, double>? standardSnapshot = GetDisplayedStandardCurve();
 			if (standardSnapshot != null && standardSnapshot.Count > 0)
 			{
-				double[] xs = standardSnapshot.Select(kv => Math.Log10(kv.Key)).ToArray();
-				double[] ys = standardSnapshot.Select(kv => kv.Value).ToArray();
+				var orderedStandard = standardSnapshot.OrderBy(p => p.Key).ToArray();
+				double[] xs = orderedStandard.Select(kv => Math.Log10(kv.Key)).ToArray();
+				double[] ys = orderedStandard.Select(kv => kv.Value).ToArray();
 				Scatter scatter = PlotFreqResponse.Plot.Add.Scatter(xs, ys);
 				scatter.LineWidth = 2f;
 				scatter.Color = ScottPlot.Color.FromHex("#EAB308");
@@ -2288,7 +2339,7 @@ public partial class AudioRouting : UserControl
 			}
 			IEnumerable<FrequencyLimitPoint> limitsSnapshot = _reviewedAutoTestCase?.FrequencyLimits.Values
 				?? _frequencyLimits?.Values ?? Enumerable.Empty<FrequencyLimitPoint>();
-			if (limitsSnapshot.Any())
+			if (!_showUnsmoothedResponse && limitsSnapshot.Any())
 			{
 				FrequencyLimitPoint[] source = limitsSnapshot.OrderBy(point => point.FrequencyHz).ToArray();
 				double[] xs2 = source.Select(point => Math.Log10(point.FrequencyHz)).ToArray();
@@ -2336,7 +2387,7 @@ public partial class AudioRouting : UserControl
 					if (num2 > 0.0 && double.IsFinite(num2))
 					{
 						double num3 = array2[num];
-						if (IsFrequencyPointOverThreeDb(num2, num3))
+						if (!_showUnsmoothedResponse && IsFrequencyPointOverThreeDb(num2, num3))
 						{
 							Marker marker = PlotFreqResponse.Plot.Add.Marker(array[num], num3);
 							marker.Color = ScottPlot.Colors.Red;
@@ -2346,7 +2397,7 @@ public partial class AudioRouting : UserControl
 					}
 				}
 			}
-			if (_sessionLineFrequencies != null && _sessionLineValues != null && _sessionLineFrequencies.Length > 0 && _sessionLineFrequencies.Length == _sessionLineValues.Length)
+			if (!_showUnsmoothedResponse && _sessionLineFrequencies != null && _sessionLineValues != null && _sessionLineFrequencies.Length > 0 && _sessionLineFrequencies.Length == _sessionLineValues.Length)
 			{
 				Scatter scatter5 = PlotFreqResponse.Plot.Add.Scatter(_sessionLineFrequencies.Select(Math.Log10).ToArray(), _sessionLineValues);
 				scatter5.Color = ScottPlot.Color.FromHex("#A855F7");
@@ -2876,7 +2927,9 @@ public partial class AudioRouting : UserControl
 			ToneThdPercent = sweep == null ? _testRunner.LastToneQuality?.ThdPercent ?? double.NaN : double.NaN,
 			ToneThdNPercent = sweep == null ? _testRunner.LastToneQuality?.ThdNPercent ?? double.NaN : double.NaN
 		};
-		TxtFailureDiagnosis.Text = "Nhận xét tham khảo sau đo:\n• " + string.Join("\n• ", SpeakerMeasurementDiagnosis.DescribeMeasurement(evidence));
+		var notes = SpeakerMeasurementDiagnosis.DescribeMeasurement(evidence).ToList();
+		if (!string.IsNullOrEmpty(_testRunner.LastPreflightWarning)) notes.Insert(0, _testRunner.LastPreflightWarning);
+		TxtFailureDiagnosis.Text = "Nhận xét tham khảo sau đo:\n• " + string.Join("\n• ", notes);
 		TxtFailureDiagnosis.Visibility = Visibility.Visible;
 	}
 
@@ -2885,7 +2938,22 @@ public partial class AudioRouting : UserControl
 		BtnStart.IsEnabled = true;
 		BtnSaveStandardReference.IsEnabled = true;
 		BtnNoiseTest.IsEnabled = true;
-		BtnSaveStandard.IsEnabled = _freqs.Count > 0 && !_testRunner.FeqRepeatabilityInvalid;
+		BtnSaveStandard.IsEnabled = _freqs.Count > 0 && !_testRunner.FeqRepeatabilityInvalid
+			&& string.IsNullOrWhiteSpace(_testRunner.LastFeqInvalidReason) && !_testRunner.InputClippingDetected;
+		if (!_testRunner.IsRubBuzzTest && (_testRunner.Steps.ElementAtOrDefault(0)?.Status != "Pass"
+			|| !string.IsNullOrWhiteSpace(_testRunner.LastFeqInvalidReason)
+			|| _testRunner.FeqRepeatabilityInvalid || _testRunner.InputClippingDetected
+			|| _testRunner.ThdAcquisitionInvalid || _freqs.Count == 0))
+		{
+			BorderVerdict.Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(66, 52, 8));
+			BorderVerdict.BorderBrush = Brushes.Gold;
+			LblVerdict.Foreground = Brushes.Gold;
+			LblVerdict.Text = "CHƯA CÓ PHÉP ĐO HỢP LỆ — KHÔNG KẾT LUẬN";
+			TxtFreqStatus.Text = !string.IsNullOrWhiteSpace(_testRunner.LastFeqInvalidReason)
+				? "CHƯA ĐO — " + _testRunner.LastFeqInvalidReason
+				: "CHƯA ĐO — " + (_testRunner.Steps.ElementAtOrDefault(0)?.Details ?? "Chưa thu được dữ liệu.");
+			return;
+		}
 		if (_testRunner.MissingFrequencyLimits)
 		{
 			BorderVerdict.Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(66, 52, 8));
@@ -3101,14 +3169,21 @@ public partial class AudioRouting : UserControl
 		CloseRoutingScope();
 		StopRoutingHeadroomMonitor();
 		_audioEngine.StopAllAudio();
+		EnsureSelectedStandardSampleRates(beforeMeasurement: true);
 		AppendLog("Audio", "Đã tắt mọi nguồn phát của app và đóng/xóa buffer bài cũ; bắt đầu bài mới.");
 		RewMeterRouting?.PrepareForLiveCapture();
 		System.Threading.Interlocked.Exchange(ref _routingMeterSession, _routingMeterBuffer.Start());
 		_testRunner.AutoTestOneKilohertzOnly = _isExecutingAutoSuite;
 		bool referenceAcquisition = referenceAcquisitionOverride ?? _isFindingStandardReference;
-		// Capture and plot the full 20 Hz–20 kHz sweep, but judge FEQ only from 50 Hz through 18 kHz.
+		_reviewedAutoTestCase = null;
+		_lastObservedCaptureRate = null;
+		UpdateSampleRateWarning();
+		if (_sampleRateWarningText.Length > 0) AppendLog("Cảnh báo 44.1 kHz", _sampleRateWarningText);
+		_lineAcquisitionValues = BuildAcquisitionValues();
+		// Both the comparison grid and default display use 1/24 octave, 50–18k.
 		_testRunner.EvaluationMaxFrequencyHz = 18000.0;
-		_testRunner.RestrictFeqToEvaluationRange = false;
+		_testRunner.RestrictFeqToEvaluationRange = true;
+		UpdateMeasurementDetails(pending: true);
 		Task measurementTask = (_activeMeasurementTask = _testRunner.RunTestAsync(playbackDevice, recordingDevice, runFeqThreeTimes, referenceAcquisition));
 		try
 		{
@@ -3197,6 +3272,7 @@ public partial class AudioRouting : UserControl
 		}
 		StopRoutingHeadroomMonitor();
 		int? previousRecordingChannel = _audioEngine.RecordingChannel;
+		EnsureSelectedStandardSampleRates(beforeMeasurement: true);
 		try
 		{
 			_audioEngine.RecordingChannel = null;
@@ -3288,9 +3364,13 @@ public partial class AudioRouting : UserControl
 
 	private void AudioRouting_Loaded(object sender, RoutedEventArgs e)
 	{
+		_measurementShortcutHost = Window.GetWindow(this);
+		if (_measurementShortcutHost != null) _measurementShortcutHost.PreviewKeyDown += HandleMeasurementShortcut;
 		_hwndSource = PresentationSource.FromVisual(this) as HwndSource;
 		_hwndSource?.AddHook(HwndHorizontalWheelHook);
 		SyncChannelSelectionsFromEngine();
+		EnsureSelectedStandardSampleRates();
+		UpdateSelectedDeviceFormats();
 		_routingMeterTimer.Start();
 		MaintainRoutingHeadroomMonitor();
 		_ = RefreshPendingQaAsync();
@@ -3298,6 +3378,8 @@ public partial class AudioRouting : UserControl
 
 	private void AudioRouting_Unloaded(object sender, RoutedEventArgs e)
 	{
+		if (_measurementShortcutHost != null) _measurementShortcutHost.PreviewKeyDown -= HandleMeasurementShortcut;
+		_measurementShortcutHost = null;
 		CloseRoutingScope();
 		_frequencyChartRefreshTimer.Stop();
 		_hwndSource?.RemoveHook(HwndHorizontalWheelHook);
@@ -3800,13 +3882,10 @@ public partial class AudioRouting : UserControl
 		return value > maximum ? fallback : value;
 	}
 
-	private void ConfigureAutoTestSweep64K()
+	private void ConfigureSelectedSweep()
 	{
-		SelectPlaybackSampleRate(44100);
-		_audioEngine.PlaybackSampleRate = 44100;
-		double duration = DefaultLogSweepSamples / 44100.0;
-		SelectLogSweepDuration(duration);
-		_testRunner.LogSweepDurationSeconds = duration;
+		_audioEngine.PlaybackSampleRate = GetSelectedPlaybackSampleRate();
+		_testRunner.LogSweepDurationSeconds = GetSelectedLogSweepDuration();
 	}
 
 	private static string GetUserDataDirectory()
@@ -4160,6 +4239,8 @@ public partial class AudioRouting : UserControl
 		// An explicit device selection means the operator wants the live input
 		// headroom back, including after an Auto Test released all audio handles.
 		_leaveAudioReleasedAfterAutoTest = false;
+		_lastObservedCaptureRate = null;
+		_sampleRateSyncFailure = "";
 		if (!_isAutoSelectingDevices && _isConfigLoaded)
 		{
 			if (sender == ComboPlayback)
@@ -4175,6 +4256,7 @@ public partial class AudioRouting : UserControl
 			RememberSelectedDeviceNames();
 			SaveConfig();
 		}
+		EnsureSelectedStandardSampleRates();
 		UpdateSelectedDeviceFormats();
 		if (TxtFreqTolerance != null && TxtThdLimit != null && !_isExecutingAutoSuite)
 		{
@@ -4510,9 +4592,8 @@ public partial class AudioRouting : UserControl
 			AppendLog("Auto Test", "Đã chặn phép đo vì Windows Accessibility Mono audio đang bật; kết quả Left/Right sẽ bị trộn.");
 			return;
 		}
-		// Reference acquisition and every Auto Test route run at 44.1 kHz.
-		// Apply the same settings before deriving any standard-file identity.
-		ConfigureAutoTestSweep64K();
+		// Keep the selected rate and length for acquisition and reference identity.
+		ConfigureSelectedSweep();
 		SyncPlaybackVolumeFromWindows();
 		AppendLog("Auto Test", $"Dùng cùng sweep {Math.Round(_testRunner.LogSweepDurationSeconds * _audioEngine.PlaybackSampleRate):F0} mẫu với Line chuẩn đang chọn.");
 		List<string> missingStandards = GetMissingStandardReferenceTests();
@@ -5118,7 +5199,7 @@ public partial class AudioRouting : UserControl
 			}
 			else
 			{
-				obj = $"LOGSWEEP_VECAVG_FDLY_G18-22K_EDGE13_HP10_PPO{48}_N{Math.Round(_testRunner.LogSweepDurationSeconds * _audioEngine.PlaybackSampleRate):F0}_PR{5.0:F0}";
+			obj = $"LOGSWEEP_{ResponseSmoothing.AnalysisId}_N{Math.Round(_testRunner.LogSweepDurationSeconds * _audioEngine.PlaybackSampleRate):F0}";
 			}
 		}
 		else
@@ -5375,6 +5456,10 @@ public partial class AudioRouting : UserControl
 			test.ResponseLevels = _dbValues.Take(count).ToArray();
 		}
 		test.ResponseLevelUnit = _testRunner.NormalizeFrequencyResponseToOneKilohertz ? "dBr" : "dBFS";
+		test.UnsmoothedResponse = new Dictionary<double, double>(_rawResponse);
+		test.UnsmoothedStandardCurve = new Dictionary<double, double>(_rawStandardCurve);
+		test.ImpulseResult = _testRunner.LastSweepResult;
+		test.MeasurementValues = BuildMeasurementValues(_testRunner.LastSweepResult, false).ToArray();
 		test.StandardCurve = _standardCurve == null
 			? new Dictionary<double, double>() : new Dictionary<double, double>(_standardCurve);
 		test.FrequencyLimits = _frequencyLimits == null
@@ -5452,6 +5537,8 @@ public partial class AudioRouting : UserControl
 		var savedPlaybackItem = ComboPlayback?.SelectedItem;
 		var savedRecordingItem = ComboRecording?.SelectedItem;
 		var savedStandardCurve = _standardCurve;
+		var savedRawStandardCurve = _rawStandardCurve;
+		var savedStandardEffects = _standardImpulseEffects;
 		var savedOneKilohertzLevel = _standardOneKilohertzLevelDbFs;
 		var savedFrequencyLimits = _frequencyLimits;
 		var savedStandardKey = _loadedStandardDeviceKey;
@@ -5505,6 +5592,8 @@ public partial class AudioRouting : UserControl
 				}
 				finally { _isAutoSelectingDevices = false; }
 				_standardCurve = savedStandardCurve;
+				_rawStandardCurve = savedRawStandardCurve;
+				_standardImpulseEffects = savedStandardEffects;
 				_standardOneKilohertzLevelDbFs = savedOneKilohertzLevel;
 				_frequencyLimits = savedFrequencyLimits;
 				_loadedStandardDeviceKey = savedStandardKey;
@@ -5520,6 +5609,8 @@ public partial class AudioRouting : UserControl
 
 	private void CheckAndLoadStandardDevice()
 	{
+		_rawStandardCurve = new Dictionary<double, double>();
+		_standardImpulseEffects = null;
 		_standardCurve = null;
 		_frequencyLimits = null;
 		_standardOneKilohertzLevelDbFs = null;
@@ -5574,6 +5665,8 @@ public partial class AudioRouting : UserControl
 						throw new InvalidDataException("Line chuẩn không khớp chế độ đo hiện tại; cần tìm lại line chuẩn.");
 					if (_testRunner.UseLogSweepFrequencyResponse)
 					{
+						if (!array.Contains("# ResponseAnalysis=" + ResponseSmoothing.AnalysisId))
+							throw new InvalidDataException("Line chuẩn khác smoothing/băng so sánh 1/24 (50 Hz–18 kHz); cần tìm lại line chuẩn.");
 						long expectedSweepSamples = (long)Math.Round(_testRunner.LogSweepDurationSeconds * _audioEngine.PlaybackSampleRate);
 						string? sweepLine = array.FirstOrDefault(line => line.StartsWith("# SweepSamples=", StringComparison.Ordinal));
 						if (sweepLine != null && (!long.TryParse(sweepLine["# SweepSamples=".Length..], NumberStyles.Integer, CultureInfo.InvariantCulture, out long savedSweepSamples)
@@ -5638,6 +5731,7 @@ public partial class AudioRouting : UserControl
 					}
 					if (dictionary.Count > 0)
 					{
+						LoadRawStandardCurve(standardDeviceFileName, expectedBasis, useRawReferenceInNormalizedMode);
 						_standardCurve = dictionary;
 						_frequencyLimits = dictionary2;
 						_loadedStandardDeviceKey = standardDeviceKey;
@@ -5714,6 +5808,9 @@ public partial class AudioRouting : UserControl
 
 	private void ConfigureProductionMeasurement(TestConfig? config)
 	{
+		_testRunner.ImpulseEffectsSettings = config?.ImpulseEffects ?? new ImpulseEffectSettings();
+		_testRunner.ApplyDistortionCalibration = ChkDistortionCalibration.IsChecked == true;
+		_testRunner.UseHarmonicFrequencyAsDistortionReference = ChkDistortionHarmonicReference.IsChecked == true;
 		if (_isExecutingAutoSuite)
 		{
 			_audioEngine.RecordingChannel = ResolveRecordingChannel(config);
@@ -5891,50 +5988,14 @@ public partial class AudioRouting : UserControl
 
 	private MicrophoneCalibration? ResolveFeqMicrophoneCalibration()
 	{
-		if (((ComboRecording.SelectedItem as DeviceItem)?.Device?.FriendlyName ?? "").IndexOf("KT USB", StringComparison.OrdinalIgnoreCase) < 0)
-		{
-			return null;
-		}
-		return MicrophoneCalibration.ScanAvailableCalibrations().FirstOrDefault((MicrophoneCalibration calibration) => calibration.Name.IndexOf("99-00192", StringComparison.OrdinalIgnoreCase) >= 0);
+		return MicrophoneCalibration.ForKtUsbDevice((ComboRecording.SelectedItem as DeviceItem)?.Device?.FriendlyName ?? "");
 	}
 
-	private void BtnExportStandard_Click(object sender, RoutedEventArgs e)
-	{
-		if (_freqs.Count == 0 || _dbValues.Count == 0 || _freqs.Count != _dbValues.Count)
-		{
-			ModernMessageBox.Show(Window.GetWindow((DependencyObject)(object)this), "Vui lòng chạy đo FEQ trước khi lưu thiết bị chuẩn!", "Thông báo", ModernMessageBox.MessageBoxType.Warning);
-			return;
-		}
-		try
-		{
-			string standardDeviceFileName = GetStandardDeviceFileName();
-			using (StreamWriter streamWriter = new StreamWriter(standardDeviceFileName))
-			{
-				streamWriter.WriteLine("# LevelBasis=" + _testRunner.CurrentFrequencyResponseLevelBasis);
-				string levelUnit = _testRunner.NormalizeFrequencyResponseToOneKilohertz ? "dBr" : "dBFS";
-				streamWriter.WriteLine($"Frequency (Hz),Target ({levelUnit}),Lower Limit ({levelUnit}),Upper Limit ({levelUnit}),Critical");
-				double num = ParseDoubleSafe(TxtFreqTolerance.Text, 3.0);
-				for (int i = 0; i < _freqs.Count; i++)
-				{
-					double num2 = _dbValues[i];
-					string value = _freqs[i].ToString("0.####", CultureInfo.InvariantCulture);
-					string value2 = num2.ToString("F4", CultureInfo.InvariantCulture);
-					string value3 = (num2 - num).ToString("F4", CultureInfo.InvariantCulture);
-					string value4 = (num2 + num).ToString("F4", CultureInfo.InvariantCulture);
-					streamWriter.WriteLine($"{value},{value2},{value3},{value4},False");
-				}
-			}
-			ModernMessageBox.Show(Window.GetWindow((DependencyObject)(object)this), "Đã lưu thông số thiết bị chuẩn thành công vào file:\n" + System.IO.Path.GetFileName(standardDeviceFileName), "Thành công", ModernMessageBox.MessageBoxType.Info);
-			CheckAndLoadStandardDevice();
-		}
-		catch (Exception ex)
-		{
-			ModernMessageBox.Show(Window.GetWindow((DependencyObject)(object)this), "Lỗi khi lưu thiết bị chuẩn: " + ex.Message, "Lỗi", ModernMessageBox.MessageBoxType.Error);
-		}
-	}
+	private void BtnExportStandard_Click(object sender, RoutedEventArgs e) => BtnSaveStandard_Click(sender, e);
 
 	private void SaveReferenceCurve(string filePath, IReadOnlyList<double> frequencies, IReadOnlyList<double> values, double tolerance, double? referenceOneKilohertzDbFs = null)
 	{
+		bool sameCapture = frequencies.SequenceEqual(_freqs) && values.SequenceEqual(_dbValues);
 		if (frequencies.Count == 0 || frequencies.Count != values.Count
 			|| frequencies.Any(f => !double.IsFinite(f) || f <= 0.0)
 			|| values.Any((double v) => !double.IsFinite(v)))
@@ -5953,6 +6014,8 @@ public partial class AudioRouting : UserControl
 			using (StreamWriter streamWriter = new StreamWriter(text))
 			{
 				streamWriter.WriteLine("# LevelBasis=" + _testRunner.CurrentFrequencyResponseLevelBasis);
+				if (_testRunner.UseLogSweepFrequencyResponse)
+					streamWriter.WriteLine("# ResponseAnalysis=" + ResponseSmoothing.AnalysisId);
 				streamWriter.WriteLine(FormattableString.Invariant($"# SweepSamples={Math.Round(_testRunner.LogSweepDurationSeconds * _audioEngine.PlaybackSampleRate):F0}"));
 				streamWriter.WriteLine(FormattableString.Invariant($"# SampleRate={_audioEngine.PlaybackSampleRate}"));
 				double referenceLevel = referenceOneKilohertzDbFs ?? _testRunner.LastOneKilohertzLevelDbFs;
@@ -5973,6 +6036,11 @@ public partial class AudioRouting : UserControl
 				var portableLine = new
 				{
 					format = "SoncaAudioInspector.ReferenceCurve.V1",
+					analysisId = ResponseSmoothing.AnalysisId,
+					csvSha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(text))),
+					rawPoints = (sameCapture ? _rawResponse : new Dictionary<double, double>()).OrderBy(p => p.Key).Select(p => new { frequencyHz = p.Key, levelDb = p.Value }).ToArray(),
+					impulseEffectsReference = !sameCapture ? null : _savingCompositeReference ? _pendingEffectsReference
+						: ImpulseEffectReference.From(_testRunner.LastSweepResult?.ImpulseEffects, _testRunner.ImpulseEffectsSettings),
 					levelBasis = _testRunner.CurrentFrequencyResponseLevelBasis,
 					sweepSamples = (int)Math.Round(_testRunner.LogSweepDurationSeconds * _audioEngine.PlaybackSampleRate),
 					sampleRate = _audioEngine.PlaybackSampleRate,
@@ -6029,7 +6097,7 @@ public partial class AudioRouting : UserControl
 			ModernMessageBox.Show(Window.GetWindow((DependencyObject)(object)this), "Không có bài đo đáp tuyến để tạo line chuẩn.", "Tìm line chuẩn", ModernMessageBox.MessageBoxType.Warning);
 			return;
 		}
-		ConfigureAutoTestSweep64K();
+		ConfigureSelectedSweep();
 		SaveConfig();
 		SelectPlaybackMode("Shared");
 		_audioEngine.UseExclusivePlayback = false;
@@ -6121,6 +6189,8 @@ public partial class AudioRouting : UserControl
 				LblVerdict.Text = "[" + testItem.Id + "] ĐANG ỔN ĐỊNH ROUTE...";
 				AppendLog("Calibration", $"[{testItem.Id}] Đã tắt phát bài trước; đo tối đa 3 lượt. Nếu 2 lượt đầu đạt độ lặp lại thì dùng ngay trung bình cặp đó; nếu chưa đạt mới đo lượt 3 để chọn cặp tối ưu.");
 				var validReferenceRuns = new List<Dictionary<double, double>>();
+				var validRawReferenceRuns = new List<IReadOnlyDictionary<double, double>>();
+				var validEffectReferences = new List<ImpulseEffectReference?>();
 				var validReferenceLevels = new List<double>();
 				int totalRuns = maxRuns;
 				int run = 1;
@@ -6179,6 +6249,8 @@ public partial class AudioRouting : UserControl
 					validReferenceRuns.Add(_freqs.Select((frequency, index) => (frequency, db: _dbValues[index]))
 						.ToDictionary(point => point.frequency, point => point.db));
 					validReferenceLevels.Add(_testRunner.LastOneKilohertzLevelDbFs);
+					validRawReferenceRuns.Add(new Dictionary<double, double>(_rawResponse));
+					validEffectReferences.Add(ImpulseEffectReference.From(_testRunner.LastSweepResult?.ImpulseEffects, _testRunner.ImpulseEffectsSettings));
 					noiseRetriesForCurrentRun = 0;
 
 					// Nếu 2 lượt đầu đã đạt chuẩn độ lặp lại thì không cần đo lượt thứ 3, lấy trung bình theo cặp 1-2
@@ -6250,13 +6322,21 @@ public partial class AudioRouting : UserControl
 				}
 				List<double> list = selectedPair.AverageCurve.Keys.OrderBy(f => f).ToList();
 				List<double> list2 = list.Select(f => selectedPair.AverageCurve[f]).ToList();
+				var rawFirst = validRawReferenceRuns[selectedPair.FirstRun - 1];
+				var rawSecond = validRawReferenceRuns[selectedPair.SecondRun - 1];
+				_rawResponse = rawFirst.Keys.Where(rawSecond.ContainsKey).ToDictionary(f => f, f => (rawFirst[f] + rawSecond[f]) / 2);
+				lock (_freqs) { _freqs.Clear(); _freqs.AddRange(list); _dbValues.Clear(); _dbValues.AddRange(list2); }
 				string selectedRuns = $"{selectedPair.FirstRun} và {selectedPair.SecondRun}";
 				AppendLog("Độ lặp lại", $"[{testItem.Id}] Chọn lượt {selectedRuns}; lệch lớn nhất {selectedPair.MaximumDifferenceDb:F2} dB tại {selectedPair.MaximumDifferenceFrequencyHz:0.#} Hz, RMS {selectedPair.RmsDifferenceDb:F2} dB. Line chuẩn là trung bình dB của hai lượt; lượt còn lại không được dùng.");
 				try
 				{
 					string standardDeviceFileName = GetStandardDeviceFileName();
 					double selectedOneKilohertzLevel = (validReferenceLevels[selectedPair.FirstRun - 1] + validReferenceLevels[selectedPair.SecondRun - 1]) / 2.0;
-					SaveReferenceCurve(standardDeviceFileName, list, list2, ParseDoubleSafe(TxtFreqTolerance.Text, 3.0), selectedOneKilohertzLevel);
+					_savingCompositeReference = true;
+					_pendingEffectsReference = ImpulseEffectReference.Average(validEffectReferences[selectedPair.FirstRun - 1],
+						validEffectReferences[selectedPair.SecondRun - 1], _testRunner.ImpulseEffectsSettings.EchoDelayToleranceMs);
+					try { SaveReferenceCurve(standardDeviceFileName, list, list2, ParseDoubleSafe(TxtFreqTolerance.Text, 3.0), selectedOneKilohertzLevel); }
+					finally { _savingCompositeReference = false; _pendingEffectsReference = null; }
 					CheckAndLoadStandardDevice();
 					if (!HasComparableStandardCurve() || _standardCurve?.Count != list.Count)
 						throw new InvalidDataException("File line chuẩn vừa lưu không nạp lại được đủ điểm.");

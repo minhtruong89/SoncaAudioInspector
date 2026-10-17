@@ -121,7 +121,7 @@
                                 </StackPanel>
                             </Grid>
                             <Slider Name="SliderPlaybackLevelDbfs" Minimum="-60" Maximum="0" Value="0" IsSnapToTickEnabled="True" TickFrequency="1" Margin="0,0,0,8" ValueChanged="SliderPlaybackLevelDbfs_ValueChanged" PreviewMouseWheel="SliderPlaybackLevelDbfs_PreviewMouseWheel"/>
-                            <Grid Margin="0,5,0,0" Visibility="Collapsed">
+                            <Grid Margin="0,5,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="120"/>
@@ -129,10 +129,11 @@
                                 <TextBlock Text="Sample rate phát của App" FontSize="11" Foreground="#71717A" VerticalAlignment="Center"/>
                                 <ComboBox Name="ComboPlaybackSampleRate" Grid.Column="1" Height="30"
                                           Style="{StaticResource DarkComboBoxStyle}"
-                                          IsEnabled="False" Focusable="False"
-                                          ToolTip="Sample rate phát cố định 44,1 kHz cho toàn bộ Auto Test"
+                                          IsEnabled="{Binding IsEnabled, ElementName=BtnStart}"
+                                          ToolTip="Chọn cùng sample rate với REW. Thời gian sweep = Length / sample rate phát; ngõ thu Shared có thể dùng sample rate khác."
                                           SelectionChanged="PlaybackSampleRate_SelectionChanged">
-                                    <ComboBoxItem Content="44,1 kHz (Cố định)" Tag="44100" IsSelected="True"/>
+                                    <ComboBoxItem Content="44,1 kHz" Tag="44100" IsSelected="True"/>
+                                    <ComboBoxItem Content="48 kHz" Tag="48000"/>
                                 </ComboBox>
                             </Grid>
                             <Grid Margin="0,6,0,0">
@@ -283,13 +284,21 @@
                             </Grid>
                             <TextBlock Text="Thu noise floor 1 giây trước sweep · phát guard 18 Hz → 22 kHz · cùng bản thu phân tích đáp tuyến, H2–H9 và THD"
                                        Foreground="#71717A" FontSize="10" Margin="22,5,0,0" TextWrapping="Wrap"/>
+                            <CheckBox Name="ChkDistortionCalibration" Content="Distortion: áp dụng calibration mic" IsChecked="False"
+                                      Checked="DistortionOptions_Changed" Unchecked="DistortionOptions_Changed" Foreground="#D4D4D8" Margin="22,8,0,0"
+                                      IsEnabled="{Binding IsEnabled, ElementName=BtnStart}" ToolTip="Khớp tùy chọn Use cal files của REW. Mặc định tắt; calibration đáp tuyến không bị thay đổi."/>
+                            <CheckBox Name="ChkDistortionHarmonicReference" Content="Distortion: tham chiếu tại tần số hài" IsChecked="False"
+                                      Checked="DistortionOptions_Changed" Unchecked="DistortionOptions_Changed" Foreground="#D4D4D8" Margin="22,6,0,0"
+                                      IsEnabled="{Binding IsEnabled, ElementName=BtnStart}" ToolTip="Khớp Use harmonic frequency as ref của REW. Mặc định chia cho fundamental tại tần số đang xét."/>
+                            <TextBlock Text="Hiển thị/so sánh 1/24 octave · 50 Hz–18 kHz · chuột phải: No smoothing"
+                                       Foreground="#71717A" FontSize="10" Margin="22,6,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
 
                     <Separator Background="#27272A" Margin="0,0,0,20"/>
 
                     <CheckBox Name="ChkNormalizeOneKilohertz" Content="CHUẨN HÓA ĐÁP TUYẾN THEO 1 kHz (0 dBr)"
-                              IsChecked="True" Checked="NormalizeOneKilohertz_Changed" Unchecked="NormalizeOneKilohertz_Changed"
+                              IsChecked="False" Checked="NormalizeOneKilohertz_Changed" Unchecked="NormalizeOneKilohertz_Changed"
                               IsEnabled="{Binding IsEnabled, ElementName=BtnStart}"
                               Foreground="#F4F4F5" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8"
                               ToolTip="Trừ mức thu tại 1 kHz khỏi mọi điểm đáp tuyến. Mức thu 1 kHz thực vẫn hiện riêng bằng dBFS."/>
@@ -359,12 +368,18 @@
         <!-- Right Panel (Charts & Verdict) -->
         <Grid Grid.Column="2">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Name="RowFooterArea" Height="Auto"/>
             </Grid.RowDefinitions>
 
+            <Border Name="BorderSampleRateWarning" Grid.Row="0" Background="#33260D" BorderBrush="#D97706"
+                    BorderThickness="1" CornerRadius="6" Padding="12,8" Margin="15,10,15,0" Visibility="Collapsed">
+                <TextBlock Name="TxtSampleRateWarning" Foreground="#FCD34D" FontSize="12" FontWeight="SemiBold" TextWrapping="Wrap"/>
+            </Border>
+
             <!-- Plot Charts Panel -->
-            <Grid Name="GridChartsArea" Grid.Row="0" Margin="15,10,15,5">
+            <Grid Name="GridChartsArea" Grid.Row="1" Margin="15,10,15,5">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Name="ColChartsPlot" Width="*"/>
                     <ColumnDefinition Name="ColAutoTestList" Width="0"/>
@@ -389,7 +404,7 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="PHÂN TÍCH ĐÁP TUYẾN TẦN SỐ (20 Hz - 20 kHz)" FontSize="12" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center"/>
+                                <TextBlock Text="ĐÁP TUYẾN 1/24 OCTAVE · 50 Hz–18 kHz" FontSize="12" FontWeight="Bold" Foreground="#10B981" VerticalAlignment="Center"/>
                                 <TextBlock Name="TxtFreqStatus" Grid.Column="1" Text="" FontSize="11" FontWeight="Bold" Foreground="#FA4B4B" Margin="0,0,10,0" VerticalAlignment="Center"/>
                                 <Button Name="BtnToggleFreqFullscreen" Grid.Column="2" Click="BtnToggleFreqFullscreen_Click" Style="{StaticResource ModernButtonStyle}" Width="28" Height="24" Padding="0" Margin="4,0,0,0" ToolTip="Phóng to đồ thị tần số (Ẩn các phần khác để nhìn rõ tần số và dB)" VerticalAlignment="Center">
                                     <Viewbox Width="13" Height="13">
@@ -560,6 +575,9 @@
                             <StackPanel HorizontalAlignment="Center">
                                 <TextBlock Text="KẾT QUẢ TỔNG" FontSize="11" FontWeight="Bold" Foreground="#71717A" HorizontalAlignment="Center"/>
                                 <TextBlock Name="LblVerdict" Text="ĐANG CHỜ..." FontSize="28" FontWeight="Black" Foreground="#A1A1AA" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="8,5" Visibility="Collapsed">
+                                    <TextBlock Name="TxtMeasurementSummary" Text="Chưa có thông số đo" FontSize="11" Foreground="#D4D4D8" TextWrapping="Wrap" MaxWidth="700" VerticalAlignment="Center"/>
+                                </StackPanel>
                                 <ScrollViewer MaxHeight="130" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                     <TextBlock Name="TxtFailureDiagnosis" Text="" FontSize="12" Foreground="#D4D4D8" TextAlignment="Left" TextWrapping="Wrap" MaxWidth="1000" Margin="16,6" Visibility="Collapsed"/>
                                 </ScrollViewer>

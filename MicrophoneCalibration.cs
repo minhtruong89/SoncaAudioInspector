@@ -129,6 +129,20 @@ namespace SoncaAudioInspector
         /// <summary>
         /// Scans standard locations for microphone calibration files.
         /// </summary>
+        public static MicrophoneCalibration? ForKtUsbDevice(string deviceName)
+        {
+            if (!deviceName.Contains("KT USB", StringComparison.OrdinalIgnoreCase)) return null;
+            foreach (string directory in new[] { AppDomain.CurrentDomain.BaseDirectory,
+                Path.GetDirectoryName(typeof(MicrophoneCalibration).Assembly.Location) ?? "" }.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                string path = Path.Combine(directory, "calibrations", "99-00192.txt");
+                if (!File.Exists(path)) continue;
+                var profile = LoadFromFile(path);
+                if (profile.IsLoaded) return profile;
+            }
+            return ScanAvailableCalibrations().FirstOrDefault(p => p.Name.Equals("99-00192.txt", StringComparison.OrdinalIgnoreCase));
+        }
+
         public static List<MicrophoneCalibration> ScanAvailableCalibrations()
         {
             var results = new List<MicrophoneCalibration>();

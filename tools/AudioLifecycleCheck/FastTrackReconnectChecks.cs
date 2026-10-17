@@ -33,6 +33,8 @@ internal static class FastTrackReconnectChecks
         byte[] original = new byte[40];
         for (int i = 0; i < original.Length; i++) original[i] = (byte)(i + 1);
         BitConverter.GetBytes((ushort)8).CopyTo(original, 12);
+        BitConverter.GetBytes(48000).CopyTo(original, 4);
+        BitConverter.GetBytes(48000 * 8).CopyTo(original, 8);
         IntPtr format = Marshal.AllocCoTaskMem(original.Length);
         try
         {
@@ -43,8 +45,23 @@ internal static class FastTrackReconnectChecks
             Marshal.Copy(format, after, 0, after.Length);
             Require(BitConverter.ToInt32(after, 4) == 44100 && BitConverter.ToInt32(after, 8) == 44100 * 8, "Incorrect byte rate.");
             Require(original.Take(4).SequenceEqual(after.Take(4)) && original.Skip(12).SequenceEqual(after.Skip(12)), "Changed bit depth/channel mask/subformat.");
+            type.GetMethod("ChangeRate", BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(null, new object[] { format, 48000 });
+            byte[] restored = new byte[40]; Marshal.Copy(format, restored, 0, restored.Length);
+            Require(original.SequenceEqual(restored), "Could not restore the original 48 kHz format exactly.");
         }
         finally { Marshal.FreeCoTaskMem(format); }
+        var ensure = typeof(AudioSampleRateSetup).GetMethods(BindingFlags.Static | BindingFlags.NonPublic).Single(m => m.Name == "EnsureStandard");
+        int rate = 48000, writes = 0;
+        Func<int> read = () => rate; Action<int> set = value => { rate = value; writes++; };
+        object?[] syncArgs = { "test endpoint", read, set, null };
+        Require((bool)ensure.Invoke(null, syncArgs)! && rate == 44100 && writes == 1, "48 kHz did not sync to the 44.1 kHz standard.");
+        Require((bool)ensure.Invoke(null, syncArgs)! && writes == 1, "An already aligned endpoint was written again.");
+        Func<int> staleRead = () => 48000; Action<int> ignoredSet = _ => { };
+        object?[] staleArgs = { "readback failure", staleRead, ignoredSet, null };
+        Require(!(bool)ensure.Invoke(null, staleArgs)! && ((string)staleArgs[3]!).Contains("48000"), "Failed readback was reported as successful sync.");
+        Action<int> unsupported = _ => throw new NotSupportedException("unsupported format");
+        object?[] failArgs = { "unsupported", staleRead, unsupported, null };
+        Require(!(bool)ensure.Invoke(null, failArgs)!, "Unsupported 44.1 kHz format was reported as successful sync.");
         Console.WriteLine(JsonSerializer.Serialize(new { stage = "fasttrack-reconnect-logic-pass" }));
     }
 

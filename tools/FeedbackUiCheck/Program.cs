@@ -20,6 +20,22 @@ internal static class Program
         var assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.Combine(directory, "SoncaAudioInspector.dll"));
         var app = (Application)Activator.CreateInstance(assembly.GetType("SoncaAudioInspector.App")!)!;
         app.GetType().GetMethod("InitializeComponent")!.Invoke(app, null);
+        if (args.Length > 1 && args[1] == "--manual-line-ui")
+        {
+            ManualLineUiChecks.Run(assembly, directory, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--octave-effects-ui")
+        {
+            OctaveEffectsUiChecks.Run(assembly, Path.GetFullPath(args[2]), Path.GetFullPath(args[3]));
+            app.Shutdown();
+            return;
+        }
+        if (args.Length > 1 && args[1] == "--rew-ui-only")
+        {
+            RewUiChecks.Run(assembly, Path.GetFullPath(args[2]));
+            app.Shutdown();
+            return;
+        }
         if (args.Length > 1 && args[1] == "--model-toggle-only")
         {
             const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -129,7 +145,7 @@ internal static class Program
             Console.WriteLine("PASS only Audio Routing is initialized and Auto Test remains available.");
             Environment.Exit(0);
         }
-        if (args.Length > 1 && args[1] == "--single-model-only")
+        if (args.Length > 1 && args[1] == "--model-config-only")
         {
             var singleModelWindowType = assembly.GetType("SoncaAudioInspector.MainWindow")!;
             using var config = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "checking_config.json")));
@@ -138,10 +154,10 @@ internal static class Program
                 throw new Exception("Packaged configuration does not contain exactly one MI SAM model.");
             var isSupported = singleModelWindowType.GetMethod("IsSupportedModel", BindingFlags.Static | BindingFlags.NonPublic)!;
             if (!(bool)isSupported.Invoke(null, new object?[] { "MI SAM" })!
-                || (bool)isSupported.Invoke(null, new object?[] { "D'AURIS 500" })!
-                || (bool)isSupported.Invoke(null, new object?[] { "CARRY ON" })!)
-                throw new Exception("Unsupported server/product models can still enter the model selector.");
-            Console.WriteLine("PASS packaged configuration contains only MI SAM and the model filter rejects unsupported models.");
+                || !(bool)isSupported.Invoke(null, new object?[] { "D'AURIS 500" })!
+                || !(bool)isSupported.Invoke(null, new object?[] { "CARRY ON" })!)
+                throw new Exception("Configured models cannot enter the model selector.");
+            Console.WriteLine("PASS packaged default MI SAM is preserved and additional configured models are supported.");
             app.Shutdown();
             return;
         }
@@ -172,7 +188,7 @@ internal static class Program
         }
         if (args.Length > 1 && args[1] == "--normalization-only")
         {
-            string isolatedDataDirectory = Path.Combine(Path.GetTempPath(), "sonca-reference-check-" + Guid.NewGuid().ToString("N"));
+            string isolatedDataDirectory = Path.Combine(directory, "test-data", "sonca-reference-check-" + Guid.NewGuid().ToString("N"));
             Environment.SetEnvironmentVariable("SONCA_AUDIO_INSPECTOR_DATA_DIR", isolatedDataDirectory);
             const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
             var normalizationRunnerType = assembly.GetType("SoncaAudioInspector.TestRunner")!;
@@ -196,6 +212,7 @@ internal static class Program
                 return routing;
             }
             var first = CreateRouting(normalizationEngine, normalizationRunner);
+            ((CheckBox)first.FindName("ChkNormalizeOneKilohertz")).IsChecked = true;
             var parseNumber = normalizationRoutingType.GetMethod("ParseDoubleSafe", privateInstance)!;
             if ((double)parseNumber.Invoke(first, new object[] { "3,0", 0.0 })! != 3.0
                 || (double)parseNumber.Invoke(first, new object[] { "0,50", 0.0 })! != 0.5)
@@ -224,7 +241,7 @@ internal static class Program
             {
                 normalizationRoutingType.GetMethod("SaveConfig", privateInstance)!.Invoke(first, null);
                 var oldConfig = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(configPath))!;
-                oldConfig["LogSweepDurationSeconds"] = 262144.0 / 44100.0;
+                oldConfig["LogSweepDurationSeconds"] = 65536.0 / 44100.0;
                 File.WriteAllText(configPath, oldConfig.ToJsonString());
                 var reloadedEngine = Activator.CreateInstance(assembly.GetType("SoncaAudioInspector.AudioEngine")!)!;
                 var reloadedRunner = Activator.CreateInstance(normalizationRunnerType, reloadedEngine)!;
@@ -395,7 +412,7 @@ internal static class Program
                 if (previousConfig == null) { if (File.Exists(configPath)) File.Delete(configPath); }
                 else File.WriteAllBytes(configPath, previousConfig);
             }
-            Console.WriteLine("PASS decimal-comma repair, old 256K reset, JSON export, restart 64K reload, 300 dB reference repair, strict sweep-length matching, Bluetooth reference reuse, and Auto Test reference gate");
+            Console.WriteLine("PASS decimal-comma repair, JSON export, restart normalization reload, 300 dB reference repair, strict sweep-length matching, Bluetooth reference reuse, and Auto Test reference gate");
             app.Shutdown();
             return;
         }
@@ -413,9 +430,9 @@ internal static class Program
             if ((sweepLengthCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() != "65536")
                 throw new Exception("64K is no longer the default sweep length.");
             var frequencyGrid = (double[])sweepRunner.GetType().GetMethod("GenerateLogSweepEvaluationFrequencies", BindingFlags.Static | BindingFlags.NonPublic)!
-                .Invoke(null, new object[] { 20.0, 20000.0, 48 })!;
-            if (frequencyGrid.Length != 481 || frequencyGrid[0] != 20.0 || frequencyGrid[^1] != 20000.0)
-                throw new Exception("LogSweep response no longer uses the 481 point, 1/48 octave grid.");
+                .Invoke(null, new object[] { 50.0, 18000.0, 24 })!;
+            if (frequencyGrid.Length != 206 || frequencyGrid[0] != 50.0 || frequencyGrid[^1] != 18000.0)
+                throw new Exception("LogSweep comparison no longer uses the 206 point, 1/24 octave grid from 50–18k.");
             foreach (int length in new[] { 65536, 131072 })
             {
                 double duration = length / 44100.0;
@@ -601,8 +618,8 @@ internal static class Program
         if (args.Length > 1 && args[1] == "--auto-feq-range-only")
         {
             object rangeRunner = Activator.CreateInstance(runnerType, engine)!;
-            if ((double)runnerType.GetProperty("EvaluationMaxFrequencyHz")!.GetValue(rangeRunner)! != 15000.0)
-                throw new Exception("Manual FEQ range changed unexpectedly.");
+            if ((double)runnerType.GetProperty("EvaluationMaxFrequencyHz")!.GetValue(rangeRunner)! != 18000.0)
+                throw new Exception("Manual FEQ no longer evaluates through 18 kHz.");
             runnerType.GetProperty("EvaluationMaxFrequencyHz")!.SetValue(rangeRunner, 18000.0);
             if ((double)runnerType.GetProperty("EvaluationMaxFrequencyHz")!.GetValue(rangeRunner)! != 18000.0)
                 throw new Exception("Auto FEQ evaluation limit was not applied.");

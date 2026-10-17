@@ -12,6 +12,11 @@ string Option(string key, string fallback) => args.FirstOrDefault(a => a.StartsW
 int cycles = int.Parse(Option("--cycles", "0"));
 int continuousSeconds = int.Parse(Option("--continuous-seconds", "0"));
 bool verifyFixes = args.Contains("--verify-fixes");
+if (args.Contains("--manual-line-check")) { await ManualInputCheck.Line(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory))); return; }
+if (args.Contains("--manual-input-check")) { await ManualInputCheck.Run(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory))); return; }
+if (args.Contains("--sync-standard-rates")) { ImpulseLoopbackCheck.SyncStandardRates(); return; }
+if (args.Any(a => a.StartsWith("--restore-capture-rate="))) { ImpulseLoopbackCheck.RestoreCaptureRate(int.Parse(Option("--restore-capture-rate", "48000"))); return; }
+if (args.Contains("--impulse-loopback")) { await ImpulseLoopbackCheck.RunAsync(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory)), int.Parse(Option("--playback-rate", "48000")), args.Contains("--align-capture-rate")); return; }
 if (args.Contains("--model-startup-check")) { ModelStartupChecks.Run(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory)), Path.GetFullPath(Option("--dependency-directory", AppContext.BaseDirectory))); return; }
 if (args.Contains("--audio-session-check")) { ModelStartupChecks.AudioSessions(); return; }
 if (args.Contains("--fasttrack-logic")) { FastTrackReconnectChecks.Logic(); return; }

@@ -38,6 +38,12 @@ public class AutoTestCaseItem : INotifyPropertyChanged
 	public double[] ResponseFrequencies { get; set; } = Array.Empty<double>();
 
 	public double[] ResponseLevels { get; set; } = Array.Empty<double>();
+	public IReadOnlyDictionary<double, double> UnsmoothedResponse { get; set; } = new Dictionary<double, double>();
+	public IReadOnlyDictionary<double, double> UnsmoothedStandardCurve { get; set; } = new Dictionary<double, double>();
+	[System.Text.Json.Serialization.JsonIgnore]
+	public StandardAcousticResult? ImpulseResult { get; set; }
+	[System.Text.Json.Serialization.JsonIgnore]
+	public IReadOnlyList<MeasurementValue> MeasurementValues { get; set; } = Array.Empty<MeasurementValue>();
 
 	public IReadOnlyDictionary<double, double> StandardCurve { get; set; } = new Dictionary<double, double>();
 
