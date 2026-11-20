@@ -1,0 +1,170 @@
+SONCA AUDIO INSPECTOR — GIẤY PHÉP PHẦN MỀM ĐỘC QUYỀN
+Proprietary Software License
+
+Copyright (c) 2026 NGUYỄN VĂN LỘC. Bảo lưu mọi quyền. All rights reserved.
+
+Đây KHÔNG phải phần mềm mã nguồn mở. Việc xem được hoặc tải được mã nguồn,
+file cài đặt hay bản portable (kể cả từ kho mã công khai) KHÔNG có nghĩa là
+bạn được cấp bất kỳ quyền nào đối với Phần mềm.
+
+--------------------------------------------------------------------------------
+BẢN TIẾNG VIỆT (bản có hiệu lực)
+--------------------------------------------------------------------------------
+
+1. Quyền sở hữu
+   Sonca Audio Inspector, gồm mã nguồn, mã máy (EXE/DLL), cách hiện thực các
+   phép đo và phân tích, giao diện, tài liệu, cấu hình mẫu, file âm thanh kích
+   thích, định dạng dữ liệu cùng mọi bản cập nhật (gọi chung là "Phần mềm"),
+   thuộc quyền sở hữu của NGUYỄN VĂN LỘC ("Chủ sở hữu") và được bảo hộ theo
+   Luật Sở hữu trí tuệ Việt Nam và các điều ước quốc tế về quyền tác giả.
+   Phần mềm được cấp phép sử dụng, không bán quyền sở hữu.
+
+2. Chỉ được dùng khi có thỏa thuận bằng văn bản
+   Chỉ tổ chức hoặc cá nhân có thỏa thuận cấp phép bằng văn bản với Chủ sở hữu
+   (hợp đồng, đơn hàng đã xác nhận hoặc giấy phép; gọi là "Thỏa thuận cấp
+   phép") mới được cài đặt và sử dụng Phần mềm, trong phạm vi Thỏa thuận cấp
+   phép cho phép (số máy hoặc trạm đo, thời hạn, địa điểm, mục đích). Nếu không
+   có Thỏa thuận cấp phép thì không có quyền sử dụng nào.
+
+3. Hành vi bị cấm, trừ khi Chủ sở hữu đồng ý bằng văn bản
+   a) Sao chép Phần mềm, trừ bản sao lưu cần cho việc sử dụng được phép.
+   b) Sửa đổi, dịch, chuyển thể hoặc tạo sản phẩm phái sinh từ Phần mềm.
+   c) Dịch ngược, giải mã, tháo rời (decompile, disassemble, reverse
+      engineer), trừ trường hợp pháp luật bắt buộc phải cho phép.
+   d) Bán, cho thuê, cho mượn, phân phối, cấp phép lại, chuyển nhượng, đăng tải
+      hoặc chia sẻ Phần mềm cho bên thứ ba.
+   e) Gỡ bỏ, che giấu hoặc sửa thông báo bản quyền, nhãn hiệu, điều khoản giấy
+      phép hoặc thông báo của bên thứ ba.
+   f) Vô hiệu hóa hoặc vượt qua cơ chế xác thực, đăng nhập, chữ ký số của bản
+      cập nhật và file cấu hình, hoặc các biện pháp bảo vệ khác của Phần mềm.
+   g) Dùng Phần mềm, mã nguồn hoặc tài liệu của Phần mềm để phát triển sản phẩm
+      cạnh tranh.
+
+4. Bảo mật
+   Mã nguồn, tài liệu kỹ thuật, khóa ký, địa chỉ và cấu hình máy chủ là thông
+   tin bí mật của Chủ sở hữu. Ai được tiếp cận các thông tin này (nhân viên,
+   đối tác, người nhận bàn giao) phải giữ bí mật và chỉ dùng trong phạm vi được
+   giao.
+
+5. Thành phần của bên thứ ba
+   Phần mềm có kèm thư viện mã nguồn mở và thành phần của bên thứ ba, liệt kê
+   trong THIRD-PARTY-NOTICES.txt và thư mục "licenses". Các thành phần này
+   thuộc quyền của chủ sở hữu tương ứng và chịu giấy phép riêng của chúng.
+   Giấy phép này không áp dụng cho các thành phần đó và không hạn chế quyền mà
+   giấy phép riêng của chúng trao cho bạn. Driver phần cứng kèm theo (nếu có)
+   thuộc quyền của nhà sản xuất driver đó.
+
+6. Dữ liệu đo
+   Kết quả đo, line chuẩn và dữ liệu do người được cấp phép tạo ra bằng Phần
+   mềm thuộc về người được cấp phép, trừ khi Thỏa thuận cấp phép quy định khác.
+
+7. Không bảo đảm
+   Trong phạm vi pháp luật cho phép, Phần mềm được cung cấp theo hiện trạng
+   ("AS IS"), không kèm bảo đảm nào về việc không có lỗi hoặc phù hợp với một
+   mục đích cụ thể. Kết quả PASS/FAIL chỉ là công cụ hỗ trợ kiểm tra chất
+   lượng. Người dùng chịu trách nhiệm hiệu chuẩn thiết bị đo, đặt ngưỡng, lập
+   line chuẩn và đưa ra quyết định cuối cùng về sản phẩm.
+
+8. Giới hạn trách nhiệm
+   Trong phạm vi pháp luật cho phép, Chủ sở hữu không chịu trách nhiệm về thiệt
+   hại gián tiếp, ngẫu nhiên, đặc biệt hoặc hệ quả, gồm cả mất lợi nhuận, mất
+   dữ liệu, ngừng sản xuất hay sản phẩm lỗi lọt qua kiểm tra. Tổng trách nhiệm
+   của Chủ sở hữu, nếu có, không vượt quá số tiền người được cấp phép đã trả
+   cho Phần mềm trong 12 tháng trước sự kiện làm phát sinh trách nhiệm.
+
+9. Chấm dứt
+   Quyền sử dụng tự động chấm dứt khi người được cấp phép vi phạm giấy phép này
+   hoặc Thỏa thuận cấp phép. Khi đó người được cấp phép phải ngừng sử dụng và
+   xóa mọi bản sao của Phần mềm.
+
+10. Luật áp dụng
+   Giấy phép này được điều chỉnh bởi pháp luật Việt Nam. Tranh chấp được giải
+   quyết trước hết bằng thương lượng; nếu không thành, tranh chấp được đưa ra
+   Tòa án có thẩm quyền tại nơi Chủ sở hữu đặt trụ sở hoặc cư trú. Nếu Thỏa
+   thuận cấp phép có điều khoản khác với giấy phép này thì áp dụng Thỏa thuận
+   cấp phép.
+
+11. Liên hệ xin cấp phép
+   Liên hệ trực tiếp Chủ sở hữu, NGUYỄN VĂN LỘC, để được cấp phép.
+
+--------------------------------------------------------------------------------
+ENGLISH TRANSLATION (for reference; the Vietnamese version prevails)
+--------------------------------------------------------------------------------
+
+1. Ownership
+   Sonca Audio Inspector, including its source code, object code (EXE/DLL),
+   implementation of its measurements and analyses, user interface,
+   documentation, sample configurations, stimulus audio files, data formats
+   and all updates (the "Software"), is owned by NGUYỄN VĂN LỘC (the
+   "Owner") and is protected by the Intellectual Property Law of Vietnam and
+   international copyright treaties. The Software is licensed, not sold.
+
+2. Written agreement required
+   Only a person or organization holding a written license agreement with the
+   Owner (a contract, confirmed purchase order or license; the "License
+   Agreement") may install and use the Software, and only within the scope it
+   grants (number of computers or test stations, term, site, purpose). Without
+   a License Agreement no right of use is granted.
+
+3. Restrictions, unless the Owner agrees in writing
+   a) Copying the Software, except a backup copy needed for permitted use.
+   b) Modifying, translating, adapting or creating derivative works.
+   c) Decompiling, disassembling or reverse engineering, except where
+      applicable law requires this to be permitted.
+   d) Selling, renting, lending, distributing, sublicensing, assigning,
+      publishing or sharing the Software with any third party.
+   e) Removing, obscuring or altering copyright notices, trademarks, license
+      terms or third-party notices.
+   f) Disabling or circumventing authentication, sign-in, the digital
+      signatures on updates and configuration files, or other protection
+      measures of the Software.
+   g) Using the Software, its source code or documentation to develop a
+      competing product.
+
+4. Confidentiality
+   Source code, technical documentation, signing keys, server addresses and
+   server configuration are confidential information of the Owner. Anyone
+   given access to them (employees, partners, recipients of a handover) must
+   keep them confidential and use them only within the assigned scope.
+
+5. Third-party components
+   The Software includes open-source libraries and other third-party
+   components listed in THIRD-PARTY-NOTICES.txt and the "licenses" folder.
+   They belong to their respective owners and are governed by their own
+   licenses. This license does not apply to them and does not restrict any
+   right their own licenses grant you. Any bundled hardware driver belongs to
+   the manufacturer of that driver.
+
+6. Measurement data
+   Measurement results, line standards and other data the licensee creates
+   with the Software belong to the licensee, unless the License Agreement
+   states otherwise.
+
+7. No warranty
+   To the extent permitted by law, the Software is provided "AS IS", without
+   any warranty that it is error-free or fit for a particular purpose.
+   PASS/FAIL results are a quality-inspection aid only. Users are responsible
+   for calibrating measurement equipment, setting limits, creating line
+   standards and making the final decision on each product.
+
+8. Limitation of liability
+   To the extent permitted by law, the Owner is not liable for any indirect,
+   incidental, special or consequential damages, including lost profits, lost
+   data, production downtime or defective products passing inspection. The
+   Owner's total liability, if any, shall not exceed the amount the licensee
+   paid for the Software in the 12 months before the event giving rise to the
+   liability.
+
+9. Termination
+   The right to use the Software terminates automatically if the licensee
+   breaches this license or the License Agreement. The licensee must then stop
+   using the Software and delete all copies.
+
+10. Governing law
+   This license is governed by the laws of Vietnam. Disputes shall first be
+   settled by negotiation; failing that, they shall be brought before the
+   competent court where the Owner is registered or resides. Where the License
+   Agreement differs from this license, the License Agreement prevails.
+
+11. Licensing contact
+   Contact the Owner, NGUYỄN VĂN LỘC, directly to obtain a license.

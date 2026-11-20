@@ -1,0 +1,8 @@
+v1.4.4 BETA: chẩn đoán Rè có bảng dấu hiệu & nguyên nhân, méo xung chirp kiểu IEC 60268-21, pink dải rộng, chẩn đoán theo mức; kênh cập nhật beta không ép máy khác và hạ cấp phiên bản ngay trong app.
+BETA chưa kiểm tra kỹ: chỉ máy chọn Ctrl+Shift+I → Phiên bản → Kênh cập nhật → Beta mới được mời cài; máy kênh Ổn định giữ v1.4.3 và không bị nhắc cập nhật.
+Phiên bản → Cài phiên bản khác / Hạ cấp: tải danh sách phiên bản có chữ ký, chọn bản (kể cả bản cũ hơn) và cài lại; kiểm chữ ký/SHA-256, chỉ tải file khác, thay file có sao lưu/rollback, giữ nguyên dữ liệu trạm.
+Rè: bảng "DẤU HIỆU & CHẨN ĐOÁN" với 10 dấu hiệu có số đo (cao tần ở đỉnh phát, bass nhỏ/lớn, xu hướng qua lượt, tính xung, cộng hưởng hẹp/dải rộng, đuôi sau khi dừng, độ nhạy, đường thu, ngưỡng kích/độ dốc/nén, méo dải rộng), xếp hạng nguyên nhân kèm độ tin cậy và việc cần kiểm tra tiếp; sao chép và lưu kèm kết quả.
+Rè · Chirp: phân tích méo xung kiểu IEC 60268-21 / Klippel — high-pass bám theo tần số quét (bội số N chỉnh được, mặc định 20), đỉnh/crest theo từng tần số, lặp lại ở ≥ 2/3 lượt, nghe lại phần dư; chỉ chẩn đoán, không đổi ĐẠT/KHÔNG ĐẠT hay line chuẩn.
+Rè: thêm "Pink dải rộng (dạng IEC/AES)" đo méo không kết hợp theo dải 1/3 octave (bù lệch clock phát/thu) và "Chẩn đoán theo mức" (Pink −30/−24/−18 dBFS rồi Chirp) để thấy ngưỡng kích, độ dốc cao tần/bass và nén limiter.
+Cảnh báo khi mic bật Audio enhancements / Voice Clarity (đọc trạng thái Windows, chỉ đọc): các bài thu Shared bị xử lý; bài Rè thu Exclusive không bị ảnh hưởng.
+Giao diện tab Rè và tab Phiên bản theo nền tối chung; ô tùy chọn chỉ hiện khi bài đo cần, có giải thích khi rê chuột.

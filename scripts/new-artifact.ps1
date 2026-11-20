@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)][string]$Description,
-    [Parameter(Mandatory)][ValidatePattern('^[a-z0-9]+(?:-[a-z0-9]+)*$')][string]$Slug,
+    [Parameter(Mandatory)][ValidatePattern('(?-i)^[a-z0-9]+(?:-[a-z0-9]+)*$')][string]$Slug,
     [string]$OutputRoot = 'artifacts'
 )
 $ErrorActionPreference = 'Stop'

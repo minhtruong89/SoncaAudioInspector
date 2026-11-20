@@ -26,7 +26,7 @@ $candidates += Get-ChildItem -LiteralPath $projectRoot -Force -Directory | Where
 $rows = foreach ($item in $candidates) {
     Assert-SafePath $item.FullName
     $entries = if ($item.PSIsContainer) { @(Get-ChildItem -LiteralPath $item.FullName -Recurse -Force) } else { @($item) }
-    if ($entries | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw "Artifact contains a reparse point: $($item.FullName)" }
+    $reparse = @($entries | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })
     $files = @($entries | Where-Object { -not $_.PSIsContainer })
     $when = $item.CreationTimeUtc
     $basis = 'legacy-latest-write-or-directory-creation'
@@ -34,24 +34,34 @@ $rows = foreach ($item in $candidates) {
     $manifest = Join-Path $item.FullName 'artifact.json'
     if ($item.PSIsContainer -and (Test-Path -LiteralPath $manifest -PathType Leaf)) {
         $meta = Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
-        $when = [DateTimeOffset]::Parse($meta.createdUtc).UtcDateTime
+        $when = if ($meta.createdUtc -is [DateTime]) { $meta.createdUtc.ToUniversalTime() } elseif ($meta.createdUtc -is [DateTimeOffset]) { $meta.createdUtc.UtcDateTime } else { [DateTimeOffset]::Parse([string]$meta.createdUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal).UtcDateTime }
         $basis = 'manifest-createdUtc'
     }
+    $action = if ($when -lt $cutoff) {'delete'} else {'keep'}
+    if ($reparse.Count -gt 0 -and $action -eq 'delete') { throw "Artifact contains a reparse point: $($item.FullName)" }
     $bytes = ($files | Measure-Object Length -Sum).Sum
-    [pscustomobject]@{ path=$item.FullName; timestampUtc=$when.ToString('o'); basis=$basis; bytes=[long]$bytes; files=$files.Count; action=$(if ($when -lt $cutoff) {'delete'} else {'keep'}); deleted=$false }
+    [pscustomobject]@{ path=$item.FullName; timestampUtc=$when.ToString('o'); basis=$basis; bytes=[long]$bytes; files=$files.Count; action=$action; deleted=$false; error=$null }
 }
 # Save the complete concrete plan before any deletion.
 $rows | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $reportPath 'inventory.json') -Encoding utf8
 if ($Apply) {
     foreach ($row in $rows | Where-Object action -eq 'delete') {
         Assert-SafePath $row.path
-        Remove-Item -LiteralPath $row.path -Recurse -Force
-        $row.deleted = $true
+        try {
+            Remove-Item -LiteralPath $row.path -Recurse -Force
+            $row.deleted = $true
+        }
+        catch {
+            # A protected/locked old build must not prevent cleanup of the rest.
+            # Keep the failed path visible; never change its ACL or ownership.
+            $row.error = $_.Exception.Message
+        }
         $rows | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $reportPath 'inventory.json') -Encoding utf8
     }
 }
 $expired = @($rows | Where-Object action -eq 'delete')
 $summary = "Cutoff UTC: $($cutoff.ToString('o')); apply=$Apply; expired=$($expired.Count); kept=$(@($rows | Where-Object action -eq 'keep').Count); expired GiB=$([Math]::Round(($expired | Measure-Object bytes -Sum).Sum/1GB,3))"
+$summary += "; deleted=$(@($rows | Where-Object deleted).Count); failed=$(@($rows | Where-Object error).Count)"
 Add-Content -LiteralPath (Join-Path $reportPath 'ARTIFACT.md') -Value @('', $summary) -Encoding utf8
 Write-Output $summary
 Write-Output "Report: $reportPath"

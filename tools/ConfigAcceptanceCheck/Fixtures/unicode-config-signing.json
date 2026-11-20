@@ -1,0 +1,28 @@
+{
+  "testOnly": true,
+  "speakerModel": "Loa Việt \"A\"\\\b\f\n\r\t\u0001<&>😀",
+  "revisionId": "thử-\"\\\n\t\u001f",
+  "serial": 27,
+  "configJson": "{\"model\":\"Loa Việt \\\"A\\\"\\\\\\b\\f\\n\\r\\t\\u0001<&>😀\",\"testItems\":{\"InOut\":{\"Devices\":{\"Input\":{\"USB\":\"Loa\"},\"Output\":{\"MIC\":\"Mic\"}},\"Tests\":[{\"id\":\"IO001\",\"Playback Out\":\"USB\",\"Recording In\":\"MIC\"}]}}}",
+  "configSha256": "c86c504d80b2e678d9a41af00d83e8ef27d6670af3d377675cfc7451b9e0e7e0",
+  "payload": "{\"v\":1,\"speakerModel\":\"Loa Việt \\\"A\\\"\\\\\\b\\f\\n\\r\\t\\u0001<&>😀\",\"revisionId\":\"thử-\\\"\\\\\\n\\t\\u001f\",\"serial\":27,\"configSha256\":\"c86c504d80b2e678d9a41af00d83e8ef27d6670af3d377675cfc7451b9e0e7e0\"}",
+  "payloadUtf8Base64": "eyJ2IjoxLCJzcGVha2VyTW9kZWwiOiJMb2EgVmnhu4d0IFwiQVwiXFxcYlxmXG5cclx0XHUwMDAxPCY+8J+YgCIsInJldmlzaW9uSWQiOiJ0aOG7rS1cIlxcXG5cdFx1MDAxZiIsInNlcmlhbCI6MjcsImNvbmZpZ1NoYTI1NiI6ImM4NmM1MDRkODBiMmU2NzhkOWE0MWFmMDBkODNlOGVmMjdkNjY3MGFmM2QzNzc2NzVjZmM3NDUxYjllMGU3ZTAifQ==",
+  "signature": "0QHEP3VIYRwjAnDzDLYLoadN4rYfGC5RtsBhnzoxn/VhwrTdy1vx3VSvLkhzLC08M+w3ra1PSMj/dkpXB37Brw==",
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERNwK952D8xbF+NTBYubo8iDKSjvA\neHuXVM09HFR78Qi5iJzZx6qDeRWumvvNI9D9BnqP5xfSqACUQ1NUw5jWlQ==\n-----END PUBLIC KEY-----\n",
+  "olderRevision": {
+    "speakerModel": "Loa Việt \"A\"\\\b\f\n\r\t\u0001<&>😀",
+    "revisionId": "thử-\"\\\n\t\u001f",
+    "serial": 26,
+    "configJson": "{\"model\":\"Loa Việt \\\"A\\\"\\\\\\b\\f\\n\\r\\t\\u0001<&>😀\",\"testItems\":{\"InOut\":{\"Devices\":{\"Input\":{\"USB\":\"Loa\"},\"Output\":{\"MIC\":\"Mic\"}},\"Tests\":[{\"id\":\"IO001\",\"Playback Out\":\"USB\",\"Recording In\":\"MIC\"}]}}}",
+    "configSha256": "c86c504d80b2e678d9a41af00d83e8ef27d6670af3d377675cfc7451b9e0e7e0",
+    "signature": "DWCHeBYkvOjdodsYTe7Dbz4VAa+sdUWii6njYYraJ45e1T5B6CQeBK+jmnBLWByPygTNuE4RxKCPwSqWw3LtEg=="
+  },
+  "newerRevision": {
+    "speakerModel": "Loa Việt \"A\"\\\b\f\n\r\t\u0001<&>😀",
+    "revisionId": "thử-\"\\\n\t\u001f",
+    "serial": 28,
+    "configJson": "{\"model\":\"Loa Việt \\\"A\\\"\\\\\\b\\f\\n\\r\\t\\u0001<&>😀\",\"testItems\":{\"InOut\":{\"Devices\":{\"Input\":{\"USB\":\"Loa\"},\"Output\":{\"MIC\":\"Mic\"}},\"Tests\":[{\"id\":\"IO001\",\"Playback Out\":\"USB\",\"Recording In\":\"MIC\"}]}}}",
+    "configSha256": "c86c504d80b2e678d9a41af00d83e8ef27d6670af3d377675cfc7451b9e0e7e0",
+    "signature": "iEjukRe1Sj6ET59D2wapY52FI29skj7TEr9gXx4ASh4C+CmwfX0PPoJkIrkIdNUulg80c4F/hqSB52KTmWOHAQ=="
+  }
+}

@@ -1,0 +1,249 @@
+SONCA AUDIO INSPECTOR — THIRD-PARTY SOFTWARE NOTICES
+Thông báo về phần mềm của bên thứ ba
+
+Sonca Audio Inspector dùng các thành phần của bên thứ ba liệt kê dưới đây.
+Các thành phần này KHÔNG thuộc quyền sở hữu của chủ sở hữu Sonca Audio
+Inspector. Chúng chịu điều khoản giấy phép riêng, được giữ nguyên văn tiếng Anh
+bên dưới và trong thư mục "licenses". LICENSE.txt của Sonca Audio Inspector
+không áp dụng cho các thành phần này và không hạn chế quyền mà giấy phép của
+chúng trao cho bạn.
+
+Sonca Audio Inspector uses the third-party components listed below. They are
+NOT owned by the owner of Sonca Audio Inspector and are licensed under their
+own terms, reproduced below and in the "licenses" folder. The Sonca Audio
+Inspector LICENSE.txt does not apply to these components and does not limit
+any right their licenses grant you.
+
+Danh sách lập từ obj/project.assets.json và file trong bản portable x64
+v1.3.0, ngày 2026-11-08. Khi thêm, bỏ hoặc nâng cấp thư viện, phải cập nhật
+file này.
+List compiled from obj/project.assets.json and the files of the v1.3.0 x64
+portable package on 2026-11-08. Update it whenever a dependency is added,
+removed or upgraded.
+
+================================================================================
+SUMMARY / TÓM TẮT
+================================================================================
+
+Component                                   Version    License
+------------------------------------------  ---------  -----------------------
+NAudio, NAudio.Core, NAudio.Wasapi,         2.3.0      MIT
+  NAudio.WinMM, NAudio.Asio, NAudio.Midi,
+  NAudio.WinForms
+Math.NET Numerics                           5.0.0      MIT
+Math.NET Numerics MKL Provider              5.0.0      MIT
+Math.NET Numerics MKL native, Win x64       3.0.0      Intel Simplified
+  (libMathNetNumericsMKL.dll, libiomp5md.dll;          Software License
+  x64 package only / chỉ có trong bản x64)
+ScottPlot, ScottPlot.WPF                    5.1.58     MIT
+SkiaSharp, SkiaSharp.HarfBuzz,              3.119.0    MIT (+ notices of
+  SkiaSharp.Views.WPF,                                 bundled native code)
+  SkiaSharp.Views.Desktop.Common,
+  SkiaSharp.NativeAssets.Win32
+HarfBuzzSharp, HarfBuzzSharp.NativeAssets   8.3.1.1    MIT (+ notices of
+                                                       bundled native code)
+OpenTK (Core, Mathematics, Graphics,        4.9.4      MIT
+  Windowing.*, Input, Compute, Audio.OpenAL)
+OpenTK.GLWpfControl                         4.3.3      MIT
+GLFW (glfw3.dll, OpenTK.redist.glfw)        3.4.0      zlib/libpng
+ZXing.Net (zxing.dll)                       0.16.11    Apache License 2.0
+ZXing.Net.Bindings.Windows.Compatibility    0.16.14    Apache License 2.0
+Microsoft.Win32.Registry.AccessControl      9.0.6      MIT
+System.Security.Cryptography.ProtectedData  9.0.6      MIT
+Microsoft.Win32.SystemEvents                9.0.10     MIT
+System.Drawing.Common                       9.0.10     MIT
+System.Runtime.CompilerServices.Unsafe      6.0.0      MIT
+.NET Runtime (Microsoft.NETCore.App)        9.0.22     MIT (+ .NET notices)
+.NET Windows Desktop Runtime                9.0.22     MIT
+  (Microsoft.WindowsDesktop.App: WPF,
+  Windows Forms)
+Windows SDK projection for .NET             10.0.19041 Microsoft Windows SDK
+  (Microsoft.Windows.SDK.NET.dll,                      license terms
+  WinRT.Runtime.dll)
+
+Linux native assets of SkiaSharp and HarfBuzzSharp are restored by NuGet but
+are not shipped in the Windows packages.
+Các gói native Linux của SkiaSharp và HarfBuzzSharp chỉ được NuGet tải về,
+không có trong gói phát hành cho Windows.
+
+================================================================================
+1. MIT-LICENSED COMPONENTS
+================================================================================
+
+Each component below is licensed under the MIT License, whose text follows the
+list, with the copyright notice shown for that component.
+
+NAudio 2.3.0 — https://github.com/naudio/NAudio
+  Copyright (c) Mark Heath & Contributors
+
+Math.NET Numerics 5.0.0, Math.NET Numerics MKL Provider 5.0.0
+  — https://github.com/mathnet/mathnet-numerics
+  Copyright (c) Math.NET Project
+
+ScottPlot 5.1.58, ScottPlot.WPF 5.1.58 — https://github.com/ScottPlot/ScottPlot
+  Copyright (c) Scott Harden / Harden Technologies, LLC
+
+SkiaSharp 3.119.0 and HarfBuzzSharp 8.3.1.1 (managed and Win32 native assets)
+  — https://github.com/mono/SkiaSharp
+  Copyright (c) 2015-2016 Xamarin, Inc.
+  Copyright (c) 2017-2018 Microsoft Corporation.
+  (Full text: licenses/SkiaSharp-HarfBuzzSharp-LICENSE.txt. The native
+  libSkiaSharp.dll and libHarfBuzzSharp.dll also contain Skia, HarfBuzz,
+  FreeType, libpng, zlib, expat, libjpeg-turbo, libwebp, ICU, ANGLE and other
+  components; their notices are in
+  licenses/SkiaSharp-HarfBuzzSharp-native-THIRD-PARTY-NOTICES.txt.)
+
+OpenTK 4.9.4 — https://github.com/opentk/opentk
+  Copyright (c) 2006 - 2020 Stefanos Apostolopoulos <stapostol@gmail.com> for
+  the Open Toolkit library.
+  Copyright (c) Team OpenTK
+
+OpenTK.GLWpfControl 4.3.3 — https://github.com/opentk/GLWpfControl
+  Copyright (c) 2022 Team OpenTK.
+
+Microsoft.Win32.Registry.AccessControl 9.0.6,
+System.Security.Cryptography.ProtectedData 9.0.6,
+Microsoft.Win32.SystemEvents 9.0.10, System.Drawing.Common 9.0.10,
+System.Runtime.CompilerServices.Unsafe 6.0.0
+  — https://github.com/dotnet/runtime, https://github.com/dotnet/winforms
+  Copyright (c) .NET Foundation and Contributors
+
+.NET Runtime 9.0.22 — https://github.com/dotnet/runtime
+  Copyright (c) .NET Foundation and Contributors
+  (Full text: licenses/dotnet-runtime-LICENSE.txt. Third-party code inside the
+  .NET Runtime, including msquic.dll, is listed in
+  licenses/dotnet-runtime-THIRD-PARTY-NOTICES.txt.)
+
+.NET Windows Desktop Runtime 9.0.22 — https://github.com/dotnet/wpf,
+https://github.com/dotnet/winforms
+  Copyright (c) .NET Foundation and Contributors
+  (Full text: licenses/windowsdesktop-runtime-LICENSE.txt. Native files such as
+  D3DCompiler_47_cor3.dll, vcruntime140_cor3.dll, wpfgfx_cor3.dll,
+  PenImc_cor3.dll and PresentationNative_cor3.dll are distributed by Microsoft
+  as part of this runtime.)
+
+--- MIT License ---------------------------------------------------------------
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+2. APACHE LICENSE 2.0 COMPONENTS
+================================================================================
+
+ZXing.Net 0.16.11 and ZXing.Net.Bindings.Windows.Compatibility 0.16.14
+  — https://github.com/micjahn/ZXing.Net
+  ZXing.Net by Michael Jahn, a port of the ZXing ("Zebra Crossing") barcode
+  library. Copyright (c) ZXing.Net and ZXing authors.
+
+  Licensed under the Apache License, Version 2.0. The full license text is in
+  licenses/Apache-2.0.txt and at http://www.apache.org/licenses/LICENSE-2.0.
+  These components are used unmodified.
+
+================================================================================
+3. GLFW — zlib/libpng LICENSE
+================================================================================
+
+GLFW 3.4.0 (glfw3.dll, from OpenTK.redist.glfw 3.4.0.44) — https://www.glfw.org/
+
+Copyright (c) 2002-2006 Marcus Geelnard
+
+Copyright (c) 2006-2019 Camilla Löwy
+
+This software is provided 'as-is', without any express or implied
+warranty. In no event will the authors be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would
+   be appreciated but is not required.
+
+2. Altered source versions must be plainly marked as such, and must not
+   be misrepresented as being the original software.
+
+3. This notice may not be removed or altered from any source
+   distribution.
+
+================================================================================
+4. INTEL MATH KERNEL LIBRARY AND INTEL OPENMP RUNTIME
+================================================================================
+
+libMathNetNumericsMKL.dll (Math.NET Numerics MKL native provider 3.0.0, which
+contains Intel(R) Math Kernel Library) and libiomp5md.dll (Intel(R) OpenMP*
+Runtime Library). Shipped in the x64 package only and redistributed without
+modification.
+
+Copyright (C) 1997-2021, Intel Corporation. All rights reserved.
+Copyright (C) Math.NET 2009-2021
+
+Intel Simplified Software License (Version August 2021)
+
+Use and Redistribution. You may use and redistribute the software (the "Software"), without modification, provided the following conditions are met:
+
+* Redistributions must reproduce the above copyright notice and the following terms of use in the Software and in the documentation and/or other materials provided with the distribution.
+* Neither the name of Intel nor the names of its suppliers may be used to endorse or promote products derived from this Software without specific prior written permission.
+* No reverse engineering, decompilation, or disassembly of this Software is permitted.
+
+No other licenses. Except as provided in the preceding section, Intel grants no licenses or other rights by implication, estoppel or otherwise to, patent, copyright, trademark, trade name, service mark or other intellectual property licenses or rights of Intel.
+
+Third party software. The Software may contain Third Party Software. "Third Party Software" is open source software, third party software, or other Intel software that may be identified in the Software itself or in the files (if any) listed in the "third-party-software.txt" or similarly named text file included with the Software. Third Party Software, even if included with the distribution of the Software, may be governed by separate license terms, including without limitation, open source software license terms, third party software license terms, and other Intel software license terms. Those separate license terms solely govern your use of the Third Party Software, and nothing in this license limits any rights under, or grants rights that supersede, the terms of the applicable license terms.
+
+DISCLAIMER. THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT ARE DISCLAIMED. THIS SOFTWARE IS NOT INTENDED FOR USE IN SYSTEMS OR APPLICATIONS WHERE FAILURE OF THE SOFTWARE MAY CAUSE PERSONAL INJURY OR DEATH AND YOU AGREE THAT YOU ARE FULLY RESPONSIBLE FOR ANY CLAIMS, COSTS, DAMAGES, EXPENSES, AND ATTORNEYS  FEES ARISING OUT OF ANY SUCH USE, EVEN IF ANY CLAIM ALLEGES THAT INTEL WAS NEGLIGENT REGARDING THE DESIGN OR MANUFACTURE OF THE SOFTWARE.
+
+LIMITATION OF LIABILITY. IN NO EVENT WILL INTEL BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+No support. Intel may make changes to the Software, at any time without notice, and is not obligated to support, update or provide training for the Software.
+
+Termination. Your right to use the Software is terminated in the event of your breach of this license.
+
+Feedback. Should you provide Intel with comments, modifications, corrections, enhancements or other input ("Feedback") related to the Software, Intel will be free to use, disclose, reproduce, license or otherwise distribute or exploit the Feedback in its sole discretion without any obligations or restrictions of any kind, including without limitation, intellectual property rights or licensing obligations.
+
+Compliance with laws. You agree to comply with all relevant laws and regulations governing your use, transfer, import or export (or prohibition thereof) of the Software.
+
+Governing law. All disputes will be governed by the laws of the United States of America and the State of Delaware without reference to conflict of law principles and subject to the exclusive jurisdiction of the state or federal courts sitting in the State of Delaware, and each party agrees that it submits to the personal jurisdiction and venue of those courts and waives any objections. The United Nations Convention on Contracts for the International Sale of Goods (1980) is specifically excluded and will not apply to the Software.
+
+================================================================================
+5. WINDOWS SDK PROJECTION FOR .NET
+================================================================================
+
+Microsoft.Windows.SDK.NET.dll (10.0.19041.55) and WinRT.Runtime.dll (C#/WinRT
+2.2.0), from the Microsoft.Windows.SDK.NET.Ref 10.0.19041.57 runtime pack that
+the .NET SDK adds to Windows-targeted applications.
+  Copyright (c) Microsoft Corporation. All rights reserved.
+  License terms: https://aka.ms/WinSDKLicenseURL
+  C#/WinRT source: https://github.com/microsoft/CsWinRT (MIT License)
+
+================================================================================
+6. NOT COVERED: HARDWARE DRIVER / KHÔNG THUỘC PHẠM VI
+================================================================================
+
+drivers\FastTrackPro_x64 Driver.rar (x64 package only) is the audio interface
+driver for the M-Audio Fast Track Pro. It is the property of its manufacturer,
+is included only for installation convenience, and is governed by the
+manufacturer's own license terms. Neither LICENSE.txt nor any license above
+applies to it.
+
+drivers\FastTrackPro_x64 Driver.rar (chỉ có trong bản x64) là driver của card
+âm thanh M-Audio Fast Track Pro. Driver này thuộc quyền của nhà sản xuất, chỉ
+được kèm theo để tiện cài đặt và chịu điều khoản giấy phép của nhà sản xuất.
+LICENSE.txt và các giấy phép nêu trên đều không áp dụng cho driver này.

@@ -1,0 +1,10 @@
+v1.4: Duyệt cấu hình trên server, Serial + so sánh QA, trang báo cáo App/QA.
+Chirp bổ sung rà tiếng rè theo tần số.
+Tab Rè gộp Pink và Chirp, chi tiết từng lượt và nghe lại.
+Lưu tạm cấu hình trong RAM; kết quả thử không được lưu.
+Chọn model xong tự vào ô Serial để quét; xác nhận QA trước đó, so KHỚP/LỆCH.
+Bánh răng mở cấu hình model như Ctrl+Shift+M.
+Ô % toàn dải cạnh bảng hõm, hiển thị số điểm xét và cho phép.
+C360 đổi tên ngõ thu thành TYPE C RECORDING, giữ line chuẩn cũ.
+Quản lý đăng nhập xem khác biệt và duyệt hoặc từ chối cấu hình.
+Xem và xuất Excel kết quả App/QA tại inventory.acnos.store/report.

@@ -1,0 +1,16 @@
+{
+  "testOnly": true,
+  "warning": "CHỈ DÙNG ĐỂ TEST; khóa test sinh riêng, không phải public key production. Private key không lưu.",
+  "algorithm": "ECDSA-P256-SHA256",
+  "signatureFormat": "IEEE-P1363",
+  "encoding": "UTF-8, no BOM",
+  "speakerModel": "C360",
+  "revisionId": "test-only-revision-c360-r12",
+  "serial": 12,
+  "configSha256": "f2f0c9d228a8fb93cca734315f69b5166b9c5078ed14e4345b2816d24079118c",
+  "configJson": "{\"model\":\"C360\",\"testItems\":{\"InOut\":{\"Devices\":{\"Input\":{\"USB\":\"Loa thử nghiệm\"},\"Output\":{\"TYPE C RECORDING\":\"Micro thử nghiệm\"}},\"Tests\":[{\"Playback Out\":\"USB\",\"Recording In\":\"TYPE C RECORDING\",\"freq_range\":[20,20000],\"id\":\"AC001\"}]}}}",
+  "payload": "{\"v\":1,\"speakerModel\":\"C360\",\"revisionId\":\"test-only-revision-c360-r12\",\"serial\":12,\"configSha256\":\"f2f0c9d228a8fb93cca734315f69b5166b9c5078ed14e4345b2816d24079118c\"}",
+  "payloadUtf8Base64": "eyJ2IjoxLCJzcGVha2VyTW9kZWwiOiJDMzYwIiwicmV2aXNpb25JZCI6InRlc3Qtb25seS1yZXZpc2lvbi1jMzYwLXIxMiIsInNlcmlhbCI6MTIsImNvbmZpZ1NoYTI1NiI6ImYyZjBjOWQyMjhhOGZiOTNjY2E3MzQzMTVmNjliNTE2NmI5YzUwNzhlZDE0ZTQzNDViMjgxNmQyNDA3OTExOGMifQ==",
+  "signature": "ReESdDTkZtUlOly9btgl0qTospFJGH6XwjRi0VryD87MWO7yxsdAY00KtwPItV4tfoURQxePjcTYRcwJA13/5A==",
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEI+aFKwk2O0Y34GnLal02yqeYfj4G\nMX0FD/AbJr8t/CxkRcJXt04I01KO2b9xqI/arx/ojvVmc0bznnSQUZaZYw==\n-----END PUBLIC KEY-----\n"
+}

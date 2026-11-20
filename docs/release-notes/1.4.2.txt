@@ -1,0 +1,7 @@
+v1.4.2: Bấm Auto Test hiện kết quả QA và ô ghi chú; chỉ gửi kết quả Auto Test; tự chỉnh âm lượng loa qua BLE.
+Bấm Auto Test (bắt đầu hoặc tiếp tục): popup hiện kết quả QA trên server, chọn P/F/N, nhập ghi chú; Enter để đo, Esc để hủy.
+Nhấn Enter ở ô serial giờ chỉ tra serial và hiện trạng thái QA, không mở popup.
+Ghi chú người đo gửi lên server tách riêng với log đo; xem và sửa tiếp trên trang /report.
+Chỉ gửi kết quả Auto Test hoàn tất (PASS/FAIL); tìm line chuẩn và phiên chưa hợp lệ chỉ lưu tại máy.
+Âm lượng MASTER/MUSIC/MIC: app tự đặt đúng mức theo model qua BLE (C360 MUSIC 50%) và trả loa về mức cũ khi đo xong.
+Không đặt được qua BLE thì hiện popup chỉnh tay, có thêm nút "Đặt đúng mức qua BLE".

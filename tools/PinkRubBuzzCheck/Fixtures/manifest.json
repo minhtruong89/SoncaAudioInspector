@@ -1,0 +1,281 @@
+[
+  {
+    "file": "pink/live/bg-excl.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live/bg-excl.wav",
+    "sourceSha256": "a46cfa7ffbda3b51b6566d02ff04d2584e3499f5b3b3439c4b3f9a66ab60aca2",
+    "floatSha256": "16e164fbaa722f28c44aab6bd4811dfe9676ec3db9aaee1f48bb05f86d0db3b7",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 225600
+  },
+  {
+    "file": "pink/live/bg-shared.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live/bg-shared.wav",
+    "sourceSha256": "58583ba8f39eb8f1b3279e0614a5c043596a22eef4563c636ff2edb6fa0c1fcd",
+    "floatSha256": "8d01394cdd0a7fca11a9ae046f991d386c89eacd909a65e96b6ce1339ab39d5a",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 225600
+  },
+  {
+    "file": "pink/live/cap-bl-m18-1.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live/cap-bl-m18-1.wav",
+    "sourceSha256": "5b107f25d5796300b6d1113b112fe4b3d6a82d1ae5dfc8ce3f914be81e933cae",
+    "floatSha256": "ea088be3540f9473a4671e7757def622aec72b68462fe8ea6833e840e8c4c6e5",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 358080
+  },
+  {
+    "file": "pink/live/cap-bl-m18-2.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live/cap-bl-m18-2.wav",
+    "sourceSha256": "18f8e8fb0a16600ca31098d9ae781fa017b50864e38a011b31816cace27a7680",
+    "floatSha256": "02b22091f06bdcce86dfcee5e56922eb07bb37f2ea7c4e5fa18f4b821dd0dad4",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 357120
+  },
+  {
+    "file": "pink/live/cap-bl-m18-3.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live/cap-bl-m18-3.wav",
+    "sourceSha256": "3e17475dd0a34a11594fda5c60af9cbf6ca30c9523fc51c3cd46bdfc9666e786",
+    "floatSha256": "2e71fed25a04b8c1a928220e66fd4c4e84adaeaa175f576165f439f534090517",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 357120
+  },
+  {
+    "file": "pink/live-tol/bg-excl.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live-tol/bg-excl.wav",
+    "sourceSha256": "89df450a31d2454c7df16c9dfa5971448569858b25f4ab71452c4b64bea28d21",
+    "floatSha256": "f711057cd606ac820a75cb6bb2e992a8723481b7d0cf5e5738b4896ab7df36f6",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 225600
+  },
+  {
+    "file": "pink/live-tol/cap-a18-1.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live-tol/cap-a18-1.wav",
+    "sourceSha256": "2483e8eb8888e3fc9b4335a44ae9c12c319e75ec085ac1c57636a93e76485707",
+    "floatSha256": "be1288ee5ef680d1c47c24cea6f1615b08381723f5fad11990c410f56164ce0e",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 357120
+  },
+  {
+    "file": "pink/live-tol/cap-a18-2.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live-tol/cap-a18-2.wav",
+    "sourceSha256": "df6f97ef1d95c55c7ef725216cda02b037352723f5418789df26910dc68d4311",
+    "floatSha256": "003d3e74ed90bfb33e0a647b3b75f791158ac2aa3ebbae4a99425fd8a1274abf",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 357120
+  },
+  {
+    "file": "pink/live-tol/cap-a18-3.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live-tol/cap-a18-3.wav",
+    "sourceSha256": "22d992a3e65d67dad629c9926c63f4fdaf73f8a6d54056af516a455c9e49d936",
+    "floatSha256": "568547c5d685606c967d269731738ffa5aa26b82f3ac52f8c99cdab8ffa3da82",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 358080
+  },
+  {
+    "file": "pink/live-tol/cap-a30-1.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live-tol/cap-a30-1.wav",
+    "sourceSha256": "be039967e5380c83f4b961147f11c116173d517ed3cf3f6dc82ef6116f53d6dc",
+    "floatSha256": "3c484aff668d8907ba7ce337facbd9f67bab9ad80fb1fe7b3395d1e755b91fe6",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 358080
+  },
+  {
+    "file": "pink/live-tol/cap-a30-2.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live-tol/cap-a30-2.wav",
+    "sourceSha256": "517ceba4da6f9d9de1d710585840e366d11b2bae7e5377de27d7676d6b3f56d9",
+    "floatSha256": "96003c62a0213162d52f2d617e735fe5cae5a811a9e14215c6c7141605569d17",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 358080
+  },
+  {
+    "file": "pink/live-tol/cap-a30-3.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live-tol/cap-a30-3.wav",
+    "sourceSha256": "3235f421c4fcb9ba49b650721f855a8bc87805278d37733a0867f0cd2d845b02",
+    "floatSha256": "37dd51bb4ee3a79052ac798142b77ce0b9369a8cbd4cceb8225d0120997ce4fa",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 357120
+  },
+  {
+    "file": "gated/target-minus18/background.wav.f32.gz",
+    "source": "artifacts/20261106-064116-198Z-umik1-pink-rattle-live/target-minus18/background.wav",
+    "sourceSha256": "29253db60f1c4d0912d41cf8b5b4c4f50de7445e3028082105905f46cea2ba83",
+    "floatSha256": "49c789929ef219aef7b2c192b49bb205cb54ccc34feeba11e66e7c93fb9042c5",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 239520
+  },
+  {
+    "file": "gated/target-minus18/capture-01.wav.f32.gz",
+    "source": "artifacts/20261106-064116-198Z-umik1-pink-rattle-live/target-minus18/capture-01.wav",
+    "sourceSha256": "1f577ec5f754b4b74b26e8beef6fd297496728c792243b83dd7185c0c2ac400e",
+    "floatSha256": "6ec153afc57a90d483d1b038ce34988b49af38f05391b1a33a88d4e10d671b1d",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 267360
+  },
+  {
+    "file": "gated/target-minus18/capture-02.wav.f32.gz",
+    "source": "artifacts/20261106-064116-198Z-umik1-pink-rattle-live/target-minus18/capture-02.wav",
+    "sourceSha256": "5b80095b7ad68bae51972f2088da2a9013e192a2c525052d585b7d4ccd32584e",
+    "floatSha256": "0a872fa6fa2c76f3ec600d36916a5ed86176c2984c9bebca71d09f6bd324fae2",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 267840
+  },
+  {
+    "file": "gated/target-minus18/capture-03.wav.f32.gz",
+    "source": "artifacts/20261106-064116-198Z-umik1-pink-rattle-live/target-minus18/capture-03.wav",
+    "sourceSha256": "dd067ca3419c521be03bcc9e393c3a78c9cbc8ddf473b67454d3bdcddbf97fa3",
+    "floatSha256": "b5a530b3faa65b1ae1130eb905a6e783a731834df4daf86f8f5db7f212f373d7",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 267360
+  },
+  {
+    "file": "chirp/chirp-10s/background.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/chirp-10s/background.wav",
+    "sourceSha256": "1bc128492869e61cc47f15b3d2059d810d876001fd876d3c2a69d21c81b24ac7",
+    "floatSha256": "171fe7d79c2a4db172b0d4b78ac2e91795cac95beb512dfa0a0928e1521d6e0d",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 144000
+  },
+  {
+    "file": "chirp/chirp-10s/capture-1.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/chirp-10s/capture-1.wav",
+    "sourceSha256": "6f469c31c2874b7147b79866baa7047fa263c0cbc20fffcf121f7b2ea455d394",
+    "floatSha256": "6e44d98de7620ff4f50da6c693704a064f2211b762ba75510c41ed7b15e453e8",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 569280
+  },
+  {
+    "file": "chirp/chirp-10s/capture-2.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/chirp-10s/capture-2.wav",
+    "sourceSha256": "bb1b0986069d6478068310198f98f73a205e80215dfb88f2cfe4f3e1b6644d3c",
+    "floatSha256": "6d202d84b363888e2515549fccc975ccbda71d0c97bc4dddc281d6cf397ef072",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 569280
+  },
+  {
+    "file": "chirp/chirp-3s/background.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/chirp-3s/background.wav",
+    "sourceSha256": "1bc128492869e61cc47f15b3d2059d810d876001fd876d3c2a69d21c81b24ac7",
+    "floatSha256": "171fe7d79c2a4db172b0d4b78ac2e91795cac95beb512dfa0a0928e1521d6e0d",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 144000
+  },
+  {
+    "file": "chirp/chirp-3s/capture-1.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/chirp-3s/capture-1.wav",
+    "sourceSha256": "d717c1f48f3b46a558e8fb4117d28b7c15fcca5b756a92eee5999ee65304a4f6",
+    "floatSha256": "34bea9e91b33d2ccc654c1b9842363913fea5ffaf18bf05fe4c8534b083ced36",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 232320
+  },
+  {
+    "file": "chirp/chirp-3s/capture-2.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/chirp-3s/capture-2.wav",
+    "sourceSha256": "fb23d05c4dce34e1e96a5dca66d266d5f13381a67dbaad8a7b4a749643d29720",
+    "floatSha256": "17a161abb984a273ff8017261bb5f4a8447e5d7883fd7cbc4abdda1cb3a91fb5",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 232320
+  },
+  {
+    "file": "chirp/sweep-live/background.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/sweep-live/background.wav",
+    "sourceSha256": "7d57b8684cc68b8f94d3b3a7d284aa5bd5c59092c2761c3e045667d1fe5a796e",
+    "floatSha256": "4b666731cdc3e3a0f3115153a51d281042673d5decac9fddc8a9689831124b48",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 144000
+  },
+  {
+    "file": "chirp/sweep-live/capture-1.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/sweep-live/capture-1.wav",
+    "sourceSha256": "3e0a9c7b8e817a4043b7f0afc8041ce6e962883a4b995b33e852c3ceacf3439c",
+    "floatSha256": "3a228e9598e121bc955e3290f104dfa12fc334a21ae2ee92583670b1451eab82",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 659520
+  },
+  {
+    "file": "chirp/sweep-live/capture-2.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/sweep-live/capture-2.wav",
+    "sourceSha256": "a44d85d94ded507709853c070e216838ffab909c46a359b149b4182692f35e31",
+    "floatSha256": "897e0548d32039e375fe5d9698c499a0abb25addcbc036e035f8519d8a276e32",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 659520
+  },
+  {
+    "file": "chirp/sweep-live-2-louder/background.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/sweep-live-2-louder/background.wav",
+    "sourceSha256": "b749d37c83e6bdcbafd76b495195340b67290088bb3db22880e09d93d09ea270",
+    "floatSha256": "9ab21e1f5ea7d0bbb9feedc6eee10cae6a771378d2673b90ee5b85b2b5f3ad48",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 144000
+  },
+  {
+    "file": "chirp/sweep-live-2-louder/capture-1.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/sweep-live-2-louder/capture-1.wav",
+    "sourceSha256": "d9bc3ff061e00825c83cf00c9b4058424077f24fbb1ed54f0c4b993bd3d8d6bb",
+    "floatSha256": "6ac7ea73e1e81783f191b292e1fb755bc1e9dd6570e934b3a66e6b23b36d5501",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 659520
+  },
+  {
+    "file": "chirp/sweep-live-2-louder/capture-2.wav.f32.gz",
+    "source": "artifacts/20261106-085907-845Z-rattle-listening/sweep-live-2-louder/capture-2.wav",
+    "sourceSha256": "4139ac9b9adbc6c4ff80a4b1cd72d4eff66e25208360467ebd32d27779ab2d1e",
+    "floatSha256": "9d94dfdedc7e9316259c06540b20a2a821d1c632f3eaf64051d82f795b4e3f1a",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 659520
+  },
+  {
+    "file": "pink/live-tol/cap-a24-1.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live-tol/cap-a24-1.wav",
+    "sourceSha256": "188da954fc98d9fbc31ea5d5dd54e8469435380d1b393ae69f2860cf946eeabf",
+    "floatSha256": "ba8f30674d1fd97f700f55d8688efc7eaa3d12572b580230fb15fc5adadf9c1f",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 358080
+  },
+  {
+    "file": "pink/live-tol/cap-a24-2.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live-tol/cap-a24-2.wav",
+    "sourceSha256": "50d2e4736f3b227eead0b25f2623a6b36501c5a187df3e315a7cabd32bd170d3",
+    "floatSha256": "b242dec5d32f11d3ecfa8ed4e22bc4e508557fb273e761b403dac2af5ba85485",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 357120
+  },
+  {
+    "file": "pink/live-tol/cap-a24-3.wav.f32.gz",
+    "source": "artifacts/20261106-070750-775Z-claude-rattle-remeasure/live-tol/cap-a24-3.wav",
+    "sourceSha256": "4b8390696241212dfc299f3b67ab6c692da11756e4ab59d538cb5774716db59d",
+    "floatSha256": "1c2dcffdc90d8654b71f040b9a41b9ff9306b644d7a57a0ccf701adeb5dcbb3e",
+    "sampleRate": 48000,
+    "channels": 1,
+    "samples": 358080
+  }
+]

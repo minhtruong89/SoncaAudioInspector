@@ -1,0 +1,7 @@
+v1.5.6: Bấm Auto Test là app tự nối loa gần nhất, chuyển và báo đủ ngõ, tự đồng bộ ngõ sound card với cấu hình server (không còn popup bấm A/B), đo hết các bài rồi báo kết quả gửi server.
+Kết nối: quét BLE và nối loa mạnh nhất theo tiền tố tên của model (C360: KBEATBOX, mã model 1075), chuyển và đọc lại từng ngõ (LINE IN / BT / USB A), popup liệt kê ngõ loa và ngõ sound card rồi tự đóng để đo tiếp; thiếu ngõ thì popup đứng lại.
+Đồng bộ ngõ sound card: một ngõ (LINE IN / MIC IN) không có tiếng thì app tự thử các ngõ sound card khác trong cấu hình; cặp nào có tiếng thật thì dùng cặp đó cho cả phiên, ngõ còn lại tự đổi theo khi hai cáp cắm ngược. Chỉ khi mọi cặp đều không có tiếng mới hỏi kiểm tra cáp.
+Tên thiết bị trong cấu hình server khớp với máy trạm dù Windows đánh số khác (7- / 8- FastTrack Pro) hoặc thừa khoảng trắng.
+IO008 Rè hiện đúng hình: đồ thị chirp Rè (chính là ảnh QA gửi lên) và kết luận Pink % / Chirp dB, không còn hiện đồ thị sweep kiểm mic.
+Effect (IO001), di tần FBX (IO002), gain trước hú (IO009) và Rè (IO008) không dùng LINE CHUẨN: không đọc, không so, không hỏi, không lưu chuẩn cho các bài này.
+Popup lỗi (dừng Auto Test, mất thiết bị, không gửi được) đứng lại tới khi bấm, không tự tắt sau 4 giây. Cuối phiên một popup báo đã gửi FACTORY FLOOR QA & APP TRACKER và Quy trình QA/QC (kèm mã log), hoặc lý do chưa gửi; nhắc khi tài khoản không phải STAFF.

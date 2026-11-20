@@ -73,7 +73,8 @@ internal static class ModelStartupChecks
                     {
                         Input = new Dictionary<string, string> { ["Test out"] = "__missing_model_playback__" },
                         Output = new Dictionary<string, string> { ["Test in"] = "__missing_model_capture__" }
-                    }
+                    },
+                    Tests = [new TestConfig { id = "IO001", PlaybackOut = "Test out", RecordingIn = "Test in", Enable = true }]
                 } } }
             }
         };
@@ -91,7 +92,7 @@ internal static class ModelStartupChecks
                 var routing = (AudioRouting)typeof(MainWindow).GetField("_audioRoutingView", Instance)!.GetValue(window)!;
                 object? Field(string name) => typeof(MainWindow).GetField(name, Instance)!.GetValue(window);
                 var autoTest = (Button)routing.FindName("BtnStartAutoTest");
-                Require(combo.Items.Count == 1 && combo.SelectedIndex == -1 && !autoTest.IsEnabled,
+                Require(combo.Items.Count == 2 && combo.Items.Contains("C360") && combo.SelectedIndex == -1 && !autoTest.IsEnabled,
                     "Startup selected a model or enabled Auto Test before operator selection.");
                 Require(Field("_pendingDeviceConfig") == null && Field("_selectedModelDeviceConfig") == null
                     && Field("_deviceConnectionWindow") == null && !(bool)Field("_audioUsageChecked")!,
@@ -126,7 +127,7 @@ internal static class ModelStartupChecks
                     var alias = new InOutConfig { Devices = new DevicesConfig
                     {
                         Input = new Dictionary<string, string> { ["Analog 1/2"] = "Analog Connector (old USB instance)" }
-                    } };
+                    }, Tests = [new TestConfig { PlaybackOut = "Analog 1/2", RecordingIn = "unused", Enable = true }] };
                     var expected = (MMDevice?)typeof(AudioRouting).GetMethod("ResolvePlaybackDevice", Instance)!
                         .Invoke(routing, new object[] { "Analog 1/2", alias.Devices.Input["Analog 1/2"], playback, true });
                     var ids = routing.GetModelDeviceIds(alias);

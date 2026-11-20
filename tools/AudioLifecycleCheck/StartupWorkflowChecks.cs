@@ -55,6 +55,32 @@ internal static class StartupWorkflowChecks
         Require(noMatches.Success && noMatches.Matched == 0 && !noModel.Success && attempted.Count == 0, "Empty or unmatched model changed pairings.");
         Console.WriteLine("Bluetooth model removal checks passed (fake pairing records only; no device changes).");
 
+        // Test Sonca BLE protocol packet construction & CRC8
+        byte[] infoPacket = SoncaBleProtocol.BuildInfoPacket();
+        Require(infoPacket.Length == 13, "SCA=INFO packet length should be 13.");
+        Require(infoPacket.AsSpan().SequenceEqual(Convert.FromHexString("028001085343413D494E464FF1")), "SCA=INFO captured wire packet mismatch.");
+        Require(SoncaBleProtocol.TryParsePacket(infoPacket, out byte parsedCmd, out byte[] parsedPayload)
+            && parsedCmd == 0x01 && System.Text.Encoding.ASCII.GetString(parsedPayload) == "SCA=INFO", "Failed to parse info packet.");
+
+        byte[] paramPacket = SoncaBleProtocol.BuildParamPacket(SoncaBleProtocol.ChannelMusic, SoncaBleProtocol.RegMusicMasterVol, 75);
+        Require(SoncaBleProtocol.TryParsePacket(paramPacket, out byte setCmd, out byte[] setPayload)
+            && setCmd == 0x04 && setPayload.Length == 4 && setPayload[0] == 0x61 && setPayload[1] == 0x03, "Param packet parse failed.");
+
+        // Test Ctrl+Shift+H shortcut handler
+        int mixerOpenedCount = 0;
+        bool handledH = MainWindow.TryHandleBleMixerShortcut(System.Windows.Input.Key.H, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, false, () => mixerOpenedCount++);
+        Require(handledH && mixerOpenedCount == 1, "Ctrl+Shift+H failed to trigger BLE mixer shortcut.");
+
+        bool ignoredRepeat = MainWindow.TryHandleBleMixerShortcut(System.Windows.Input.Key.H, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, true, () => mixerOpenedCount++);
+        Require(ignoredRepeat && mixerOpenedCount == 1, "Repeated Ctrl+Shift+H should not trigger extra open.");
+
+        bool wrongKey = MainWindow.TryHandleBleMixerShortcut(System.Windows.Input.Key.M, System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift, false, () => mixerOpenedCount++);
+        Require(!wrongKey && mixerOpenedCount == 1, "Non-H key triggered BLE mixer shortcut.");
+
+        bool missingCtrl = MainWindow.TryHandleBleMixerShortcut(System.Windows.Input.Key.H, System.Windows.Input.ModifierKeys.Shift, false, () => mixerOpenedCount++);
+        Require(!missingCtrl && mixerOpenedCount == 1, "Missing Ctrl triggered BLE mixer shortcut.");
+        Console.WriteLine("Sonca BLE Protocol and Ctrl+Shift+H shortcut checks passed.");
+
         using var recovering = new ScriptedHandler(HttpStatusCode.ServiceUnavailable, HttpStatusCode.BadGateway, HttpStatusCode.OK);
         using var recoveringClient = new HttpClient(recovering);
         var requests = new List<HttpRequestMessage>();

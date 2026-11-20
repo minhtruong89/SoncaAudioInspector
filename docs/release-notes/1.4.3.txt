@@ -1,0 +1,10 @@
+v1.4.3: Rè báo số đo nền và cho tăng nền cho phép theo trạm, popup hướng dẫn mọi lỗi đo Rè; báo đủ ngõ sai tên/mất kết nối, cảnh báo sample rate C360.
+Rè: khi nền cao, popup hiện RMS/đỉnh/DC đo được, nguyên nhân thường gặp và cho tăng "nền cho phép" (RMS tới −35, đỉnh tới −10 dBFS) rồi đo lại; ngưỡng lưu cho máy này, dùng cho Rè thủ công, Auto Test và C360, và được ghi kèm route của kết quả.
+Rè: bỏ 0,3 s đầu lúc mic vừa mở luồng khi kiểm tra nền (giống bước phân tích), tránh tiếng tách khởi động chặn bài đo; mặc định vẫn −55 dBFS RMS / −26 dBFS đỉnh.
+Rè: mic trả về im lặng số (quyền Microphone, Mute, cáp) được báo riêng ngay trước khi phát, không còn đo xong mới báo nền bất thường.
+Rè: lỗi dừng đo hiện popup "Cách xử lý" theo từng trường hợp (app khác giữ mic kèm tên app, Windows chặn Exclusive, mic không nhận định dạng, mất kết nối USB, quyền mic, đổi route/âm lượng/sample rate, Mono audio, đang bận); chỉ gợi ý Exclusive khi lỗi thật sự là mở thiết bị.
+Popup "Kết nối thiết bị đo" của C360/ACOUSTIC 3 liệt kê mọi ngõ sai tên hoặc đã rớt USB/hub (không chỉ ngõ đầu tiên), kèm tên Windows đang có.
+Cấu hình model (Ctrl+Shift+M): nút "Lấy ngõ PHÁT/THU đang chọn ở Cấu hình đường âm thanh" và dòng ✓/⚠ kiểm tra tên thiết bị với Windows.
+Dùng cấu hình thử với tên thiết bị không khớp Windows: lần bấm đầu bị chặn và liệt kê từng ngõ; bấm lại để vẫn dùng.
+C360: trước khi đo app tự đặt các ngõ về 44,1 kHz; ngõ thu khác 44,1 kHz (ví dụ 48 kHz do Audio enhancements) thì cảnh báo nhưng vẫn cho lưu line chuẩn.
+Cấu hình thử: BẮT ĐẦU ĐO LINE vẫn đo và vẽ đáp tuyến khi chưa có line chuẩn thử (không kết luận); Auto Test thử vẫn cần line chuẩn thử.

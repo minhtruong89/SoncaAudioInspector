@@ -2,6 +2,18 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <Version>1.5.6</Version>
+    <AssemblyVersion>1.5.6.0</AssemblyVersion>
+    <FileVersion>1.5.6.0</FileVersion>
+    <InformationalVersion>1.5.6</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <!-- Kênh phát hành: stable hoặc beta. Bản beta chỉ vào beta.json, không bao giờ vào latest.json (skill sonca-beta-release). -->
+    <SoncaReleaseChannel>stable</SoncaReleaseChannel>
+    <!-- Chủ sở hữu bản quyền: phải trùng tên trong LICENSE.txt. publish-portable.ps1 từ chối đóng gói khi còn chỗ trống {{...}}. -->
+    <CopyrightHolder>NGUYỄN VĂN LỘC</CopyrightHolder>
+    <Company>$(CopyrightHolder)</Company>
+    <Copyright>Copyright (c) 2026 $(CopyrightHolder). All rights reserved.</Copyright>
+    <RootNamespace>SoncaAudioInspector</RootNamespace>
     <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -17,27 +29,33 @@
     <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
     <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Keep DEBUG startup behavior while compiling measurement loops for speed. -->
+    <Optimize>true</Optimize>
     <SatelliteResourceLanguages>none</SatelliteResourceLanguages>
     <!-- Keep generated WPF sources excluded when building into an isolated intermediate directory. -->
-    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;bin\**;.codex-obj*\**;.codex-bin-*\**;.artifacts*\**;artifacts*\**;demo-builds\**;bin-*\**;obj-*\**;hardware-channel-fix\**;scratch\**</DefaultItemExcludes>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj\**;bin\**;.codex-obj*\**;.codex-bin-*\**;.artifacts*\**;artifacts*\**;demo-builds\**;bin-*\**;obj-*\**;hardware-channel-fix\**;scratch\**;legacy\**;local-data\**;save standards\**</DefaultItemExcludes>
     <DefineConstants Condition="'$(RuntimeIdentifier)' == 'win-x86'">$(DefineConstants);WIN_X86</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
+    <AssemblyMetadata Include="SoncaReleaseChannel" Value="$(SoncaReleaseChannel)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Remove="CheckApp\**\*.cs" />
     <Compile Remove="tools\**\*.cs" />
-    <Compile Remove="VisualAI.xaml.cs" />
-    <Compile Remove="VisualAI.x86.xaml.cs" />
-    <Compile Remove="AiVisualization\**\*.cs" />
+    <Compile Remove="legacy\**\*.cs" />
     <None Remove="CheckApp\**\*" />
     <None Remove="tools\**\*" />
     <Page Remove="CheckApp\**\*.xaml" />
     <Page Remove="tools\**\*.xaml" />
-    <Page Remove="VisualAI.xaml" />
+    <Page Remove="legacy\**\*.xaml" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
+    <PackageReference Include="MathNet.Numerics.Providers.MKL" Version="5.0.0" />
+    <PackageReference Include="MathNet.Numerics.MKL.Win-x64" Version="3.0.0" Condition="'$(RuntimeIdentifier)' != 'win-x86'" />
     <PackageReference Include="Microsoft.Win32.Registry.AccessControl" Version="9.0.6" />
     <PackageReference Include="NAudio" Version="2.3.0" />
     <PackageReference Include="ScottPlot.WPF" Version="5.1.58" />
@@ -48,7 +66,23 @@
 
   <ItemGroup>
     <Resource Include="Assets\app_icon.ico" />
+    <EmbeddedResource Include="Assets\config-signing-public.pem" LogicalName="SoncaAudioInspector.ConfigSigningPublicKey" />
+    <Content Include="Assets\config-signing-public.pem"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory><CopyToPublishDirectory>Always</CopyToPublishDirectory></Content>
+    <EmbeddedResource Include="Assets\firmware-models.json" LogicalName="SoncaAudioInspector.FirmwareModels" />
     <Content Include="Assets\Audio\sine-1000Hz-minus12dBFS-RMS.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <!-- Rè WAVs are listening/reference copies; the app synthesizes the real stimulus (PinkRubBuzzCheck keeps them identical). -->
+    <Content Include="Assets\Audio\pink-rattle-25-150Hz-6s-44100Hz-minus18dBFS-RMS.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Assets\Audio\chirp-rattle-20-2000Hz-3s-44100Hz-minus12dBFS-peak.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+    <Content Include="Assets\Audio\chirp-rattle-20-2000Hz-10s-44100Hz-minus12dBFS-peak.wav">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </Content>
@@ -57,15 +91,39 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
+    <Content Include="docs\CONFIG_TESTS.vi.md">
+      <TargetPath>CONFIG_TESTS.vi.md</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="docs\PINK_RUBBUZZ_v1.2.vi.md">
+      <TargetPath>PINK_RUBBUZZ_v1.2.vi.md</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
     <Content Include="calibrations\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
-    <Content Include="FEEDBACK_SHIFT_GUIDE.vi.md">
+    <Content Include="docs\FEEDBACK_SHIFT_GUIDE.vi.md">
+      <TargetPath>FEEDBACK_SHIFT_GUIDE.vi.md</TargetPath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
-    <Content Include="FEEDBACK_SHIFT_REVIEW.vi.md">
+    <Content Include="docs\FEEDBACK_SHIFT_REVIEW.vi.md">
+      <TargetPath>FEEDBACK_SHIFT_REVIEW.vi.md</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="LICENSE.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="THIRD-PARTY-NOTICES.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+    <Content Include="licenses\*.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>

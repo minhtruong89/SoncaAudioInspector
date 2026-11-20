@@ -1,0 +1,9 @@
+v1.5.5: Máy trạm chỉ cần verify.txt một lần và đăng nhập một lần: app nhớ xác thực máy và tự đăng nhập tài khoản đã ghi nhớ.
+Xác thực máy: sau lần đầu dùng verify.txt, thông tin được mã hóa (Windows DPAPI) cho user Windows này; app key hết hạn hay đổi thư mục app cũng không hỏi lại verify.txt. Server từ chối thì mới hỏi lại.
+Đăng nhập: ô "Ghi nhớ và tự đăng nhập trên máy này" bật sẵn; lần sau mở app tự đăng nhập. Bấm Đăng xuất để tắt.
+Tiền tố tên BLE (Ctrl+Shift+M, web /config): đặt ví dụ KBEATBOX thì khi bắt đầu Auto Test app quét BLE 4 giây, chỉ lấy loa có tên bắt đầu bằng chuỗi này và kết nối loa có RSSI mạnh nhất; model có FirmwareModelId (C360 = 1075) thì INFO phải đúng mã đó, không thì thử loa mạnh kế tiếp.
+Ctrl+Shift+M có thêm ô "FBX thêm tối thiểu (dB)" cho bài Gain trước hú (IO009).
+Gửi kết quả: server nhận tới 16 bài/ảnh mỗi phiên, nên C360 đủ 9 bài (IO001–IO009) gửi lên được.
+Rè IO008 không cần line chuẩn: Pink PASS khi tỷ lệ rè lặp lại < 30 %, Chirp PASS khi đỉnh rè dưới ngưỡng FAIL; không còn "CẦN DUYỆT", không hỏi lấy chuẩn Rè.
+Gain trước hú IO009 là bài tùy chọn: đo lại hoặc bỏ qua đều không đổi kết luận tổng và không chặn gửi kết quả. FBX tắt mà chưa hú thì hiện popup "đặt mic đo gần loa hơn" (Thử lại / Bỏ qua).
+IO009 có thêm độ mạnh tiếng hú (hú nhẹ / vừa / mạnh: đỉnh nổi trên nền, mức tại mic, tần số) và mức FBX giảm đỉnh hú; hú mạnh được tự ghi vào ghi chú của phiên gửi lên server.

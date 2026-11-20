@@ -1,25 +1,39 @@
-param(
+﻿param(
     [ValidateSet("all", "x64", "x86")]
     [string]$Architecture = "all",
     [string]$OutputRoot = "artifacts",
-    [string]$Description = "Portable SoncaAudioInspector release"
+    [string]$Description = "Portable SoncaAudioInspector release",
+    [switch]$SkipStationData
 )
 
 $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent $scriptRoot
 $projectFile = Join-Path $projectRoot "SoncaAudioInspector.csproj"
+$configKeyPath = Join-Path $projectRoot 'Assets/config-signing-public.pem'
+if (-not (Test-Path -LiteralPath $configKeyPath) -or (Get-Content -Raw -LiteralPath $configKeyPath) -match 'PLACEHOLDER|\{\{') {
+    throw 'Chưa ghim public key production cho cấu hình ACTIVE; từ chối đóng gói.'
+}
 $outputRootPath = & (Join-Path $scriptRoot 'new-artifact.ps1') -Description $Description -Slug "portable-$Architecture" -OutputRoot $OutputRoot
 
 $requiredSourceFiles = @(
     (Join-Path $projectRoot "checking_config.json"),
     (Join-Path $projectRoot "PortableReadme.txt"),
-    (Join-Path $projectRoot "PortableReadme-x86.txt")
+    (Join-Path $projectRoot "PortableReadme-x86.txt"),
+    (Join-Path $projectRoot "LICENSE.txt"),
+    (Join-Path $projectRoot "THIRD-PARTY-NOTICES.txt")
 )
 
 foreach ($requiredFile in $requiredSourceFiles) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
         throw "Thiếu file cần đóng gói: $requiredFile"
+    }
+}
+
+# Không phát hành khi giấy phép còn chỗ trống (tên chủ sở hữu, liên hệ).
+foreach ($licenseSource in @((Join-Path $projectRoot "LICENSE.txt"), $projectFile)) {
+    if (Select-String -LiteralPath $licenseSource -Pattern '\{\{[A-Z_]+\}\}' -Quiet) {
+        throw "Chưa điền chủ sở hữu/liên hệ ({{...}}) trong: $licenseSource"
     }
 }
 
@@ -51,12 +65,17 @@ function Publish-Portable {
     }
 
     $realRouteSource = Join-Path $projectRoot "checking_config_realRoute.json"
-    if (Test-Path -LiteralPath $realRouteSource) {
+    if (-not $SkipStationData -and (Test-Path -LiteralPath $realRouteSource)) {
         Copy-Item -LiteralPath $realRouteSource -Destination $publishPath -Force
     }
     $saveStandardsSource = Join-Path $projectRoot "save standards"
-    if (Test-Path -LiteralPath $saveStandardsSource) {
-        Copy-Item -LiteralPath $saveStandardsSource -Destination $publishPath -Recurse -Force
+    if (-not $SkipStationData -and (Test-Path -LiteralPath $saveStandardsSource)) {
+        $saveStandardsTarget = Join-Path $publishPath 'save standards'
+        New-Item -ItemType Directory -Path $saveStandardsTarget -Force | Out-Null
+        # The cleanup archive contains historical local data, not live references.
+        foreach ($reference in Get-ChildItem -LiteralPath $saveStandardsSource -Force | Where-Object Name -ne 'retained-artifact-data') {
+            Copy-Item -LiteralPath $reference.FullName -Destination $saveStandardsTarget -Recurse -Force
+        }
     }
 
     $requiredPublishFiles = @(

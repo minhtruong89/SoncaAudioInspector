@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sonca Version Update"
+  short_description: "Phát hành Sonca có cache, chữ ký và kiểm tra live"
+  default_prompt: "Use $sonca-version-update để cập nhật phiên bản Sonca nhanh và xác minh bản phát hành."

@@ -1,0 +1,146 @@
+<Window x:Class="SoncaAudioInspector.RoutingScopeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ScottPlot="clr-namespace:ScottPlot.WPF;assembly=ScottPlot.WPF"
+        Title="Scope &amp; Noise Check" Width="980" Height="680" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterOwner" WindowStyle="None" ResizeMode="CanResize"
+        Background="#0E0E10" Foreground="#F4F4F5">
+    <Window.Resources>
+        <!-- WPF's stock ComboBox popup keeps the system/light palette unless it is styled locally. -->
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="#18181B"/>
+            <Setter Property="Foreground" Value="#F4F4F5"/>
+            <Setter Property="BorderBrush" Value="#3F3F46"/>
+            <Setter Property="Padding" Value="6,2"/>
+        </Style>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="#18181B"/>
+            <Setter Property="Foreground" Value="#F4F4F5"/>
+            <Setter Property="Padding" Value="7,4"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="#18181B"/>
+            <Setter Property="Foreground" Value="#F4F4F5"/>
+            <Setter Property="BorderBrush" Value="#3F3F46"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="#121214"/>
+            <Setter Property="Foreground" Value="#F4F4F5"/>
+            <Setter Property="BorderBrush" Value="#3F3F46"/>
+            <Setter Property="CaretBrush" Value="#F4F4F5"/>
+            <Setter Property="Padding" Value="6,3"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="110"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,10" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel>
+                <TextBlock Text="SCOPE · KIỂM TRA NHIỄU NGÕ THU" FontSize="17" FontWeight="Bold" Foreground="#22D3EE"/>
+                <TextBlock x:Name="TxtDevices" Text="" Foreground="#A1A1AA" FontSize="11" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="✕" Click="BtnClose_Click" Width="32" Height="30" FontSize="15"
+                    Background="#18181B" Foreground="#D4D4D8" BorderBrush="#3F3F46"/>
+        </Grid>
+
+        <Border Grid.Row="1" Background="#18181B" BorderBrush="#27272A" BorderThickness="1" CornerRadius="7" Padding="10" Margin="0,0,0,10">
+            <StackPanel>
+                <WrapPanel VerticalAlignment="Center" Margin="0,0,0,8">
+                    <Button x:Name="BtnSineCheck" Content="▶ PHÁT WAV 1 kHz" Click="BtnSineCheck_Click" Width="190" Height="34"
+                            Background="#065F46" Foreground="White" BorderBrush="#10B981" FontWeight="Bold" Margin="0,0,14,0"
+                            ToolTip="Phát lặp file WAV 1 kHz qua ngõ OUT đã chọn. Dừng WAV không dừng Scope thu."/>
+                    <TextBlock Text="Tần số" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox x:Name="TxtSineFrequency" Text="1000" Width="76" Height="29" IsReadOnly="True"
+                             VerticalContentAlignment="Center" ToolTip="File WAV kiểm tra có tần số cố định 1 kHz."/>
+                    <TextBlock Text="Hz" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="4,0,14,0"/>
+                    <TextBlock Text="Mức phát RMS" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox x:Name="TxtSineLevelRms" Text="-12" Width="66" Height="29" IsReadOnly="True"
+                             VerticalContentAlignment="Center" ToolTip="Mức RMS của file WAV; âm lượng nghe còn phụ thuộc ngõ phát Windows."/>
+                    <TextBlock Text="dBFS" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="4,0,14,0"/>
+                    <Border x:Name="BorderNoiseStatus" Background="#172554" BorderBrush="#3B82F6" BorderThickness="1" CornerRadius="11" Padding="10,3">
+                        <TextBlock x:Name="TxtNoiseStatus" Text="ĐANG THU NỀN..." FontWeight="Bold" FontSize="10" Foreground="#BFDBFE"/>
+                    </Border>
+                </WrapPanel>
+                <WrapPanel VerticalAlignment="Center">
+                    <TextBlock Text="Timebase" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,14,0" ToolTip="Giảm/tăng thời gian mỗi ô. Cuộn chuột trên biểu đồ để zoom dọc liên tục.">
+                        <Button x:Name="BtnTimebaseDown" Content="−" Click="BtnTimebaseDown_Click" Width="29" Height="29" FontSize="16" Padding="0"/>
+                        <Border Background="#18181B" BorderBrush="#3F3F46" BorderThickness="0,1,0,1" Height="29" MinWidth="88" Padding="7,3">
+                            <TextBlock x:Name="TxtTimebase" Text="2 ms/div" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Button x:Name="BtnTimebaseUp" Content="+" Click="BtnTimebaseUp_Click" Width="29" Height="29" FontSize="16" Padding="0"/>
+                    </StackPanel>
+                    <TextBlock Text="V/div" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,14,0"
+                                ToolTip="Thang dọc kiểu REW. Luôn bắt đầu ở 500 mV/div; giảm để phóng to, tăng đến 5 V/div.">
+                        <Button x:Name="BtnVoltsPerDivisionDown" Content="−" Click="BtnVoltsPerDivisionDown_Click" Width="29" Height="29" FontSize="16" Padding="0"/>
+                        <Border Background="#18181B" BorderBrush="#3F3F46" BorderThickness="0,1,0,1" Height="29" MinWidth="97" Padding="7,3">
+                            <TextBlock x:Name="TxtVoltsPerDivision" Text="500 mV/div" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <Button x:Name="BtnVoltsPerDivisionUp" Content="+" Click="BtnVoltsPerDivisionUp_Click" Width="29" Height="29" FontSize="16" Padding="0"/>
+                    </StackPanel>
+                    <Button Content="VỪA SÓNG" Click="BtnFitScope_Click" Height="29" Margin="0,0,10,0" ToolTip="Phóng vừa tín hiệu thu thực tế; không thay đổi âm lượng hoặc số đo."/>
+                    <TextBlock Text="Đường xanh: sạch · Đường đỏ: click / nhiễu" Foreground="#71717A" VerticalAlignment="Center" FontSize="10"/>
+                </WrapPanel>
+                <TextBlock x:Name="TxtSineActionStatus" Text="Scope tự thu ngõ IN. Bấm PHÁT WAV hoặc dùng nguồn 1 kHz bên ngoài." TextWrapping="Wrap"
+                           Foreground="#FCD34D" FontSize="12" Margin="0,8,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <UniformGrid Grid.Row="0" Columns="4" Margin="0,0,0,8">
+                <StackPanel>
+                    <TextBlock Text="ĐỈNH-ĐỈNH" FontSize="10" Foreground="#71717A"/>
+                    <TextBlock x:Name="TxtVpp" Text="-- FS" FontSize="16" FontWeight="Bold" Foreground="#FACC15"/>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="RMS" FontSize="10" Foreground="#71717A"/>
+                    <TextBlock x:Name="TxtRms" Text="-- dBFS" FontSize="16" FontWeight="Bold" Foreground="#38BDF8"/>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="TẦN SỐ ƯỚC TÍNH" FontSize="10" Foreground="#71717A"/>
+                    <TextBlock x:Name="TxtFrequency" Text="-- Hz" FontSize="16" FontWeight="Bold" Foreground="#4ADE80"/>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="HEADROOM" FontSize="10" Foreground="#71717A"/>
+                    <TextBlock x:Name="TxtHeadroom" Text="-- dB" FontSize="16" FontWeight="Bold" Foreground="#E879F9"/>
+                </StackPanel>
+            </UniformGrid>
+            <Grid Grid.Row="1">
+                <ScottPlot:WpfPlot x:Name="PlotScope"
+                                      PreviewMouseRightButtonDown="PlotScope_PreviewMouseRightButtonDown"
+                                      PreviewMouseRightButtonUp="PlotScope_PreviewMouseRightButtonUp"
+                                      PreviewMouseMove="PlotScope_PreviewMouseMove"
+                                      LostMouseCapture="PlotScope_LostMouseCapture"
+                                      ToolTip="Cuộn chuột: zoom dọc · Giữ chuột phải và kéo lên/xuống: di chuyển vùng nhìn để kiểm tra đỉnh clipping."/>
+            </Grid>
+        </Grid>
+
+        <Border Grid.Row="3" Background="#121214" BorderBrush="#27272A" BorderThickness="1" CornerRadius="7" Padding="9" Margin="0,10,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="NHẬT KÝ KIỂM TRA NHIỄU TỰ ĐỘNG" FontSize="10" FontWeight="Bold" Foreground="#71717A"/>
+                <TextBox x:Name="TxtNoiseLog" Grid.Row="1" Margin="0,5,0,0" IsReadOnly="True" BorderThickness="0"
+                         Background="Transparent" Foreground="#D4D4D8" FontFamily="Consolas" FontSize="10"
+                         TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

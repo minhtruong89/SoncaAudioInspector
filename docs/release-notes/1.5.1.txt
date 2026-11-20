@@ -1,0 +1,6 @@
+v1.5.1: Gộp mọi công cụ Rè vào một tab với nút Đo chuẩn, Chỉ Pink, Chỉ Chirp và kết luận chẩn đoán ngắn; Pink tới −12 dBFS; app luôn đọc đúng cấu hình đã duyệt trên server.
+Rè (Ctrl+Shift+I): chỉ còn một tab "Rè (Rub & Buzz)". Nút Đo chuẩn chạy đúng bài của model; thêm nút Chỉ Pink và Chỉ Chirp (vẫn so và lưu line chuẩn). Âm thanh chẩn đoán, H10–H35, Hạt rác, Rò khí và Pink nghe thử chuyển vào mục "Chẩn đoán nâng cao".
+Chẩn đoán Rè gọn hơn: kết luận nhanh 3–4 dòng (nguyên nhân nghiêng về, dấu hiệu chính, dấu hiệu trái chiều, việc làm tiếp); bảng 10 dấu hiệu và giải thích chi tiết thu gọn trong mục "Chi tiết". Cách tính và kết luận ĐẠT/KHÔNG ĐẠT không đổi.
+Pink Rè: mức phát tối đa tăng từ −18 lên −12 dBFS RMS; ở mức −18 trở xuống tín hiệu giữ nguyên từng mẫu nên line chuẩn đã lưu vẫn dùng được. Chẩn đoán theo mức chạy −30/−24/−18/−12 dBFS.
+Cấu hình server: app tải lại cấu hình đã duyệt khi đổi model và khi mở danh sách chờ duyệt; "MI SAM" và "MISAM" được coi là một model; xóa cache cấu hình model đã bị gỡ trên web; file cấu hình đi kèm app không còn ghi đè cấu hình server đã xác minh; cấu hình đã duyệt không bị bản lưu trên máy ghi đè.
+File âm thanh: thay file pink cũ của v1.2 (thực ra là full-band) bằng bản giống từng mẫu tín hiệu Pink Rè đang dùng.

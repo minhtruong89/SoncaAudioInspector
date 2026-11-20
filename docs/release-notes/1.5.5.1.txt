@@ -1,0 +1,4 @@
+v1.5.5.1: Mọi cửa sổ chức năng (Ctrl+Shift+M, BLE, duyệt cấu hình, Rè, trở kháng, hộp thoại…) cao tối đa 90 % màn hình đang hiển thị, kể cả khi phóng to.
+Cửa sổ chính vẫn vừa 100 % màn hình như trước. Cửa sổ mở ở màn hình nào thì lấy 90 % chiều cao vùng làm việc của màn hình đó (đã tính DPI); kéo sang màn hình khác thì tự tính lại.
+Cửa sổ mở giữa màn hình vẫn căn giữa sau khi thu chiều cao; cửa sổ phóng to (Ctrl+Shift+I, Impulse) rộng hết màn hình, cao 90 %, căn giữa dọc.
+Số phiên bản 4 phần (1.5.5.1) hiển thị và gửi lên server đầy đủ.

@@ -1,0 +1,7 @@
+v1.4.1: Sửa tab Rè bấm Đo không phát tiếng; thêm Ctrl+Shift+T test núm/nút subwoofer.
+Tab Rè: bấm Đo giờ phát Pink/Chirp và thu đúng; trước đây luôn bị từ chối "Đang đo/chuyển model".
+Ctrl+Shift+T: 5 bước có hướng dẫn test Crossover 40–180 Hz, Delay 0–20 ms, nút Phase 180° và đèn 180°.
+Hình mặt loa tô vàng mọi núm/nút cần chỉnh ở từng bước; chấm bằng so sánh vị trí, không cần line chuẩn.
+Đồ thị đáp tuyến và pha so với bước 1; đo xong tự lưu WAV và kết quả vào captures/subwoofer-*.
+Cấu hình thử: kết quả đo thử lưu riêng vào dữ liệu thử, không lẫn kết quả thật.
+Báo cáo App/QA: xem chi tiết từng kết quả, mã đo thống nhất giữa App và QA.

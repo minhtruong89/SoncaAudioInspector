@@ -1,0 +1,59 @@
+<UserControl x:Class="SoncaAudioInspector.RewRealtimeLevelMeter"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:SoncaAudioInspector"
+             MinHeight="85">
+
+    <Border Background="#141416" BorderBrush="#27272A" BorderThickness="1" CornerRadius="6" Padding="6,5">
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- Row 0: Bảng cuộn sóng REW trọn 100% bề ngang -->
+                <RowDefinition Height="*"/>
+                <!-- Row 1: Toàn bộ chữ, thông số Headroom, trạng thái, Peak/RMS chuyển xuống dưới -->
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Row 0: REW Meter Box with metallic beveled border (Full Width) -->
+            <Border Grid.Row="0" Background="#000000" 
+                    BorderBrush="#4B4B52" BorderThickness="1.5" CornerRadius="4"
+                    ClipToBounds="True" MinHeight="45" VerticalAlignment="Stretch">
+                <local:RewLevelGraphCanvas x:Name="GraphCanvas"/>
+            </Border>
+
+            <!-- Row 1: Headroom & Diagnostics Section (Nằm phía dưới bảng) -->
+            <Grid Grid.Row="1" Margin="0,5,0,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- Dòng 1: Headroom Label + Value bên trái, Status Badge bên phải -->
+                <Grid Grid.Row="0" Margin="0,0,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Headroom:" FontSize="11" FontWeight="SemiBold" Foreground="#A1A1AA" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock x:Name="TxtHeadroom" Text="-- dB" 
+                                   FontSize="15" FontWeight="Bold" Foreground="#3B82F6"
+                                   FontFamily="Segoe UI, Consolas, Arial" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Border Grid.Column="2" x:Name="BorderStatusBadge" Background="#182234" 
+                            BorderBrush="#3B82F6" BorderThickness="1" CornerRadius="3" 
+                            Padding="6,2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                        <TextBlock x:Name="TxtStatusBadge" Text="ℹ CHỜ TÍN HIỆU" 
+                                   FontSize="10" FontWeight="Bold" Foreground="#60A5FA"/>
+                    </Border>
+                </Grid>
+
+                <!-- Dòng 2: Chi tiết Peak / RMS / SNR trải rộng đầy đủ không bị cắt chữ -->
+                <TextBlock Grid.Row="1" x:Name="TxtStatsDetail" Text="Peak: -- | RMS: -- | SNR: --" 
+                           FontSize="10" Foreground="#71717A" TextTrimming="CharacterEllipsis"/>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

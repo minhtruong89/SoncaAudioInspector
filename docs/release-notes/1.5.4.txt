@@ -1,0 +1,4 @@
+v1.5.4: C360 thêm bài IO009 "Gain trước hú" đo khả năng chống hú của FBX (so FBX tắt/bật); popup chờ thiết bị ngắn gọn và nằm cao hơn.
+IO009: app tạo vòng mic đo → MIC IN → loa → mic đo, tăng gain từng bước tới khi hú, lần FBX tắt rồi FBX bật; báo FBX thêm được bao nhiêu dB và lưu ảnh. Bài này phát tiếng hú to trong vài giây; dừng và tắt tiếng ngay khi phát hiện hú. Chưa đặt ngưỡng đạt nên chỉ báo số. Không phải chuẩn IEC/AES.
+Popup chờ thiết bị: chỉ còn model và ngõ còn thiếu, hiện cao hơn trên màn hình.
+Cấu hình C360 có IO009 chỉ chạy được trên app ≥ 1.5.4.

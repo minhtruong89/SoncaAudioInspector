@@ -1,0 +1,13 @@
+v1.5.3: C360 có bài Rè riêng IO008 (Pink + Chirp, ảnh chirp), nhắc bấm A/B khi sound card không có tín hiệu, tự lấy LINE CHUẨN khi thiếu, BLE 50% và ánh xạ âm lượng Windows chỉnh được từng bài, hỏi xóa thiết bị BT khi đo xong, mỗi bài tối đa 2 lượt; máy kênh Beta nhận bản tạm do ADMIN duyệt trên server.
+IO008 Rè: ngõ mới "Mic thực tế · Rè (Rub & Buzz)" chạy Pink + Chirp qua mic đo, không cần LINE CHUẨN đáp tuyến; ảnh QA là một hình chirp. Cấu hình C360 rev 3 (tách IO008) chỉ duyệt sau khi các trạm đã lên 1.5.3.
+Âm lượng: kết quả từng bài ghi ánh xạ BLE MASTER / MUSIC / MIC và Windows phát / thu; web /config có ô âm lượng chung và "Âm lượng riêng bài này" (ô trống = theo mức chung). App đặt BLE riêng cho bài có ghi đè rồi khôi phục khi xong.
+Tab Rè (Ctrl+Shift+I): chỉ hiện đồ thị tần số chirp; bảng Pink / Chirp và đồ thị Pink gập trong mục sổ xuống.
+A/B sound card: lúc bắt đầu, app kiểm ngầm Windows có Analog 1/2 và 3/4 cho LINE IN / MIC IN; khi đo không có tín hiệu thì hiện "bấm A/B trên sound card rồi Thử lại" và đo lại đúng bài đó.
+LINE CHUẨN: bấm Bắt đầu đo tự động mà chưa có chuẩn thì hỏi có tự lấy chuẩn từ loa đang đo rồi đo luôn không (chỉ chọn Có với loa tốt đã biết); áp dụng cả line chuẩn Rè.
+Đo xong hỏi có xóa thiết bị Bluetooth của loa vừa đo khỏi Windows không; kết nối BLE vẫn giữ. Cấu hình BluetoothAutoRemove vẫn xóa không hỏi.
+Số lượt: mặc định mỗi bài tối đa 2 lượt, lượt 1 PASS thì bỏ lượt 2.
+FBX (IO002): ghi chú rõ khi cấu hình chưa đặt kỳ vọng FBX hoặc khi bật/tắt FBX không làm đổi di tần. Cách chấm không đổi.
+Mất thiết bị khi đang đo: chờ 2 s (Bluetooth 6 s) xem Windows có nối lại không rồi mới dừng, báo rõ thiết bị nào; mỗi phiên Auto Test có nhật ký auto-test-log.txt.
+Giao diện vừa 100% màn hình: mở phủ vùng làm việc của màn hình, phóng to không che taskbar, màn hình nhỏ thì thu nhỏ đều thay vì cắt mất nút.
+Bản tạm: máy chọn kênh Beta nhận bản build do máy khác gửi lên và ADMIN duyệt trên inventory.acnos.store/temp-updates (server ký bằng khóa riêng); máy kênh Ổn định không bị mời.
+Web /config: chọn ngõ BLE cho bài đo tự điền tên ngõ chuẩn (MIC IN, LINE IN, USB A, BLUETOOTH) và cờ đúng của bài, để thêm bài/đổi model dễ hơn.

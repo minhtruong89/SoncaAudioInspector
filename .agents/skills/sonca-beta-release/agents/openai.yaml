@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sonca Beta Release"
+  short_description: "Phát hành bản beta Sonca chỉ qua beta.json, không đổi latest.json, có hạ cấp"
+  default_prompt: "Use $sonca-beta-release để phát hành bản beta Sonca mà không ép các máy khác cập nhật."

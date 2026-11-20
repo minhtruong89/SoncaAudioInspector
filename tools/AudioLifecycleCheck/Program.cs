@@ -6,12 +6,90 @@ using NAudio.CoreAudioApi;
 using NAudio.Wave;
 using SoncaAudioInspector;
 
+if (args.Contains("--update-logic")) { try { await UpdateLogicChecks.Run(args); } catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; } return; }
+
 // Endpoint settings are read-only. Explicit acoustic test modes emit test tones.
 // Run baseline and fixed assemblies in separate processes with the same arguments.
 string Option(string key, string fallback) => args.FirstOrDefault(a => a.StartsWith(key + "="))?.Split('=', 2)[1] ?? fallback;
+if (args.Any(a => a.StartsWith("--symphony-config-sync="))) { await SymphonyConfigSyncCheck.Run(Option("--symphony-config-sync", ""), Option("--model-config", "")); return; }
+if (args.Any(a => a.StartsWith("--symphony-server-draft="))) { await SymphonyServerDraft.Run(Option("--symphony-server-draft", ""), Option("--output", ""), args.Contains("--activate-config")); return; }
+if (args.Any(a => a.StartsWith("--symphony-live="))) { await SymphonyLiveChecks.Run(Option("--symphony-live", ""), Option("--routing-config", ""), args.Contains("--measure"), args.Any(a => a.StartsWith("--model-config=")) ? Option("--model-config", "") : null); return; }
+if (args.Contains("--brief-phase=P6") || args.Contains("--io001-gate-vs-io003")) { try { Io001GateVsIo003Check.Run(args); } catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; } return; }
+if (args.Contains("--brief-phase=P1")) { await BriefP1Checks.Run(Option("--output", Path.Combine(AppContext.BaseDirectory, "p1-checks"))); return; }
+if (args.Contains("--brief-phase=P2")) { await BriefP2Checks.Run(Option("--output", Path.Combine(AppContext.BaseDirectory, "p2-checks")), Option("--config", Path.Combine(AppContext.BaseDirectory, "checking_config.json")), Option("--baseline-assembly", "")); return; }
+if (args.Contains("--brief-phase=P3")) { await BriefP3Checks.Run(Option("--output", Path.Combine(AppContext.BaseDirectory, "p3-checks")), Option("--config", Path.Combine(AppContext.BaseDirectory, "checking_config.json")), Option("--baseline-assembly", "")); return; }
+if (args.Contains("--brief-phase=P4")) { await BriefP4Checks.Run(Option("--output", Path.Combine(AppContext.BaseDirectory, "p4-checks")), Option("--config", Path.Combine(AppContext.BaseDirectory, "checking_config.json")), Option("--baseline-assembly", "")); return; }
+if (args.Contains("--brief-phase=P5")) { try { await BriefP5Checks.Run(Option("--output", Path.Combine(AppContext.BaseDirectory, "p5-checks")), Option("--config", Path.Combine(AppContext.BaseDirectory, "checking_config.json")), Option("--baseline-assembly", "")); } catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; } return; }
+if (args.Any(a => a.StartsWith("--brief-phase="))) throw new ArgumentException("Chỉ hỗ trợ --brief-phase=P1, P2, P3, P4, P5 hoặc P6.");
+if(args.Contains("--acoustic3-model-logic")){Acoustic3ModelChecks.Logic();return;}
+if(args.Any(a=>a.StartsWith("--ble-restore-baseline="))){await BleModelControlChecks.Restore(Option("--ble-restore-baseline",""),Option("--output",""));return;}
+if(args.Any(a=>a.StartsWith("--acoustic3-qualify="))){Acoustic3RouteProbe.Qualify(Option("--acoustic3-qualify",""));return;}
+if(args.Any(a=>a.StartsWith("--acoustic3-model="))){Acoustic3ModelChecks.Prepare(Option("--model-config",""),Option("--acoustic3-model",""),Option("--probes",""),Option("--usb-probes",""),args.Contains("--apply"),Option("--volume-baseline",""));return;}
+if (args.Any(a => a.StartsWith("--c360-preparation-check="))) { await C360PreparationChecks.Run(Option("--c360-preparation-check", "")); return; }
+if (args.Any(a => a.StartsWith("--c360-reference-offline="))) { await C360ReferenceOfflineChecks.Run(Option("--c360-reference-offline", ""), Option("--output", "")); return; }
+if (args.Any(a => a.StartsWith("--ble-readiness-check="))) { await BleConnectionChecks.ReadinessAsync(Option("--ble-readiness-check", ""), Convert.ToUInt64(Option("--ble-address", "423E3F752ECC"), 16)); return; }
+if (args.Any(a => a.StartsWith("--qualify-recorded-bt="))) { C360RecordedReferenceChecks.Run(Option("--qualify-recorded-bt", ""), Option("--identity", ""), Option("--reference-dir", ""), Option("--output", "")); return; }
+if (args.Any(a=>a.StartsWith("--impedance-input-format="))) { ImpedanceInputChecks.Run(Option("--impedance-input-format","")); return; }
+if (args.Any(a=>a.StartsWith("--c360-volume-reference="))) { C360VolumeQualificationChecks.SaveReference(Option("--c360-volume-reference",""),Option("--c360-setup",""),Option("--model-config",""),Option("--reference-dir","")); return; }
+if (args.Any(a => a.StartsWith("--c360-volume-calibrate="))) { await C360VolumeQualificationChecks.Run(Option("--c360-volume-calibrate", ""), Option("--c360-setup", ""), Option("--model-config", ""), args.Contains("--confirm-volume")?100:null); return; }
+if (args.Any(a => a.StartsWith("--criteria-logic="))) { MeasurementCriteriaChecks.Run(Option("--criteria-logic", "")); return; }
 int cycles = int.Parse(Option("--cycles", "0"));
+if (args.Any(a => a.StartsWith("--reverb-replay="))) { ReverbReplayChecks.Run(Option("--reverb-replay", ""), Option("--output", "")); return; }
+if (args.Any(a => a.StartsWith("--c360-stage-live="))) { await C360StageChecks.Run(Option("--c360-stage-live", ""), Option("--model-config", ""), Option("--c360-setup", ""), Option("--test-id", "IO004"), args.Contains("--verify-reverb"), args.Contains("--reverb-off"), args.Any(a => a.StartsWith("--c360-reference-dir=")) ? Option("--c360-reference-dir", "") : null, !args.Contains("--compare-reference"),Option("--model-name",""), args.Contains("--trial-config")); return; }
+if (args.Any(a => a.StartsWith("--c360-usb-route="))) { await C360UsbRouteChecks.Run(Option("--c360-usb-route", ""), Option("--model-config", ""), Convert.ToUInt64(Option("--ble-address", "423E3F752ECC"), 16)); return; }
+if (args.Any(a => a.StartsWith("--c360-levels="))) { await C360LevelChecks.Run(Option("--c360-levels", ""), Option("--c360-setup", ""), Option("--model-config", "")); return; }
 int continuousSeconds = int.Parse(Option("--continuous-seconds", "0"));
 bool verifyFixes = args.Contains("--verify-fixes");
+if (args.Contains("--frequency-shift-logic")) { FrequencyShiftChecks.Logic(); return; }
+if (args.Any(a => a.StartsWith("--fbx-replay="))) { FrequencyShiftChecks.Replay(Option("--fbx-replay", ""), Option("--output", "")); return; }
+if (args.Any(a => a.StartsWith("--c360-effects-live="))) { await FrequencyShiftChecks.Live(Option("--c360-effects-live", ""), Option("--c360-setup", ""), "MicEffects", args.Contains("--dry-effects"), args.Contains("--find-effects-reference")); return; }
+if (args.Any(a => a.StartsWith("--c360-fbx-live="))) { await FrequencyShiftChecks.Live(Option("--c360-fbx-live", ""), Option("--c360-setup", "")); return; }
+if (args.Any(a => a.StartsWith("--ble-option-check="))) { await BleInputSourceChecks.Run(Option("--ble-option-check", ""), false, knownAddress: Convert.ToUInt64(Option("--ble-address", "423E3F752ECC"), 16), exerciseOptions: true); return; }
+if (args.Any(a => a.StartsWith("--qa-graph-storage="))) { QaGraphStorageChecks.Run(Option("--qa-graph-storage", "")); return; }
+if (args.Any(a => a.StartsWith("--frequency-shift-audit="))) { FrequencyShiftChecks.Audit(Option("--frequency-shift-audit", "")); return; }
+if (args.Contains("--c360-sequence-logic")) { await C360ElectronicChecks.Run(); C360AcousticChecks.Run(); return; }
+if (args.Any(a => a.StartsWith("--c360-v152-logic="))) { try { await C360V152Checks.Run(Option("--c360-v152-logic", ""), Option("--output", Path.Combine(AppContext.BaseDirectory, "c360-v152"))); } catch (Exception ex) { Console.Error.WriteLine(ex.Message); Environment.ExitCode = 1; } return; }
+if (args.Any(a => a.StartsWith("--c360-electronic-check="))) { await BleInputSourceChecks.Run(Option("--c360-electronic-check", ""), false, knownAddress: Convert.ToUInt64(Option("--ble-address", "423E3F752ECC"), 16), c360SetupPath: Option("--c360-setup", ""), probeC360Line: args.Contains("--probe-c360-line"), exerciseOptions: args.Contains("--exercise-options")); return; }
+if (args.Any(a => a.StartsWith("--select-measurement-input="))) { await BleInputSourceChecks.Run(Option("--select-measurement-input", ""), false, knownAddress: Convert.ToUInt64(Option("--ble-address", "423E3F752ECC"), 16), leaveSource: byte.Parse(Option("--source", "4"))); return; }
+if (args.Any(a => a.StartsWith("--live-route-audit="))) { await LiveRouteAudit.Run(Option("--live-route-audit", ""), Option("--routing-config", ""), Convert.ToUInt64(Option("--ble-address", "423E3F752ECC"), 16)); return; }
+if (args.Any(a => a.StartsWith("--live-noise-isolation="))) { await BleInputSourceChecks.Run(Option("--live-noise-isolation", ""), false, knownAddress: Convert.ToUInt64(Option("--ble-address", "423E3F752ECC"), 16), noiseConfigPath: Option("--routing-config", "")); return; }
+if (args.Any(a => a.StartsWith("--line-distortion-audit="))) { await BleInputSourceChecks.Run(Option("--line-distortion-audit", ""), false, knownAddress: Convert.ToUInt64(Option("--ble-address", "423E3F752ECC"), 16), distortionConfigPath: Option("--routing-config", "")); return; }
+if (args.Any(a => a.StartsWith("--ble-jack-status="))) { await BleJackStatusChecks.Run(Option("--ble-jack-status", ""), Convert.ToUInt64(Option("--ble-address", "423E3F752ECC"), 16), int.Parse(Option("--watch-seconds", "90"))); return; }
+if (args.Any(a => a.StartsWith("--windows-bt-state="))) { await BleAutoInputPathChecks.WindowsState(Option("--windows-bt-state", "")); return; }
+if (args.Any(a => a.StartsWith("--ble-auto-paths="))) { await BleAutoInputPathChecks.Run(Option("--ble-auto-paths", ""), args.Contains("--connect-auto-peer")); return; }
+if (args.Any(a => a.StartsWith("--ble-source-availability="))) { await BleInputSourceChecks.Run(Option("--ble-source-availability", ""), false, knownAddress: args.Any(a => a.StartsWith("--ble-address=")) ? Convert.ToUInt64(Option("--ble-address", ""), 16) : null, probeAvailability: true); return; }
+if (args.Any(a => a.StartsWith("--ble-source-hold="))) { await BleInputSourceChecks.Run(Option("--ble-source-hold", ""), false, holdSeconds: int.Parse(Option("--hold-seconds", "20")), holdSource: byte.Parse(Option("--source", "4")), knownAddress: args.Any(a => a.StartsWith("--ble-address=")) ? Convert.ToUInt64(Option("--ble-address", ""), 16) : null, deferSourceRead: args.Contains("--defer-source-read")); return; }
+if (args.Any(a => a.StartsWith("--idle-input-check="))) { await IdleInputChecks.Run(Option("--idle-input-check", ""), Option("--routing-config", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoncaAudioInspector", "routing_value.json"))); return; }
+if (args.Any(a => a.StartsWith("--ble-port-probe="))) { await BleInputSourceChecks.Run(Option("--ble-port-probe", ""), false, Option("--routing-config", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SoncaAudioInspector", "routing_value.json"))); return; }
+if (args.Any(a => a.StartsWith("--ble-input-source-check="))) { await BleInputSourceChecks.Run(Option("--ble-input-source-check", ""), args.Contains("--exercise-source")); return; }
+if (args.Any(a => a.StartsWith("--live-effects-check="))) { await LiveDistortionCheck.RunEffects(Option("--live-effects-check", ""), Option("--routing-config", "")); return; }
+if (args.Any(a => a.StartsWith("--reanalyze-effects="))) { LiveDistortionCheck.ReanalyzeEffects(Option("--reanalyze-effects", "")); return; }
+if (args.Any(a => a.StartsWith("--live-distortion-check="))) { await LiveDistortionCheck.Run(Option("--live-distortion-check", ""), Option("--routing-config", "")); return; }
+if (args.Any(a => a.StartsWith("--reanalyze-distortion="))) { LiveDistortionCheck.Reanalyze(Option("--reanalyze-distortion", "")); return; }
+if (args.Contains("--sweep-cancellation")) { await SweepCancellationChecks.Run(verifyFixes); return; }
+if (args.Contains("--sample-rate-snapshot")) { await SampleRateSnapshot.RunAsync(); return; }
+if (args.Any(a => a.StartsWith("--acoustic3-probe-reanalyze="))) { Acoustic3RouteProbe.Reanalyze(Option("--acoustic3-probe-reanalyze", "")); return; }
+if (args.Any(a => a.StartsWith("--acoustic3-route-probe="))) { await Acoustic3RouteProbe.Run(Option("--acoustic3-route-probe", ""), Convert.ToUInt64(Option("--ble-address", ""), 16),Option("--baseline",""),args.Contains("--usb-only")); return; }
+if (args.Any(a => a.StartsWith("--ble-model-controls="))) { await BleModelControlChecks.Run(Option("--ble-model-controls", ""), Convert.ToUInt64(Option("--ble-address", ""), 16), args.Contains("--exercise-controls"), args.Contains("--exercise-extra-controls"),args.Any(a=>a.StartsWith("--control-register="))?Convert.ToUInt16(Option("--control-register",""),16):null); return; }
+if (args.Contains("--ble-snapshot")) { await BleConnectionChecks.SnapshotAsync(); return; }
+if (args.Contains("--refresh-model-catalogue")) { await SoncaFirmwareModels.RefreshAsync(); BleModelNameChecks.Run(); return; }
+if (args.Contains("--bluetooth-playback-logic")) { await BluetoothPlaybackChecks.Run(); return; }
+if (args.Contains("--bluetooth-removal-logic")) { await BluetoothRemovalChecks.Run(); return; }
+if (args.Any(a=>a.StartsWith("--bt-live-unpair="))) { await WindowsBluetoothLiveChecks.Unpair(Option("--bt-live-unpair",""),Convert.ToUInt64(Option("--ble-address",""),16)); return; }
+if (args.Any(a=>a.StartsWith("--bt-discovery="))) { await WindowsBluetoothLiveChecks.Discover(Option("--bt-discovery",""),Convert.ToUInt64(Option("--ble-address",""),16)); return; }
+if (args.Any(a=>a.StartsWith("--bt-live-pair="))) { await WindowsBluetoothLiveChecks.Pair(Option("--bt-live-pair",""),Convert.ToUInt64(Option("--ble-address",""),16)); return; }
+if (args.Any(a=>a.StartsWith("--bluetooth-endpoints="))) { BluetoothPlaybackChecks.Snapshot(Option("--bluetooth-endpoints","")); return; }
+if (args.Contains("--ble-model-names")) { BleModelNameChecks.Run(); return; }
+if (args.Contains("--ble-logic")) { BleConnectionChecks.Logic(); return; }
+if (args.Contains("--ble-connect-check")) { await BleConnectionChecks.ConnectControlAsync(); return; }
+if (args.Contains("--ble-volume-observe")) { await BleVolumeObservation.RunAsync(int.Parse(Option("--watch-seconds", "45")), args.Contains("--passive")); return; }
+if (args.Contains("--windows-volume-snapshot")) { BleVolumeObservation.WindowsSnapshot(); return; }
+if (args.Contains("--ble-control-check")) { await BleConnectionChecks.ConnectControlAsync(exerciseControls: true); return; }
+if (args.Contains("--manual-line-check")) { await ManualInputCheck.Line(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory))); return; }
+if (args.Contains("--manual-input-check")) { await ManualInputCheck.Run(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory))); return; }
+if (args.Contains("--sync-standard-rates")) { ImpulseLoopbackCheck.SyncStandardRates(); return; }
+if (args.Any(a => a.StartsWith("--restore-capture-rate="))) { ImpulseLoopbackCheck.RestoreCaptureRate(int.Parse(Option("--restore-capture-rate", "48000"))); return; }
+if (args.Contains("--impulse-loopback")) { await ImpulseLoopbackCheck.RunAsync(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory)), int.Parse(Option("--playback-rate", "48000")), args.Contains("--align-capture-rate")); return; }
 if (args.Contains("--model-startup-check")) { ModelStartupChecks.Run(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory)), Path.GetFullPath(Option("--dependency-directory", AppContext.BaseDirectory))); return; }
 if (args.Contains("--audio-session-check")) { ModelStartupChecks.AudioSessions(); return; }
 if (args.Contains("--fasttrack-logic")) { FastTrackReconnectChecks.Logic(); return; }
@@ -20,6 +98,9 @@ if (args.Contains("--fasttrack-apply")) { FastTrackReconnectChecks.Hardware(appl
 if (args.Contains("--fasttrack-ui")) { FastTrackReconnectChecks.Ui(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory)), Path.GetFullPath(Option("--dependency-directory", AppContext.BaseDirectory))); return; }
 if (args.Contains("--long-run-check")) { await LongRunChecks.RunAsync(Path.GetFullPath(Option("--test-directory", AppContext.BaseDirectory))); return; }
 if (args.Contains("--sweep-benchmark")) { SweepPerformanceChecks.Run(); return; }
+if (args.Contains("--sweep-equivalence")) { SweepPerformanceChecks.Run(repeats: 1); return; }
+if (args.Any(a => a.StartsWith("--native-sweep-comparison="))) { SweepNumericalComparison.Run(Option("--native-sweep-comparison", "")); return; }
+if (args.Contains("--production-sweep-benchmark")) { SweepPerformanceChecks.RunProduction(int.Parse(Option("--sweep-length", "524288")), int.Parse(Option("--runs", "3")), args.Contains("--silent-capture")); return; }
 if (args.Contains("--clock-equivalence")) { SweepPerformanceChecks.CheckClockCorrection(); return; }
 if (args.Contains("--startup-check")) { await StartupWorkflowChecks.RunAsync(); return; }
 if (args.Contains("--login-owner-guard"))
@@ -57,16 +138,16 @@ if (args.Contains("--integrity-check"))
     double gain = Math.Pow(10, -10.508596 / 20.0);
     float[] ReadChannel(string path)
     {
-        using var reader = new WaveFileReader(path);
+        using var reader = new WaveFileReader(Path.Combine(AppContext.BaseDirectory, "Fixtures", "CaptureIntegrity", path));
         var result = new List<float>(); float[]? frame;
         while ((frame = reader.ReadNextSampleFrame()) != null) result.Add(frame[1]);
         return result.ToArray();
     }
-    Require(CaptureDataIntegrity.HasRepeatedPcm16Bytes(ReadChannel(".artifacts/audio-lifecycle/input-output-comparison/01-playing.wav"), gain), "Missed real byte-corrupted capture.");
-    Require(CaptureDataIntegrity.HasRepeatedPcm16Bytes(ReadChannel(".artifacts/audio-lifecycle/independent-mid/01-playing.wav"), gain), "Missed quieter corrupted capture.");
-    Require(CaptureDataIntegrity.HasRepeatedPcm16Bytes(ReadChannel(".artifacts/audio-lifecycle/replug-byte-test/01-playing.wav").Concat(ReadChannel(".artifacts/audio-lifecycle/input-output-comparison/01-playing.wav")).ToArray(), gain), "Missed corruption beginning during capture.");
-    Require(!CaptureDataIntegrity.HasRepeatedPcm16Bytes(ReadChannel(".artifacts/audio-lifecycle/replug-byte-test/01-playing.wav"), gain), "Rejected real healthy capture.");
-    Require(!CaptureDataIntegrity.HasRepeatedPcm16Bytes(ReadChannel(".artifacts/audio-lifecycle/independent-low/01-playing.wav"), gain), "Misclassified near-silence as byte corruption.");
+    Require(CaptureDataIntegrity.HasRepeatedPcm16Bytes(ReadChannel("corrupt.wav"), gain), "Missed real byte-corrupted capture.");
+    Require(CaptureDataIntegrity.HasRepeatedPcm16Bytes(ReadChannel("quiet-corrupt.wav"), gain), "Missed quieter corrupted capture.");
+    Require(CaptureDataIntegrity.HasRepeatedPcm16Bytes(ReadChannel("healthy.wav").Concat(ReadChannel("corrupt.wav")).ToArray(), gain), "Missed corruption beginning during capture.");
+    Require(!CaptureDataIntegrity.HasRepeatedPcm16Bytes(ReadChannel("healthy.wav"), gain), "Rejected real healthy capture.");
+    Require(!CaptureDataIntegrity.HasRepeatedPcm16Bytes(ReadChannel("near-silence.wav"), gain), "Misclassified near-silence as byte corruption.");
     Require(!CaptureDataIntegrity.HasRepeatedPcm16Bytes(new float[44100], gain), "Misclassified silence.");
     Write(new { stage = "real-wav-byte-integrity-check-pass" });
     return;
@@ -645,7 +726,7 @@ static void ScopeWaveformChecks()
     var distortedTrace = ScopeWaveform.Create(distorted, 48000, 5, true);
     Require(distortedTrace.Samples.Count(s => s == .4f) > 40, "Scope hid clipped peaks.");
     Require(!ScopeWaveform.Create(new float[4096], 48000, 5, true).Triggered, "Silence faked a sine trigger.");
-    string wav = ".artifacts/auto-retry-cleanup/bluetooth-captures/sine-1.wav";
+    string wav = Path.Combine(AppContext.BaseDirectory, "Fixtures", "CaptureIntegrity", "bluetooth-sine.wav");
     if (File.Exists(wav))
     {
         using var reader = new AudioFileReader(wav);

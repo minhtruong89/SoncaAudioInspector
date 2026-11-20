@@ -12,14 +12,203 @@ internal static class Program
     static void Main(string[] args)
     {
         string directory = Path.GetFullPath(args[0]);
+        if (args.Contains("--brief-phase=P6"))
+        {
+            // P6 adds no app UI. Decode the ALC artifact before any App startup.
+            try
+            {
+                string output = Path.GetFullPath(args.FirstOrDefault(a => a.StartsWith("--output="))?.Split('=', 2)[1] ?? Path.Combine(directory, "p6-ui-checks"));
+                string source = Path.GetFullPath(args.FirstOrDefault(a => a.StartsWith("--p6-output="))?.Split('=', 2)[1] ?? Path.Combine(directory, "..", "..", "checks", "alc-P6"));
+                string png = Path.Combine(source, "io001-gate-vs-io003-comparison.png");
+                using var stream = new FileStream(png, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                var decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                var frame = decoder.Frames.Single();
+                if (frame.PixelWidth < 900 || frame.PixelHeight < 500 || stream.Length == 0) throw new InvalidDataException("P6 PNG dimensions/size invalid.");
+                var pixels = new byte[frame.PixelHeight * frame.PixelWidth * 4]; frame.CopyPixels(pixels, frame.PixelWidth * 4, 0);
+                if (pixels.Distinct().Count() < 16) throw new InvalidDataException("P6 PNG is blank.");
+                foreach (string name in new[] { "io001-gate-vs-io003-summary.csv", "io001-gate-vs-io003-curves.csv", "qualification-template.vi.md", "checks.txt" })
+                    if (!File.Exists(Path.Combine(source, name)) || new FileInfo(Path.Combine(source, name)).Length == 0) throw new InvalidDataException("P6 output missing: " + name);
+                string artifactRoot = source;
+                while (!File.Exists(Path.Combine(artifactRoot, "artifact.json")) && Path.GetDirectoryName(artifactRoot) is string parent) artifactRoot = parent;
+                if (!File.Exists(Path.Combine(artifactRoot, "artifact.json")) || !output.StartsWith(artifactRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("P6 UI output must be within the same artifact.");
+                Directory.CreateDirectory(output);
+                File.WriteAllText(Path.Combine(output, "P6-ui-check.txt"), $"PASS P6: decoded nonblank {frame.PixelWidth}x{frame.PixelHeight} PNG and required ALC outputs. No App/UI behavior changed.\r\n");
+                Console.WriteLine($"PASS P6 UI artifact check: {frame.PixelWidth}x{frame.PixelHeight}; no App instance created.");
+            }
+            catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; }
+            return;
+        }
+        if (args.Contains("--brief-phase=U1") || args.Contains("--brief-phase=P1") || args.Contains("--brief-phase=P2") || args.Contains("--brief-phase=P3") || args.Contains("--brief-phase=P4") || args.Contains("--brief-phase=P5"))
+            System.Runtime.InteropServices.NativeLibrary.Load(Path.Combine(directory, "runtimes", "win-x64", "native", "libSkiaSharp.dll"));
         AssemblyLoadContext.Default.Resolving += (_, name) =>
         {
             string candidate = Path.Combine(directory, name.Name + ".dll");
             return File.Exists(candidate) ? AssemblyLoadContext.Default.LoadFromAssemblyPath(candidate) : null;
         };
         var assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(Path.Combine(directory, "SoncaAudioInspector.dll"));
+        if (args.Contains("--update-version"))
+        {
+            // Validate the real header binding and render its actual AppVersion value without constructing MainWindow.
+            string xamlPath = args.Single(a => a.StartsWith("--version-xaml=")).Split('=', 2)[1];
+            string output = args.Single(a => a.StartsWith("--output=")).Split('=', 2)[1];
+            var document = System.Xml.Linq.XDocument.Load(xamlPath);
+            var label = document.Descendants().Single(e => (string?)e.Attribute("Name") == "TxtAppVersion");
+            if ((string?)label.Attribute("Text") != "{x:Static local:AppVersion.Display}") throw new Exception("Header is not bound to AppVersion.Display.");
+            string value = (string)assembly.GetType("SoncaAudioInspector.AppVersion")!.GetProperty("Display")!.GetValue(null)!;
+            // Expected text comes from the assembly version itself; a pinned "v1.1" broke at every later release.
+            var built = assembly.GetName().Version!;
+            string expected = "v" + (built.Revision > 0 ? built.ToString(4) : built.Build > 0 ? built.ToString(3) : built.ToString(2));
+            if (value != expected || (string?)label.Attribute("Visibility") is "Collapsed" or "Hidden") throw new Exception($"Version label missing or incorrect: '{value}', expected '{expected}'.");
+            var version = new TextBlock { Text = value, Foreground = Brushes.MediumSpringGreen, FontSize = 16 };
+            version.Measure(new Size(180, 32)); version.Arrange(new Rect(0, 0, 180, 32)); version.UpdateLayout();
+            var bitmap = new RenderTargetBitmap(180, 32, 96, 96, PixelFormats.Pbgra32); bitmap.Render(version);
+            Directory.CreateDirectory(output);
+            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            using (var stream = File.Create(Path.Combine(output, "version-header.png"))) encoder.Save(stream);
+            Console.WriteLine($"PASS header XAML binding + isolated rendered {value} label; no MainWindow constructor/Loaded or dialog.");
+            return;
+        }
         var app = (Application)Activator.CreateInstance(assembly.GetType("SoncaAudioInspector.App")!)!;
         app.GetType().GetMethod("InitializeComponent")!.Invoke(app, null);
+        var startupUri = app.StartupUri;
+        // A UI check may pump rendering but must not launch the app's splash/login
+        // workflow or turn a dispatcher error into a modal warning that hides failure.
+        typeof(Application).GetField("_startupUri", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(app, null);
+        app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        if (args.Contains("--brief-phase=U1"))
+        {
+            string output = args.Single(a => a.StartsWith("--output=")).Split('=', 2)[1];
+            try { VersionInfoUiChecks.Run(assembly, Path.GetFullPath(output)); }
+            catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; }
+            app.Shutdown(); return;
+        }
+        if (args.Contains("--brief-phase=P1"))
+        {
+            string output = args.FirstOrDefault(a => a.StartsWith("--output="))?.Split('=', 2)[1]
+                ?? (args.Length > 2 ? args[2] : Path.Combine(directory, "p1-ui-checks"));
+            BriefP1UiChecks.Run(assembly, Path.GetFullPath(output)); app.Shutdown(); return;
+        }
+        if (args.Contains("--brief-phase=P2"))
+        {
+            string output = args.FirstOrDefault(a => a.StartsWith("--output="))?.Split('=', 2)[1] ?? Path.Combine(directory, "p2-ui-checks");
+            BriefP2UiChecks.Run(assembly, Path.GetFullPath(output)); app.Shutdown(); return;
+        }
+        if (args.Contains("--brief-phase=P3"))
+        {
+            string output = args.FirstOrDefault(a => a.StartsWith("--output="))?.Split('=', 2)[1] ?? Path.Combine(directory, "p3-ui-checks");
+            string? screenshotDir = args.FirstOrDefault(a => a.StartsWith("--screenshot-dir="))?.Split('=', 2)[1];
+            BriefP3UiChecks.Run(assembly, Path.GetFullPath(output), screenshotDir != null ? Path.GetFullPath(screenshotDir) : null);
+            app.Shutdown(); return;
+        }
+        if (args.Contains("--brief-phase=P4"))
+        {
+            string output = args.FirstOrDefault(a => a.StartsWith("--output="))?.Split('=', 2)[1] ?? Path.Combine(directory, "p4-ui-checks");
+            string? screenshotDir = args.FirstOrDefault(a => a.StartsWith("--screenshot-dir="))?.Split('=', 2)[1];
+            BriefP4UiChecks.Run(assembly, Path.GetFullPath(output), screenshotDir != null ? Path.GetFullPath(screenshotDir) : null);
+            app.Shutdown(); return;
+        }
+        if (args.Contains("--brief-phase=P5"))
+        {
+            string output = args.FirstOrDefault(a => a.StartsWith("--output="))?.Split('=', 2)[1] ?? Path.Combine(directory, "p5-ui-checks");
+            string? screenshotDir = args.FirstOrDefault(a => a.StartsWith("--screenshot-dir="))?.Split('=', 2)[1];
+            try { BriefP5UiChecks.Run(assembly, Path.GetFullPath(output), screenshotDir != null ? Path.GetFullPath(screenshotDir) : null); }
+            catch (Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode = 1; }
+            app.Shutdown(); return;
+        }
+        if (args.Any(a => a.StartsWith("--brief-phase="))) throw new ArgumentException("Chỉ hỗ trợ --brief-phase=P1, P2, P3, P4, P5 hoặc P6.");
+        if (args.Length > 1 && args[1] == "--source-layout-ui")
+        { SourceLayoutUiChecks.Run(assembly, startupUri, Path.GetFullPath(args[2])); app.Shutdown(); return; }
+        if(args.Length>1 && args[1]=="--ble-bluetooth-audio-live")
+        {BleBluetoothAudioLiveChecks.Run(assembly,Path.GetFullPath(args[2]),Convert.ToUInt64(args[3],16));app.Shutdown();return;}
+        if(args.Length>1 && args[1]=="--ble-bluetooth-audio-ui")
+        {BleBluetoothAudioUiChecks.Run(assembly,Path.GetFullPath(args[2]));app.Shutdown();return;}
+        if(args.Length>1 && args[1]=="--ble-model-names-ui")
+        {BleModelNamesUiChecks.Run(assembly,Path.GetFullPath(args[2]));app.Shutdown();return;}
+        if(args.Length>1 && args[1]=="--response-db-labels")
+        {ResponseDbLabelsChecks.Run(assembly,Path.GetFullPath(args[2]));app.Shutdown();return;}
+        if (args.Length > 1 && args[1] == "--impedance-ui")
+        { ImpedanceUiChecks.Run(assembly, Path.GetFullPath(args[2])); app.Shutdown(); return; }
+        if (args.Length > 1 && args[1] == "--c360-model-ui")
+        {
+            try { C360ModelUiChecks.Run(assembly, Path.GetFullPath(args[2]), Path.GetFullPath(args[3]), args.Contains("--live"), args.Contains("--reference"), args.FirstOrDefault(a => a.StartsWith("--model-config="))?.Split('=',2)[1], args.FirstOrDefault(a => a.StartsWith("--test-id="))?.Split('=',2)[1], args.Contains("--run-button"), args.FirstOrDefault(a=>a.StartsWith("--ble-address="))?.Split('=',2)[1], args.FirstOrDefault(a=>a.StartsWith("--reference-dir="))?.Split('=',2)[1],args.Contains("--allow-nonstandard-rate")); }
+            finally
+            {
+                var manager = assembly.GetType("SoncaAudioInspector.SoncaBleManager")!.GetProperty("Instance")!.GetValue(null)!;
+                manager.GetType().GetMethod("Disconnect")!.Invoke(manager, null);
+                app.Shutdown();
+            }
+            return;
+        }
+        if (args.Length > 1 && args[1] == "--ble-options-ui")
+        {
+            BleOptionsUiChecks.Run(assembly); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--measurement-cancellation-ui")
+        {
+            MeasurementCancellationUiChecks.Run(assembly, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--signal-diagnostics-ui")
+        {
+            SignalDiagnosticUiChecks.Run(assembly, Path.GetFullPath(args[2]), Path.GetFullPath(args[3])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--mechanical-ui")
+        {
+            MechanicalUiChecks.Run(assembly, Path.GetFullPath(args[2]), Path.GetFullPath(args[3])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--measurement-diagnosis-ui")
+        {
+            MeasurementDiagnosisUiChecks.Run(assembly, Path.GetFullPath(args[2]), Path.GetFullPath(args[3])); app.Shutdown(); return;
+        }
+        app.Dispatcher.UnhandledExceptionFilter += (_, e) =>
+        {
+            Console.Error.WriteLine(e.Exception);
+            e.RequestCatch = false;
+        };
+        if (args.Length > 1 && args[1] == "--sample-rate-refresh-ui")
+        {
+            SampleRateRefreshUiChecks.Run(assembly, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--dense-render-check")
+        {
+            ImpulsePerformanceUiChecks.CheckDenseRendering(assembly, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && (args[1] == "--impulse-view-only" || args[1] == "--impulse-performance-only"))
+        {
+            var options = new System.Text.Json.JsonSerializerOptions { NumberHandling = System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals };
+            object result = System.Text.Json.JsonSerializer.Deserialize(File.ReadAllText(args[3]), assembly.GetType("SoncaAudioInspector.StandardAcousticResult")!, options)!;
+            if (args[1] == "--impulse-performance-only") ImpulsePerformanceUiChecks.Run(assembly, result, Path.GetFullPath(args[2]));
+            else ImpulseGraphUiChecks.Check(assembly, result, Path.GetFullPath(args[2]));
+            app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--ble-startup-performance")
+        {
+            BleMixerUiChecks.Performance(assembly, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--ble-mixer-ui")
+        {
+            BleMixerUiChecks.Run(assembly, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--ble-mixer-live-ui")
+        {
+            BleMixerUiChecks.Live(assembly, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--manual-line-ui")
+        {
+            ManualLineUiChecks.Run(assembly, directory, Path.GetFullPath(args[2])); app.Shutdown(); return;
+        }
+        if (args.Length > 1 && args[1] == "--octave-effects-ui")
+        {
+            OctaveEffectsUiChecks.Run(assembly, Path.GetFullPath(args[2]), Path.GetFullPath(args[3]));
+            app.Shutdown();
+            return;
+        }
+        if (args.Length > 1 && args[1] == "--rew-ui-only")
+        {
+            RewUiChecks.Run(assembly, Path.GetFullPath(args[2]));
+            app.Shutdown();
+            return;
+        }
         if (args.Length > 1 && args[1] == "--model-toggle-only")
         {
             const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -33,8 +222,6 @@ internal static class Program
             if (models.SelectedItem != null)
                 throw new Exception("Clicking the selected model cannot clear the selection.");
             var toggleRouting = (UserControl)((ContentControl)window.FindName("MainContentArea")).Content;
-            if (toggleRouting == null || toggleRouting.GetType().FullName != "SoncaAudioInspector.AudioRouting")
-                toggleRouting = (UserControl)mainType.GetField("_audioRoutingView", privateInstance)!.GetValue(window)!;
             if (((Button)toggleRouting.FindName("BtnStartAutoTest")).IsEnabled)
                 throw new Exception("Auto Test remains enabled after clearing Model.");
             if (mainType.GetField("_selectedModelDeviceConfig", privateInstance)!.GetValue(window) != null)
@@ -55,8 +242,6 @@ internal static class Program
             var window = (Window)Activator.CreateInstance(mainType)!;
             app.MainWindow = window;
             var resumeRouting = (UserControl)((ContentControl)window.FindName("MainContentArea")).Content;
-            if (resumeRouting == null || resumeRouting.GetType().FullName != "SoncaAudioInspector.AudioRouting")
-                resumeRouting = (UserControl)mainType.GetField("_audioRoutingView", privateInstance)!.GetValue(window)!;
             var resumeRoutingType = resumeRouting.GetType();
             ((TextBox)window.FindName("TxtSerialNumber")).Text = "RESUME_CHECK";
             ((TextBox)resumeRouting.FindName("TxtFreqTolerance")).Text = "3.0";
@@ -127,15 +312,13 @@ internal static class Program
                 throw new Exception("A removed module was initialized by the Audio Routing build.");
             var content = ((ContentControl)window.FindName("MainContentArea")).Content as FrameworkElement;
             if (content?.GetType().FullName != "SoncaAudioInspector.AudioRouting")
-                content = audioOnlyWindowType.GetField("_audioRoutingView", instanceFields)?.GetValue(window) as FrameworkElement;
-            if (content?.GetType().FullName != "SoncaAudioInspector.AudioRouting")
                 throw new Exception("Main content is not Audio Routing.");
             if (content.FindName("BtnStartAutoTest") is not Button)
                 throw new Exception("Auto Test was removed from Audio Routing.");
             Console.WriteLine("PASS only Audio Routing is initialized and Auto Test remains available.");
             Environment.Exit(0);
         }
-        if (args.Length > 1 && args[1] == "--single-model-only")
+        if (args.Length > 1 && args[1] == "--model-config-only")
         {
             var singleModelWindowType = assembly.GetType("SoncaAudioInspector.MainWindow")!;
             using var config = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "checking_config.json")));
@@ -144,10 +327,10 @@ internal static class Program
                 throw new Exception("Packaged configuration does not contain exactly one MI SAM model.");
             var isSupported = singleModelWindowType.GetMethod("IsSupportedModel", BindingFlags.Static | BindingFlags.NonPublic)!;
             if (!(bool)isSupported.Invoke(null, new object?[] { "MI SAM" })!
-                || (bool)isSupported.Invoke(null, new object?[] { "D'AURIS 500" })!
-                || (bool)isSupported.Invoke(null, new object?[] { "CARRY ON" })!)
-                throw new Exception("Unsupported server/product models can still enter the model selector.");
-            Console.WriteLine("PASS packaged configuration contains only MI SAM and the model filter rejects unsupported models.");
+                || !(bool)isSupported.Invoke(null, new object?[] { "D'AURIS 500" })!
+                || !(bool)isSupported.Invoke(null, new object?[] { "CARRY ON" })!)
+                throw new Exception("Configured models cannot enter the model selector.");
+            Console.WriteLine("PASS packaged default MI SAM is preserved and additional configured models are supported.");
             app.Shutdown();
             return;
         }
@@ -178,7 +361,7 @@ internal static class Program
         }
         if (args.Length > 1 && args[1] == "--normalization-only")
         {
-            string isolatedDataDirectory = Path.Combine(Path.GetTempPath(), "sonca-reference-check-" + Guid.NewGuid().ToString("N"));
+            string isolatedDataDirectory = Path.Combine(directory, "test-data", "sonca-reference-check-" + Guid.NewGuid().ToString("N"));
             Environment.SetEnvironmentVariable("SONCA_AUDIO_INSPECTOR_DATA_DIR", isolatedDataDirectory);
             const BindingFlags privateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
             var normalizationRunnerType = assembly.GetType("SoncaAudioInspector.TestRunner")!;
@@ -202,6 +385,8 @@ internal static class Program
                 return routing;
             }
             var first = CreateRouting(normalizationEngine, normalizationRunner);
+            if (first.FindName("ChkNormalizeOneKilohertz") != null) throw new Exception("Normalization option was not removed.");
+            normalizationRunnerType.GetProperty("NormalizeFrequencyResponseToOneKilohertz")!.SetValue(normalizationRunner, false);
             var parseNumber = normalizationRoutingType.GetMethod("ParseDoubleSafe", privateInstance)!;
             if ((double)parseNumber.Invoke(first, new object[] { "3,0", 0.0 })! != 3.0
                 || (double)parseNumber.Invoke(first, new object[] { "0,50", 0.0 })! != 0.5)
@@ -230,7 +415,8 @@ internal static class Program
             {
                 normalizationRoutingType.GetMethod("SaveConfig", privateInstance)!.Invoke(first, null);
                 var oldConfig = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(configPath))!;
-                oldConfig["LogSweepDurationSeconds"] = 262144.0 / 44100.0;
+                oldConfig["LogSweepDurationSeconds"] = 65536.0 / 44100.0;
+                oldConfig["NormalizeFrequencyResponseToOneKilohertz"] = true;
                 File.WriteAllText(configPath, oldConfig.ToJsonString());
                 var reloadedEngine = Activator.CreateInstance(assembly.GetType("SoncaAudioInspector.AudioEngine")!)!;
                 var reloadedRunner = Activator.CreateInstance(normalizationRunnerType, reloadedEngine)!;
@@ -239,9 +425,9 @@ internal static class Program
                 if (Math.Abs((double)normalizationRoutingType.GetProperty("PlaybackLevelDbfs")!.GetValue(configReload)!) > 0.001
                     || ((CheckBox)configReload.FindName("ChkSendToServer")).IsChecked != true)
                     throw new Exception("Saved 0 dBFS or server upload default was not restored.");
-                if (((CheckBox)configReload.FindName("ChkNormalizeOneKilohertz")).IsChecked != true
-                    || !(bool)normalizationRunnerType.GetProperty("NormalizeFrequencyResponseToOneKilohertz")!.GetValue(reloadedRunner)!)
-                    throw new Exception("Restarted view did not restore the 1 kHz normalization setting");
+                if (configReload.FindName("ChkNormalizeOneKilohertz") != null
+                    || (bool)normalizationRunnerType.GetProperty("NormalizeFrequencyResponseToOneKilohertz")!.GetValue(reloadedRunner)!)
+                    throw new Exception("Legacy 1 kHz normalization was not disabled");
                 path = (string)normalizationRoutingType.GetMethod("GetStandardDeviceFileName", privateInstance)!.Invoke(configReload, null)!;
                 normalizationRoutingType.GetMethod("SaveReferenceCurve", privateInstance)!.Invoke(configReload,
                     new object?[] { path, new[] { 500.0, 1000.0, 2000.0 }, new[] { -6.0, 0.0, 6.0 }, 3.0, -20.0 });
@@ -401,7 +587,7 @@ internal static class Program
                 if (previousConfig == null) { if (File.Exists(configPath)) File.Delete(configPath); }
                 else File.WriteAllBytes(configPath, previousConfig);
             }
-            Console.WriteLine("PASS decimal-comma repair, old 256K reset, JSON export, restart 64K reload, 300 dB reference repair, strict sweep-length matching, Bluetooth reference reuse, and Auto Test reference gate");
+            Console.WriteLine("PASS decimal-comma repair, JSON export, restart normalization reload, 300 dB reference repair, strict sweep-length matching, Bluetooth reference reuse, and Auto Test reference gate");
             app.Shutdown();
             return;
         }
@@ -419,9 +605,9 @@ internal static class Program
             if ((sweepLengthCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() != "65536")
                 throw new Exception("64K is no longer the default sweep length.");
             var frequencyGrid = (double[])sweepRunner.GetType().GetMethod("GenerateLogSweepEvaluationFrequencies", BindingFlags.Static | BindingFlags.NonPublic)!
-                .Invoke(null, new object[] { 20.0, 20000.0, 48 })!;
-            if (frequencyGrid.Length != 481 || frequencyGrid[0] != 20.0 || frequencyGrid[^1] != 20000.0)
-                throw new Exception("LogSweep response no longer uses the 481 point, 1/48 octave grid.");
+                .Invoke(null, new object[] { 50.0, 18000.0, 24 })!;
+            if (frequencyGrid.Length != 206 || frequencyGrid[0] != 50.0 || frequencyGrid[^1] != 18000.0)
+                throw new Exception("LogSweep comparison no longer uses the 206 point, 1/24 octave grid from 50–18k.");
             foreach (int length in new[] { 65536, 131072 })
             {
                 double duration = length / 44100.0;
@@ -565,16 +751,31 @@ internal static class Program
             app.Shutdown();
             return;
         }
-        if (args.Length > 1 && args[1] == "--advanced-upgrade-only")
+        if (args.Length > 1 && (args[1] == "--advanced-upgrade-only" || args[1] == "--ir-window-settings-only"))
         {
             var measurementEngine = Activator.CreateInstance(assembly.GetType("SoncaAudioInspector.AudioEngine")!)!;
             var measurementView = (UserControl)Activator.CreateInstance(
                 assembly.GetType("SoncaAudioInspector.StandardMeasurementWindow")!, measurementEngine)!;
-            foreach (string required in new[] { "TxtIrLeftMs", "TxtIrRightMs", "HarmonicsTab", "PlotHarmonics", "TransientTab", "PlotTransient" })
+            foreach (string required in args[1] == "--advanced-upgrade-only"
+                ? new[] { "TxtIrLeftMs", "TxtIrRightMs", "HarmonicsTab", "PlotHarmonics", "TransientTab", "PlotTransient" }
+                : new[] { "TxtIrLeftMs", "TxtIrRightMs", "ChkFdw", "TxtFdwCycles" })
                 if (measurementView.FindName(required) == null) throw new Exception($"Missing upgraded advanced control: {required}");
             if (measurementView.FindName("BtnExport") != null || measurementView.FindName("BtnGolden") != null)
                 throw new Exception("Advanced report/golden controls remain");
-            Console.WriteLine("PASS advanced UI has gate controls, ESS harmonics and transient plots without report/golden controls.");
+            var left = (TextBox)measurementView.FindName("TxtIrLeftMs");
+            var right = (TextBox)measurementView.FindName("TxtIrRightMs");
+            var fdw = (CheckBox)measurementView.FindName("ChkFdw");
+            var cycles = (TextBox)measurementView.FindName("TxtFdwCycles");
+            if (left.Text != "125" || right.Text != "500" || fdw.IsChecked != false || cycles.IsEnabled)
+                throw new Exception("Advanced sweep defaults differ from Tukey 125/500 ms, FDW off.");
+            fdw.IsChecked = true;
+            cycles.GetBindingExpression(UIElement.IsEnabledProperty)!.UpdateTarget();
+            if (!cycles.IsEnabled) throw new Exception("Explicit FDW control did not enable its cycle count.");
+            measurementView.GetType().GetMethod("ReleaseDeviceItems")!.Invoke(measurementView, null);
+            ((IDisposable)measurementEngine).Dispose();
+            if (args[1] == "--advanced-upgrade-only")
+                Console.WriteLine("PASS advanced UI has gate controls, ESS harmonics and transient plots without report/golden controls.");
+            Console.WriteLine("PASS advanced sweep uses 125/500 ms by default, with FDW off and an explicit opt-in cycle control.");
             app.Shutdown();
             return;
         }
@@ -607,8 +808,8 @@ internal static class Program
         if (args.Length > 1 && args[1] == "--auto-feq-range-only")
         {
             object rangeRunner = Activator.CreateInstance(runnerType, engine)!;
-            if ((double)runnerType.GetProperty("EvaluationMaxFrequencyHz")!.GetValue(rangeRunner)! != 15000.0)
-                throw new Exception("Manual FEQ range changed unexpectedly.");
+            if ((double)runnerType.GetProperty("EvaluationMaxFrequencyHz")!.GetValue(rangeRunner)! != 18000.0)
+                throw new Exception("Manual FEQ no longer evaluates through 18 kHz.");
             runnerType.GetProperty("EvaluationMaxFrequencyHz")!.SetValue(rangeRunner, 18000.0);
             if ((double)runnerType.GetProperty("EvaluationMaxFrequencyHz")!.GetValue(rangeRunner)! != 18000.0)
                 throw new Exception("Auto FEQ evaluation limit was not applied.");

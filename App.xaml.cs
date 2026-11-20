@@ -17,6 +17,8 @@ public partial class App : Application
 
     public App()
     {
+        // Owner 2026-11-19: every secondary window (Ctrl+Shift+M…) at most 90 % of the screen height.
+        WindowHeightLimit.Register();
         this.DispatcherUnhandledException += (s, e) =>
         {
             System.Diagnostics.Debug.WriteLine($"[DispatcherUnhandledException] {e.Exception}");
