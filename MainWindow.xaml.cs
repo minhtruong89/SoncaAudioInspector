@@ -299,8 +299,8 @@ namespace SoncaAudioInspector
                 TxtStaffWelcome.Text = "Xin chào, Nhân viên";
             }
 
-            // Default to Device tab
-            SwitchToTab("Device");
+            // Default tab
+            SwitchToTab("AudioRouting");
             _audioRoutingView.SetSetupVisibility(false);
             UpdateSettingsToggleIcon(false);
 
