@@ -313,6 +313,7 @@ namespace SoncaAudioInspector
         private TestRunner _testRunner = null!;
 
         private AudioRouting _audioRoutingView = null!;
+        private DeviceView _deviceView = null!;
         private QrScanWindow? _qrScanView;
         private StandardMeasurementWindow? _standardMeasurementView;
         private CheckingConfig _checkingConfig = new CheckingConfig();
@@ -361,6 +362,7 @@ namespace SoncaAudioInspector
             StartAudioDeviceNotifications();
 
             // Instantiate views
+            _deviceView = new DeviceView();
             _audioRoutingView = new AudioRouting();
             _audioRoutingView.InitializeRouting(_audioEngine, _testRunner);
 
@@ -2019,14 +2021,39 @@ namespace SoncaAudioInspector
 
         private void SwitchToTab(string tabName)
         {
-            // This build intentionally exposes the complete Audio Routing workspace only.
-            // Auto Test, reference-line capture, Scope and all routing measurements live
-            // inside AudioRouting and remain available.
-            MainContentArea.Content = _audioRoutingView;
-            BtnToggleSettings.Visibility = Visibility.Visible;
-            BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
-            BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
-            BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
+            if (tabName == "Device")
+            {
+                MainContentArea.Content = _deviceView;
+                BtnToggleSettings.Visibility = Visibility.Collapsed;
+
+                BtnTabDevice.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+                BtnTabDevice.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+                BtnTabDevice.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
+
+                BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
+                BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
+                BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
+            }
+            else
+            {
+                // Audio Routing workspace (default): Auto Test, reference-line capture,
+                // Scope and all routing measurements live inside AudioRouting.
+                MainContentArea.Content = _audioRoutingView;
+                BtnToggleSettings.Visibility = Visibility.Visible;
+
+                BtnTabAudioRouting.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+                BtnTabAudioRouting.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(16, 185, 129));
+                BtnTabAudioRouting.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(24, 24, 27));
+
+                BtnTabDevice.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122));
+                BtnTabDevice.BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(39, 39, 42));
+                BtnTabDevice.Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(15, 15, 17));
+            }
+        }
+
+        private void BtnTabDevice_Click(object sender, RoutedEventArgs e)
+        {
+            SwitchToTab("Device");
         }
 
         private void BtnTabAudioRouting_Click(object sender, RoutedEventArgs e)
