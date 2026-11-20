@@ -313,7 +313,8 @@ namespace SoncaAudioInspector
         private TestRunner _testRunner = null!;
 
         private AudioRouting _audioRoutingView = null!;
-        private DeviceView _deviceView = null!;
+        private bool flagDeviceTab = false;
+        private DeviceView? _deviceView;
         private QrScanWindow? _qrScanView;
         private StandardMeasurementWindow? _standardMeasurementView;
         private CheckingConfig _checkingConfig = new CheckingConfig();
@@ -350,6 +351,7 @@ namespace SoncaAudioInspector
         {
             _runtimeEnabled = initializeRuntime;
             InitializeComponent();
+            BtnTabDevice.Visibility = flagDeviceTab ? Visibility.Visible : Visibility.Collapsed;
             if (!initializeRuntime) return; // Offscreen UI host: no devices, BLE, startup HTTP or timers.
             InitializeUpdateUi();
             InitializeScreenFit();
@@ -362,7 +364,10 @@ namespace SoncaAudioInspector
             StartAudioDeviceNotifications();
 
             // Instantiate views
-            _deviceView = new DeviceView();
+            if (flagDeviceTab)
+            {
+                _deviceView = new DeviceView();
+            }
             _audioRoutingView = new AudioRouting();
             _audioRoutingView.InitializeRouting(_audioEngine, _testRunner);
 
@@ -2021,8 +2026,9 @@ namespace SoncaAudioInspector
 
         private void SwitchToTab(string tabName)
         {
-            if (tabName == "Device")
+            if (flagDeviceTab && tabName == "Device")
             {
+                _deviceView ??= new DeviceView();
                 MainContentArea.Content = _deviceView;
                 BtnToggleSettings.Visibility = Visibility.Collapsed;
 
