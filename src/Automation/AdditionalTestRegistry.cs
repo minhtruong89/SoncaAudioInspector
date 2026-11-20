@@ -29,6 +29,7 @@ public sealed record AdditionalTestCaptureData(int SampleRate, float[] Backgroun
 {
     /// <summary>Station background allowance this acquisition passed (Rè Pink/Chirp); null = factory gate.</summary>
     public BackgroundAllowance? Background { get; init; }
+    public string CaptureMode { get; init; } = "WASAPI Exclusive";
     /// <summary>Route label for results; a raised allowance is recorded with every result it produced.</summary>
     public string ResultRoute => Background is { IsDefault: false } b ? RouteLabel + " · " + b.Describe : RouteLabel;
 }

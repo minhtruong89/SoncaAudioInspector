@@ -1,25 +1,29 @@
-# HANDOFF — SoncaAudioInspector (cập nhật 2026-11-19)
+# HANDOFF — SoncaAudioInspector (cập nhật 2026-11-20)
 
-Đọc file này trước khi làm việc trên repo, nhất là khi bạn là agent ở **máy khác** máy build chính.
+Đọc file này trước khi làm việc trên repo, nhất là khi bạn là Claude/agent ở **máy khác** máy build chính.
 Sau đó đọc `AGENTS.md`, `ARTIFACTS.md`, `note/claude/notes.md` (sổ ghi chú chung) và skill liên quan trong `.agents/skills/`.
 
 ## 1. Trạng thái hiện tại
 
 | Mục | Giá trị |
 |---|---|
-| App live (kênh Ổn định) | **v1.5.6** — commit phát hành `c9c3f50`, tag `v1.5.6`, code `0cc69e2` (HEAD `5da9e78`) |
+| App live (kênh Ổn định) | **v1.5.7** — commit phát hành `a0fa48a`, tag `v1.5.7`, code `4daa6d5` (+ vá deploy `f41c1f2`), 2026-11-20 |
 | Feed cập nhật | `https://inventory.acnos.store/updates/audio-inspector/` (lịch sử: `/update`) |
-| Web + API | `https://inventory.acnos.store` — repo riêng `Speaker Inventory System` (không trên GitHub này), commit live `95cf33d` (release `20261119-032810`) |
-| Cấu hình C360 ACTIVE | **serial 5** (rev 5, revision `cmwn08a4y000032mbf78apmyl`, sha256 `4987d62b…6c20`, agent duyệt 2026-11-19 qua `agent-publish`), cần app ≥ 1.5.5 |
+| Web + API | `https://inventory.acnos.store` — repo riêng `Speaker Inventory System` (không trên GitHub này), commit live `33a157d` (release `20261120-032915`, nhánh `agent/codex-qa-report-mobile-20261120`, **chưa gộp** vào nhánh làm việc `feature/config-approval-v140`) |
+| Cấu hình C360 ACTIVE | **serial 12** (revision `cmwocqvrt001l32mblulety82`, sha256 `687631e7…fa79`, agent duyệt 2026-11-20 qua `agent-publish`): serial 11 của trạm + đổi dây LINE IN = Analog 3/4, MIC IN = Analog 1/2 |
 | Bản tạm (kênh Beta) | trang `/temp-updates`, feed `/api/app/updates/temp/` — chưa có bản tạm nào |
 
-### C360 (serial 5)
+### C360 (serial 12; trạm sửa serial 6–11 trên web 19/11)
+Dây trạm từ 19/11 16:10: **LINE IN = Analog 3/4, MIC IN = Analog 1/2** (FastTrack Pro). IO006/IO008 phát −6 dBFS, IO006 THD < 0,7 %, IO008 BLE MUSIC 100 % / Windows 80 %, `AllowLineOutliers` bật cho bài có LINE CHUẨN, `BleNamePrefix` trống.
 IO001 MIC Echo/Reverb −24 · IO002 FBX di tần −30 · IO003 MIC khô −24 · IO004 LINE IN · IO005 USB A · IO006 Mic KT đáp tuyến/THD ·
 IO007 BLUETOOTH · IO008 Rè Pink + Chirp (ảnh QA là hình chirp; chỉ ngưỡng tuyệt đối Pink < 30 %, Chirp < 10 dB, không cần line chuẩn Rè) · IO009 Gain trước hú (tùy chọn, FAIL khi FBX thêm < 6 dB nhưng không đổi kết luận tổng).
 IO002 phải có di tần (|di tần| ≥ 0,5 Hz khi FBX bật). BLE tự kết nối loa tên bắt đầu `KBEATBOX` RSSI mạnh nhất, INFO phải là model 1075.
 Chung: BLE MASTER/MUSIC/MIC 50%, Windows phát 75% / thu 100% (ghi đè từng bài bằng `TestVolume` của bài), 2 lượt / 1 đạt.
 
-## 2. Tính năng mới 1.5.3–1.5.6 (để không làm lại)
+## 2. Tính năng mới 1.5.3–1.5.7 (để không làm lại)
+- **1.5.7 (2026-11-20, handoff trạm `superzjppr0/handoff` 19/11, điều phối `artifacts/20261120-020747-007Z-handoff-20261119-dispatch/`)**: `C360VerdictPolicy` — 1 bài bắt buộc FAIL ⇒ KHÔNG ĐẠT + gửi ngay, bài chưa kết luận gửi `PENDING` `CHƯA KẾT LUẬN — …`, tùy chọn `TÙY CHỌN — …` và xám; bấm bài INVALID → `RetestInvalidStepDialog` đo lại riêng bài (Windows/BLE override một lần) rồi gửi lại cùng `uploadSessionId`; note lỗi ngắn (`AutoTestFaultNotes`); IO006 lấy LINE CHUẨN không phụ thuộc THD; chặn Enter lọt popup (agy · Gemini 4 Neon XHigh). `C360PortProbe` dò cặp FastTrack đầu phiên bằng matched filter; tab Rè theo route bài (`AudioRouting.RubBuzzRoute.cs`), "Chuẩn bị loa như IO008", Pink + Chirp đủ, ngưỡng từ config; nhãn `PHÁT → … | THU ← …`; chirp không vẽ đường giả; `0x8889000A` thử lại shared (Codex). Popup "Chờ thiết bị" căn giữa khi cửa sổ chính phóng to. Check mới: `c360-verdict`, `c360-re-probe`.
+- **Web `33a157d`**: ảnh trong từng bài (thu gọn), hết khuất ảnh IO007, thẻ trên mobile < 768 px, `qa_logs.upload_session_id` (unique theo sản phẩm): gửi lại cùng phiên cập nhật cùng log.
+- `deploy-update.ps1` (`f41c1f2`): stdin ssh không BOM khi console ở code page 65001 (lỗi "does not look like a tar archive" lúc deploy 1.5.7).
 - Ngõ mới: `AcousticRubBuzz` (IO008), `MicFeedbackGain` (IO009) — `src/Automation/Electronic/`.
 - Popup A/B khi ngõ analog không có tín hiệu (`C360NoSignalRetryBench`), kiểm ngầm Analog 1/2–3/4 lúc bắt đầu.
 - Tự lấy LINE CHUẨN khi thiếu (hỏi một lần); riêng IO008 từ **1.5.5** chỉ chấm theo ngưỡng tuyệt đối (Pink < 30 %, Chirp < `AbsoluteFailDb`), không có `CẦN DUYỆT`, không đọc/hỏi/lưu chuẩn Rè.
@@ -36,6 +40,9 @@ Chung: BLE MASTER/MUSIC/MIC 50%, Windows phát 75% / thu 100% (ghi đè từng b
 3. **FBX (IO002) & IO009**: chốt lại tiêu chí `ExpectedDetected` / ngưỡng `MinimumAddedDb` sau khi đo vài loa thật.
 4. File cấu hình dự phòng có chữ ký (`config/latest.json`, serial 1794906189) vẫn có C360 7 bài cũ; trạm online luôn dùng bản ACTIVE nên không ảnh hưởng. Muốn cập nhật: skill `sonca-config-deployment`.
 5. Check `ui-impedance` FAIL trên bàn đo của máy build (có từ trước, không chặn phát hành).
+6. **1.5.7 chưa đo ở trạm thật**: ngưỡng dò sound card (matched ≥ 24 dB, ≥ −55 dBFS, burst 0,3 s), đo lại bài INVALID với BLE thật, gửi lại cùng bản ghi trên tracker, web trên Chrome Android / Safari iOS.
+7. Chưa làm (handoff 19/11): gửi nền **từng bài** trong lúc đo (cần API mới, đề xuất trong `agent-reports/agy-verdict-REPORT.vi.md`), IO009 hình + DISTORTION + khoảng lặng TẮT/BẬT (§1.4), ô tick tạo bài IO mới ở Ctrl+Shift+M (§1.5), THD MIC IN bằng sine (§7.4), IO001 thiếu echo trên firmware (§6.1), "Lưu mức này vào config?" sau đo lại.
+8. Repo chính: user `admin` (không nâng quyền) **không có quyền xóa** file cũ (ACL kế thừa `CodexSandbox*`, `BUILTIN\Users: RX,W`) nên `git merge/checkout` lỗi "unable to unlink". 2026-11-20 đã gộp trong worktree rồi chép đè. Dọn artifact cũng bị chặn 46 mục. Cấp lại quyền xóa là việc của chủ.
 
 ## 4. Làm việc từ máy khác
 - **Sửa code rồi muốn trạm chạy thử trước:** dùng skill `.agents/skills/sonca-temp-release` — `scripts/submit-temp-update.ps1` gửi bản build lên server bằng token `SONCA_UPDATE_SUBMIT_TOKEN` (xin chủ; không commit, không in). ADMIN duyệt ở `/temp-updates`; chỉ máy kênh Beta nhận. Không cần khóa ký hay SSH.

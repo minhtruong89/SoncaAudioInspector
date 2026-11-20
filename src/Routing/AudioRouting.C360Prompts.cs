@@ -14,12 +14,13 @@ public partial class AudioRouting
     private string _soundCardReport = "";
 
     private Task<bool> ConfirmAsync(string message, string title, string yes, string no)
-        => Dispatcher.InvokeAsync(() => ModernMessageBox.ShowConfirmation(Window.GetWindow(this) ?? Application.Current.MainWindow, message, title, yes, no)).Task;
+        // Owner 2026-11-19 (A7): guard important C360 decision popups (auto LINE CHUẨN, Bluetooth removal, cable retry) against stray Enter/Space.
+        => Dispatcher.InvokeAsync(() => ModernMessageBox.ShowImportantConfirmation(Window.GetWindow(this) ?? Application.Current.MainWindow, message, title, yes, no)).Task;
 
     private Task<bool> ConfirmAsync(string message, string title, string yes, string no, string icon, System.Windows.Media.Color color)
         => Dispatcher.InvokeAsync(() =>
         {
-            var dialog = ModernMessageBox.CreateConfirmation(message, title, yes, no);
+            var dialog = ModernMessageBox.CreateImportantConfirmation(message, title, yes, no);
             dialog.TxtIcon.Text = icon; dialog.TxtIcon.Foreground = new System.Windows.Media.SolidColorBrush(color);
             var owner = Window.GetWindow(this) ?? Application.Current.MainWindow;
             if (owner?.IsVisible == true) dialog.Owner = owner;
@@ -31,9 +32,9 @@ public partial class AudioRouting
     /// <summary>Test hook: enables the port sync with a fake bench (offline checks).</summary>
     internal bool C360PortSyncForTests { get; set; }
 
-    private C360PortSync? CreateC360PortSync(C360ModelPlan plan)
+    private C360PortSync? CreateC360PortSync(C360ModelPlan plan, IC360ElectronicBench bench)
     {
-        if (C360BenchFactory != null && !C360PortSyncForTests) return null;
+        if (C360BenchFactory != null && !C360PortSyncForTests && bench is not IC360PortProbeCapture) return null;
         var ports = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var test in plan.Configuration.Tests.Where(t => t.IsEnabled && C360ModelDefinition.UsesAnalogPlayback(C360ModelDefinition.Stage(t))))
             if (plan.PlaybackIds.TryGetValue(C360ModelDefinition.Stage(test), out string? id) && id.Length > 0) ports.TryAdd(test.PlaybackOut, id);
@@ -73,11 +74,11 @@ public partial class AudioRouting
             }
             var inputs = plan.Configuration.Devices.Input;
             var sync = _c360PortSync;
-            // The app already tried every configured sound card output for this port (C360PortSync); what is left is the cable / speaker.
-            string tried = sync == null ? inputs.GetValueOrDefault(test.PlaybackOut, test.PlaybackOut)
-                : string.Join(", ", sync.Configured.Values.Distinct(StringComparer.OrdinalIgnoreCase).Select(sync.Name));
+            string tried = result.Acquisition?.PlaybackDeviceName is { Length: > 0 } actual ? actual
+                : sync?.EndpointFor(test.PlaybackOut) is { Length: > 0 } endpoint ? sync.Name(endpoint)
+                : inputs.GetValueOrDefault(test.PlaybackOut, test.PlaybackOut);
             string message = $"{test.id} · {test.name}: loa không nhận tín hiệu ở ngõ {test.PlaybackOut} ({C360SignalCheck.Describe(result)}).\n"
-                + $"App đã tự thử phát qua: {tried}.\n\n"
+                + $"Ngõ phát của lượt này: {tried}.\n\n"
                 + $"Kiểm tra cáp {test.PlaybackOut} từ sound card tới loa (cắm chặt, đúng jack), mức trên sound card và nguồn loa, rồi bấm THỬ LẠI.\n"
                 + (_soundCardReport.Length > 0 ? "Sound card lúc bắt đầu: " + _soundCardReport + "\n" : "")
                 + "\nBấm BỎ QUA để giữ kết quả không có tín hiệu và đo tiếp bài sau."

@@ -19,7 +19,9 @@ public static class ChirpRubBuzzConfiguredTest
     {
         ChirpRubBuzzStandard.Compare(run, null, limits with { AbsolutePassDb = limits.AbsoluteFailDb, ReviewFraction = 0 });
         if (run.Verdict is "PASS" or "FAIL")
-            run.Message = $"Ngưỡng tuyệt đối (không dùng line chuẩn): PASS khi đỉnh rè < {limits.AbsoluteFailDb:0.#} dB · đo {run.Metrics.PeakBumpDb:0.0} dB tại {run.Metrics.PeakBumpHz:0} Hz.";
+            run.Message = run.Metrics.HasMeasuredPeak
+                ? $"Ngưỡng tuyệt đối (không dùng line chuẩn): PASS khi đỉnh rè < {limits.AbsoluteFailDb:0.#} dB · đo {run.Metrics.PeakBumpDb:0.0} dB tại {run.Metrics.PeakBumpHz:0} Hz."
+                : run.Metrics.HasSensitiveBins ? "Không có đỉnh rè dương lặp lại." : run.Metrics.GraphStatus;
         return run;
     }
     public static ConfiguredTestResult Analyze(TestConfig config, AdditionalTestCaptureData capture, AdditionalTestContext context)
@@ -29,7 +31,7 @@ public static class ChirpRubBuzzConfiguredTest
             capture.Background?.AnalysisRmsLimitDbFs ?? -50);
         string key = ChirpRubBuzzStimulus.Key(settings, context.AcquisitionKey + ":" + config.id + ":" + capture.SampleRate);
         var run = new ChirpRubBuzzRun(settings, key, capture.ResultRoute, capture.SampleRate, metrics)
-            { Captures = capture.StepCaptures.ToArray(), Background = capture.BackgroundSamples, PlaybackSampleRate = context.PlaybackSampleRate };
+            { Captures = capture.StepCaptures.ToArray(), Background = capture.BackgroundSamples, PlaybackSampleRate = context.PlaybackSampleRate, CaptureMode = capture.CaptureMode };
         if (context.AbsoluteOnly) return new(DisplayName, JudgeAbsolute(run, config.ChirpLimits).Verdict, run.Summary) { ChirpRubBuzz = run };
         try
         {
@@ -107,7 +109,7 @@ public static class AcousticRubBuzzConfiguredTest
                 var metrics = PinkRubBuzzAnalysis.Analyze(captures, capture.BackgroundSamples, capture.SampleRate, settings,
                     capture.Background?.AnalysisRmsLimitDbFs ?? -50);
                 runs.Add(new(settings, "manual-level-diagnostic", capture.ResultRoute, capture.SampleRate, metrics)
-                { Captures = captures, Background = capture.BackgroundSamples, PlaybackSampleRate = context.PlaybackSampleRate });
+                { Captures = captures, Background = capture.BackgroundSamples, PlaybackSampleRate = context.PlaybackSampleRate, CaptureMode = capture.CaptureMode });
             }
             pink = runs.Last(); levels = RubBuzzLevelDiagnostics.Analyze(runs);
             var c = plan.Steps.Select((s, i) => (s, i)).Where(p => p.s.DiagnosticTag == "chirp").Select(p => capture.StepCaptures[p.i]).ToArray();

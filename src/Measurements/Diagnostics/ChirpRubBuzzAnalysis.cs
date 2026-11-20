@@ -72,6 +72,12 @@ public sealed record ChirpRubBuzzMetrics(bool IsValid, string Reason)
     public double[] ExcessDb { get; init; } = [];
     public double[] CaptureStartSeconds { get; init; } = [];
     public double[][] RepeatBumpDb { get; init; } = [];
+    public double[][] RepeatExcessDb { get; init; } = [];
+    [JsonIgnore] public bool HasSensitiveBins => IsValid && FrequenciesHz.Length > 0
+        && ExcessDb.Length == FrequenciesHz.Length && ExcessDb.Any(x => x >= 3);
+    [JsonIgnore] public bool HasMeasuredPeak => HasSensitiveBins && PeakBumpDb > 0;
+    [JsonIgnore] public string GraphStatus => FrequenciesHz.Length == 0 || !IsValid
+        ? "KHÔNG CÓ TÍN HIỆU ĐO HỢP LỆ" : "KHÔNG ĐỦ ĐỘ NHẠY";
 }
 
 public sealed record ChirpRubBuzzRun(ChirpRubBuzzSettings Settings, string ContextKey, string Route, int SampleRate, ChirpRubBuzzMetrics Metrics)
@@ -93,7 +99,7 @@ public sealed record ChirpRubBuzzRun(ChirpRubBuzzSettings Settings, string Conte
     [JsonIgnore] public float[][] Captures { get; init; } = [];
     [JsonIgnore] public float[] Background { get; init; } = [];
     public bool IsValid => Metrics.IsValid;
-    public string Summary => $"{Verdict}: {Message}" + (Metrics.IsValid
+    public string Summary => $"{Verdict}: {Message}" + (Metrics.HasMeasuredPeak
         ? $"{Environment.NewLine}Đỉnh rè {Metrics.PeakBumpDb:0.0} dB tại {Metrics.PeakBumpHz:0} Hz · cao tần trên 10·f vượt nền {Metrics.ExcessAtPeakDb:0.0} dB · mức cơ bản {Metrics.DriveDbFs:0.0} dB (tương đối)"
         : "");
 }
@@ -218,7 +224,8 @@ public static class ChirpRubBuzzAnalysis
             MaxExcessDb = minExcess.Where(double.IsFinite).DefaultIfEmpty(0).Max(), DriveDbFs = PowerDb(drive.Average(d => Math.Pow(10, d / 10))),
             DriveSpreadDb = drive.Max() - drive.Min(), BackgroundRmsDbFs = bgRms, BackgroundDriftDb = drift, Repeats = captures.Count,
             FrequenciesHz = grid.ToArray(), BumpDb = bump, HohdDb = meanHohd.Select(Clean).ToArray(), ExcessDb = minExcess.Select(Clean).ToArray(),
-            CaptureStartSeconds = captureStarts.ToArray(), RepeatBumpDb = bumps
+            CaptureStartSeconds = captureStarts.ToArray(), RepeatBumpDb = bumps,
+            RepeatExcessDb = excess.Select(e => e.Select(Clean).ToArray()).ToArray()
         };
     }
 }

@@ -102,21 +102,40 @@ public static class FeedbackGainDiagnostics
         return on.Length == 0 ? null : off.PeakToMedianDb - on.Max(s => s.PeakToMedianDb);
     }
 
-    /// <summary>Owner 2026-11-19: a loud howl ("hú mạnh") in an optional IO009 run never changes the verdict but is added to the
-    /// session note sent with the QA result. Reads the stored result lines, so it also works for a session resumed after restart.</summary>
-    public static string? AppendHowlNote(string? operatorNote, IEnumerable<AutoTestCaseItem> cases)
+    /// <summary>Owner 2026-11-19 (A3): IO009 intentionally ramps loop gain until it howls (51–63 dB above floor is normal and must NOT be noted).
+    /// Only abnormal howling is flagged: already howling at/below configured StartGainDb (step 0), or FBX ON howls clearly louder/worse than FBX OFF.</summary>
+    public static bool IsAbnormalHowl(FeedbackGainResult? result, FeedbackGainSettings settings)
     {
-        var lines = cases.Where(c => c.Config?.SpeakerStage == "MicFeedbackGain")
-            .SelectMany(c => c.MeasurementValues.Where(v => v.ThongSo.Contains("độ mạnh tiếng hú", StringComparison.Ordinal)
-                    && v.GiaTri.StartsWith("hú mạnh", StringComparison.Ordinal))
-                .Select(v => $"{c.Id} · {v.ThongSo.Replace(" · độ mạnh tiếng hú", "", StringComparison.Ordinal)}: {v.GiaTri}"))
-            .ToArray();
-        if (lines.Length == 0) return operatorNote;
-        string howl = "HÚ LỚN (bài tùy chọn, không đổi kết luận): " + string.Join("; ", lines) + ".";
-        if (operatorNote?.Contains(howl, StringComparison.Ordinal) == true) return operatorNote;
-        string note = string.IsNullOrWhiteSpace(operatorNote) ? howl : operatorNote.TrimEnd() + Environment.NewLine + howl;
-        return note.Length > 4000 ? note[..4000] : note;
+        if (result == null) return false;
+        if (result.Off.HowlGainDb is double offGain && offGain <= settings.StartGainDb + 1e-6) return true;
+        if (result.On.HowlGainDb is double onGain && onGain <= settings.StartGainDb + 1e-6) return true;
+        if (SuppressionAtOffHowlDb(result, settings) is double suppression && suppression < -3.0) return true;
+        if (result.Off.Howled && result.On.Howled)
+        {
+            if (result.On.HowlGainDb!.Value < result.Off.HowlGainDb!.Value - 3.0) return true;
+            if (result.On.HowlGainDb.Value <= result.Off.HowlGainDb.Value + 1e-6
+                && result.On.PeakDbFs > result.Off.PeakDbFs + 3.0) return true;
+        }
+        return false;
     }
+
+    /// <summary>Owner 2026-11-19 (A2): concise neutral measurement text for optional IO009 (no ĐẠT/KHÔNG ĐẠT wording).</summary>
+    public static string OptionalMeasurementLabel(FeedbackGainResult? result, FeedbackGainSettings? settings = null)
+    {
+        var vi = System.Globalization.CultureInfo.GetCultureInfo("vi-VN");
+        if (result == null) return "chưa có số đo";
+        if (!result.Off.Howled)
+            return $"FBX tắt chưa hú tới {(settings?.MaximumGainDb ?? result.MaximumGainDb).ToString("+0;-0;0", vi)} dB";
+        if (result.AddedDb is not double added) return "chưa xác định";
+        string sign = added < 0 ? "−" : "+";
+        string num = Math.Abs(added).ToString("0.0", vi);
+        return $"FBX thêm {(result.AddedIsLowerBound ? "≥ " : "")}{sign}{num} dB";
+    }
+
+    /// <summary>Owner 2026-11-19 (A3): removed automatic "hú mạnh" note; normal howling is expected in IO009.
+    /// Abnormal howling is emitted only via <see cref="AutoTestFaultNotes.Build"/>.</summary>
+    public static string? AppendHowlNote(string? operatorNote, IEnumerable<AutoTestCaseItem> cases)
+        => ProductMeasurementContext.NormalizeOperatorNote(operatorNote);
 
     public static string Describe(HowlStrength s)
         => $"{s.Grade}: đỉnh nổi {s.PeakToMedianDb:0.0} dB trên nền, mức {s.LevelDbFs:0.0} dBFS tại mic, {s.FrequencyHz:0} Hz";

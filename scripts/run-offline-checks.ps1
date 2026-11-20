@@ -1,4 +1,4 @@
-param(
+﻿param(
     # Reuse an artifact created by scripts/new-artifact.ps1. Default: create a new one.
     [string]$Artifact,
     # Check ids or group names to run (see -List). Default: every check that is not slow or quarantined.
@@ -60,6 +60,10 @@ $catalogue = @(
        note = 'C360 stage order, 3/2 voting, restore, acoustic draft gate (no radio, no audio)' }
     @{ id = 'c360-v152';            group = 'c360';    tool = 'AudioLifecycleCheck'; args = @('--c360-v152-logic={repo}/tools/AudioLifecycleCheck/Fixtures/C360-rev3.json', '--output={art}/checks/c360-v152');
        note = 'v1.5.3: IO008 Rè stage, A/B no-signal retry, auto LINE CHUẨN, FBX note, 2/1 runs, port report, screen fit' }
+    @{ id = 'c360-re-probe';        group = 'c360';    tool = 'AudioLifecycleCheck'; args = @('--c360-re-probe={repo}/tools/AudioLifecycleCheck/Fixtures/C360-rev5.json', '--output={art}/checks/c360-re-probe');
+       note = 'C360 two-pair wiring probe, IO008 route and limits, chirp graph validity and WASAPI retry (offline)' }
+    @{ id = 'c360-verdict';         group = 'c360';    tool = 'AudioLifecycleCheck'; args = @('--c360-verdict-logic', '--output={art}/checks/c360-verdict');
+       note = 'A1-A7: FAIL+INVALID immediate upload, PENDING prefixes, gray optional IO009, fault notes, INVALID row retest + same uploadSessionId, off-thread QA snapshot, THD-decoupled auto LINE CHUẨN, popup guard' }
     @{ id = 'acoustic3-logic';      group = 'c360';    tool = 'AudioLifecycleCheck'; args = @('--acoustic3-model-logic');
        note = 'ACOUSTIC 3 model factory, firmware identity guard, mapped controls' }
     @{ id = 'frequency-shift';      group = 'c360';    tool = 'AudioLifecycleCheck'; args = @('--frequency-shift-logic');
@@ -130,6 +134,8 @@ $catalogue = @(
        note = 'Feedback frequency-shift measurement' }
     @{ id = 'pink-noise';           group = 'measure'; tool = 'PinkNoiseCheck'; args = @('{art}/checks/pink-noise');
        note = 'Pink noise generator, WAV export and tab (no playback)' }
+    @{ id = 'pink-rubbuzz';         group = 'measure'; tool = 'PinkRubBuzzCheck'; needsApp = $true; args = @('{app}', '{art}/checks/pink-rubbuzz', '{repo}/tools/PinkRubBuzzCheck/Fixtures/pink', '{repo}/tools/PinkRubBuzzCheck/Fixtures/gated', '{repo}/tools/PinkRubBuzzCheck/Fixtures/chirp'); slow = $true; timeout = 600;
+       note = 'Pink and chirp DSP, real recorded fixtures, manual orchestration and WPF render (no playback)' }
     @{ id = 'bom-csv';              group = 'config';  tool = 'CheckApp'; args = @();
        note = 'BOM CSV rules' }
 )

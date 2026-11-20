@@ -14,8 +14,10 @@ namespace SoncaAudioInspector;
 public sealed class RubBuzzView : UserControl
 {
     public const string Title = "RÈ (Rub & Buzz)";
-    private const string IdleMessage = "Bấm Đo chuẩn: nền 3 s rồi mỗi tín hiệu 3 lượt, thu Exclusive, phát Shared. Đây là bài dùng để kết luận và lưu line chuẩn.";
+    private const string IdleMessage = "Đo chuẩn thu nền 3 giây rồi đo Pink và Chirp, mỗi tín hiệu 3 lượt.";
     private readonly TextBlock _status = DiagnosticViewStyle.Text(Title + " — CHƯA ĐO", 21);
+    private readonly TextBlock _testRoute = DiagnosticViewStyle.Text("", 17);
+    private readonly ComboBox _test = new() { Name = "RubBuzzTestRoute", MinWidth = 210, Margin = new Thickness(4) };
     private readonly TextBlock _message = DiagnosticViewStyle.Text(IdleMessage, 13);
     private readonly TextBlock _pinkMessage = DiagnosticViewStyle.Text("Chưa có kết quả Pink.", 13);
     private readonly TextBlock _chirpMessage = DiagnosticViewStyle.Text("Chưa có kết quả Chirp.", 13);
@@ -38,6 +40,7 @@ public sealed class RubBuzzView : UserControl
     public bool TablesExpanded => _tables.IsExpanded;
     private readonly CheckBox _good = new() { Content = "Đây là loa TỐT đã nghe kiểm tra, đúng gá/mic/âm lượng như khi test line", Foreground = Brushes.WhiteSmoke, Margin = new Thickness(4) };
     private readonly Button _measure, _measurePink, _measureChirp, _diagnose, _stop, _play, _stopPlay, _save, _export;
+    private readonly Button _prepare;
     private readonly RubBuzzAudioPlayer _player = new();
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(1 / 30.0) };
     private ScottPlot.Plottables.VerticalLine? _pinkCursor, _chirpCursor;
@@ -76,6 +79,13 @@ public sealed class RubBuzzView : UserControl
     private RubBuzzSoundChoice _resultChoice;
     public Func<RubBuzzSoundChoice, CancellationToken, Task<RubBuzzManualResult>>? Runner { get; set; }
     public Func<MeasurementRouteInfo?>? RouteProvider { get; set; }
+    public Func<RubBuzzTestRoute?>? TestRouteProvider { get; set; }
+    public Func<CancellationToken, Task>? PrepareRunner { get; set; }
+    public Func<Task>? ReleasePreparation { get; set; }
+    public TestConfig? SelectedRouteTest => (_test.SelectedItem as TestRouteChoice)?.Test;
+    private RubBuzzTestRoute? _route;
+    private bool _absoluteOnly, _prepared, _releasing;
+    private sealed record TestRouteChoice(TestConfig Test, string Label);
     public Func<RubBuzzRenderDevice[]>? RenderDevicesProvider { get; set; }
     public bool DetailsExpanded => _details.IsExpanded;
     public IReadOnlyList<RubBuzzListeningItem> ListeningItems => _items;
@@ -85,8 +95,18 @@ public sealed class RubBuzzView : UserControl
 
     public RubBuzzView()
     {
-        var root = new StackPanel { Margin = new Thickness(12) }; Content = root;
-        root.Children.Add(_status); root.Children.Add(_message); root.Children.Add(_capturePathWarning);
+        var layout = new DockPanel { Margin = new Thickness(12) }; Content = layout;
+        var heading = new StackPanel(); DockPanel.SetDock(heading, Dock.Top); layout.Children.Add(heading);
+        heading.Children.Add(_status); heading.Children.Add(_testRoute);
+        var root = new StackPanel();
+        layout.Children.Add(new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
+        var routeTools = new WrapPanel();
+        root.Children.Add(routeTools);
+        routeTools.Children.Add(DiagnosticViewStyle.Text("Bài / route", 13));
+        routeTools.Children.Add(_test); _test.DisplayMemberPath = nameof(TestRouteChoice.Label);
+        _prepare = Button(routeTools, "Chuẩn bị loa", "PrepareRubBuzzSpeaker", PrepareSpeaker);
+        _test.SelectionChanged += async (_, _) => { await LeaveRouteAsync(); RefreshTestRoute(); };
+        root.Children.Add(_message); root.Children.Add(_capturePathWarning);
         var tools = new WrapPanel { VerticalAlignment = VerticalAlignment.Center }; root.Children.Add(tools);
         _measure = Button(tools, "", "RunRubBuzz", () => Capture(_standardChoice));
         _measure.FontWeight = FontWeights.SemiBold; _measure.FontSize = 14; _measure.Padding = new Thickness(14, 8, 14, 8);
@@ -120,9 +140,10 @@ public sealed class RubBuzzView : UserControl
         Setting(_broadbandOptions, "Crest (dB):", _wideCrest, "Giới hạn hệ số đỉnh của tín hiệu: 12 dB gần nhạc thật; 6 dB nặng hơn cho loa. Không khẳng định tuân thủ IEC/AES.");
         Setting(_broadbandOptions, "Mức RMS (dBFS):", _wideLevel, "Mức phát RMS của pink dải rộng (mặc định −20 dBFS).");
         Setting(_broadbandOptions, "Số lượt:", _wideRepeats, "Số lượt phát cùng dạng sóng để tách méo lặp lại khỏi nhiễu (mặc định 3).");
-        var replay = new WrapPanel(); root.Children.Add(replay);
-        replay.Children.Add(DiagnosticViewStyle.Text("Nghe lại:", 13)); replay.Children.Add(_listen);
-        replay.Children.Add(DiagnosticViewStyle.Text("Nghe qua:", 13)); replay.Children.Add(_render);
+        var replay = new WrapPanel();
+        root.Children.Add(new GroupBox { Header = "NGHE LẠI", Foreground = Brushes.WhiteSmoke, Content = replay, Margin = new Thickness(4) });
+        replay.Children.Add(_listen);
+        replay.Children.Add(DiagnosticViewStyle.Text("Nghe lại bản thu qua (loa/tai nghe kiểm tra)", 13)); replay.Children.Add(_render);
         _play = Button(replay, "▶ Nghe", "PlayRubBuzz", Play);
         _stopPlay = Button(replay, "■ Dừng", "StopRubBuzzReplay", () => { StopPlayback(); return Task.CompletedTask; });
         root.Children.Add(_pinkSection); _pinkSection.Children.Add(DiagnosticViewStyle.Text("PINK · rè lặp lại", 17));
@@ -232,24 +253,75 @@ public sealed class RubBuzzView : UserControl
         if (Equals(_selectionKey, selectionKey)) return;
         _selectionKey = selectionKey; _standardChoice = RubBuzzManualCapture.DefaultChoice(config); StandardLabel();
     }
-    /// <summary>The standard run follows the model's RubBuzzMode, so its result can use and save the Auto Test line standard.</summary>
-    private void StandardLabel() => _measure.Content = "▶ Đo chuẩn · " + _standardChoice switch
-        { RubBuzzSoundChoice.Pink => "Pink", RubBuzzSoundChoice.Chirp => "Chirp", _ => "Pink + Chirp" } + " (3 lượt)";
+    private void StandardLabel() => _measure.Content = (_standardChoice switch
+        { RubBuzzSoundChoice.Pink => "▶ Đo chuẩn · Pink", RubBuzzSoundChoice.Chirp => "▶ Đo chuẩn · Chirp", _ => "▶ Đo chuẩn · Pink + Chirp" }) + " (3 lượt)";
     public RubBuzzSoundChoice StandardChoice => _standardChoice;
     /// <summary>Shows the operator guidance popup for a failed measurement (set by Audio Routing).</summary>
     public Action<Exception>? FailureNotifier { get; set; }
     public void SetBusy(bool busy) { _busy = busy; if (busy) StopPlayback(); RefreshButtons(); }
     public void Cancel() => _cancellation?.Cancel();
     public void Shutdown() { Cancel(); StopPlayback(); _player.Dispose(); }
+    public void SetTestRoutes(IEnumerable<TestConfig> tests)
+    {
+        var choices = tests.Where(t => t.IsEnabled).ToArray();
+        if (_test.ItemsSource is IEnumerable<TestRouteChoice> previous && previous.Select(c => c.Test).SequenceEqual(choices)) return;
+        var items = choices.Select(t => new TestRouteChoice(t, $"{t.id} · {t.PlaybackOut} → {t.RecordingIn}")).ToArray();
+        _test.ItemsSource = items;
+        _test.SelectedItem = items.FirstOrDefault(i => ReferenceEquals(i.Test, RubBuzzTestRoute.DefaultTest(choices)));
+        _standardChoice = RubBuzzSoundChoice.PinkAndChirp;
+        StandardLabel();
+        RefreshTestRoute();
+    }
+
+    public void RefreshTestRoute()
+    {
+        if (TestRouteProvider == null) { RefreshButtons(); return; }
+        try { _route = TestRouteProvider(); }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Runtime.InteropServices.COMException) { _route = null; }
+        _testRoute.Text = _route is { IsMatched: true } ? _route.Label
+            : (_route?.Label ?? "Chưa chọn bài đo") + " · NGÕ PHÁT/THU KHÔNG KHỚP";
+        _testRoute.Foreground = _route?.IsMatched == true ? Brushes.LightSkyBlue : Brushes.Salmon;
+        _prepare.Content = _prepared ? "Khôi phục loa" : $"Chuẩn bị loa như {SelectedRouteTest?.id ?? "bài đo"}";
+        _prepare.Visibility = _route?.CanPrepare == true || _prepared ? Visibility.Visible : Visibility.Collapsed;
+        RefreshPlaybackRoute(_route?.PlaybackId);
+        RefreshButtons();
+    }
+
+    private async Task PrepareSpeaker()
+    {
+        if (_prepared) { await LeaveRouteAsync(); _message.Text = "Đã khôi phục loa."; return; }
+        StopPlayback();
+        using var cancellation = new CancellationTokenSource();
+        _cancellation = cancellation; RefreshButtons();
+        try
+        {
+            await (PrepareRunner ?? throw new InvalidOperationException("Chưa mở đường chuẩn bị loa."))(cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            _prepared = true;
+            _message.Text = "Đã chuẩn bị loa và mức Windows của bài. Có thể bấm Đo.";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException) { _message.Text = ex.Message; FailureNotifier?.Invoke(ex); }
+        finally { _cancellation = null; RefreshTestRoute(); }
+    }
+
+    public async Task LeaveRouteAsync()
+    {
+        Cancel();
+        StopPlayback();
+        if (ReleasePreparation == null || _releasing) return;
+        _releasing = true; RefreshButtons();
+        try { await ReleasePreparation(); }
+        finally { _prepared = false; _releasing = false; RefreshTestRoute(); }
+    }
     public void RefreshRenderDevices()
     {
         if (RenderDevicesProvider == null) return;
         try
         {
-            string? testId = RouteProvider?.Invoke()?.PlaybackId;
+            string? testId = TestRouteProvider != null ? _route?.PlaybackId : RouteProvider?.Invoke()?.PlaybackId;
             string? previous = testId == _lastTestPlaybackId ? (_render.SelectedItem as RubBuzzRenderDevice)?.Id : null;
             _lastTestPlaybackId = testId;
-            var devices = RenderDevicesProvider();
+            var devices = RenderDevicesProvider().Where(d => !string.Equals(d.Id, testId, StringComparison.OrdinalIgnoreCase)).ToArray();
             _render.ItemsSource = devices;
             _render.SelectedItem = devices.FirstOrDefault(d => d.Id == previous) ?? RubBuzzAudioPlayer.DefaultDevice(devices, testId);
         }
@@ -262,15 +334,18 @@ public sealed class RubBuzzView : UserControl
     }
     private void RefreshButtons()
     {
-        bool idle = !_busy && _cancellation == null;
-        _measure.IsEnabled = _measurePink.IsEnabled = _measureChirp.IsEnabled = _diagnose.IsEnabled = idle; _sound.IsEnabled = idle; _stop.IsEnabled = _cancellation != null;
+        bool idle = !_busy && !_releasing && _cancellation == null;
+        bool routeMatches = TestRouteProvider == null || _route?.IsMatched == true;
+        _measure.IsEnabled = _measurePink.IsEnabled = _measureChirp.IsEnabled = _diagnose.IsEnabled = idle && routeMatches;
+        _prepare.IsEnabled = idle && (_prepared || routeMatches && _route?.CanPrepare == true);
+        _test.IsEnabled = idle; _sound.IsEnabled = idle; _stop.IsEnabled = _cancellation != null;
         _listen.IsEnabled = idle && _items.Count > 0; _render.IsEnabled = idle;
         _play.IsEnabled = idle && _listen.SelectedItem != null && _render.SelectedItem != null;
         _stopPlay.IsEnabled = _player.IsPlaying;
         bool valid = (_pink != null || _chirp != null) && (_pink == null || _pink.IsValid && _pink.Verdict != "INVALID")
             && (_chirp == null || _chirp.IsValid && _chirp.Verdict != "INVALID");
         // Only the result of the standard run can be saved; the diagnostic selector no longer affects that result.
-        _save.IsEnabled = idle && valid && !_diagnostic && (_pink is { SavedAsStandard: false } || _chirp is { SavedAsStandard: false });
+        _save.IsEnabled = idle && valid && !_diagnostic && !_absoluteOnly && (_pink is { SavedAsStandard: false } || _chirp is { SavedAsStandard: false });
         _save.ToolTip = _diagnostic ? "Kết quả chẩn đoán không lưu hoặc dùng line chuẩn Auto Test; bấm Đo chuẩn." : "Xác nhận loa tốt trước khi lưu chuẩn của lần đo này.";
         _export.IsEnabled = idle && (_pink != null || _chirp != null) && ResultPersistencePolicy.CanPersist
             && _pink?.PersistenceAllowed != false && _chirp?.PersistenceAllowed != false;
@@ -283,7 +358,7 @@ public sealed class RubBuzzView : UserControl
     }
     private async Task Capture(RubBuzzSoundChoice choice)
     {
-        if (_busy || _cancellation != null) return;
+        if (_busy || _cancellation != null || TestRouteProvider != null && _route?.IsMatched != true) return;
         StopPlayback(); using var cancellation = new CancellationTokenSource(); _cancellation = cancellation; RefreshButtons();
         try
         {
@@ -301,14 +376,15 @@ public sealed class RubBuzzView : UserControl
             if (ex is not OperationCanceledException) { _message.Text = ex.Message; FailureNotifier?.Invoke(ex); }
             throw;
         }
-        finally { _cancellation = null; RefreshButtons(); }
+        finally { _cancellation = null; _prepared = false; RefreshTestRoute(); }
     }
     public void Update(PinkRubBuzzRun? pink, ChirpRubBuzzRun? chirp, string directory,
         PinkRubBuzzLimits? pinkLimits = null, ChirpRubBuzzLimits? chirpLimits = null, bool diagnostic = false, RubBuzzSoundChoice choice = RubBuzzSoundChoice.PinkAndChirp,
-        RubBuzzManualResult? diagnostics = null)
+        RubBuzzManualResult? diagnostics = null, bool absoluteOnly = false)
     {
         if (_cancellation != null) return;
         diagnostic |= !RubBuzzManualCapture.AllowsStandard(choice);
+        _absoluteOnly = absoluteOnly || diagnostics?.AbsoluteOnly == true;
         bool changed = !ReferenceEquals(_pink, pink) || !ReferenceEquals(_chirp, chirp) || _diagnostic != diagnostic
             || diagnostics != null && !ReferenceEquals(_diagnostics, diagnostics);
         _directory = directory; _diagnostic = diagnostic; _resultChoice = choice;
@@ -320,8 +396,16 @@ public sealed class RubBuzzView : UserControl
                 if (pink != null) { pink.StandardMetrics = null; pink.StandardCreatedUtc = null; pink.DeltaRepeatPct = null; pink.DeltaHfDb = null; }
                 if (chirp != null) { chirp.StandardMetrics = null; chirp.StandardCreatedUtc = null; chirp.DeltaBumpDb = null; chirp.DeltaBumpHz = null; }
             }
-            if (pink != null && !pink.SavedAsStandard) PinkRubBuzzStandard.Compare(pink, diagnostic ? null : PinkRubBuzzStandard.Load(directory, pink.ContextKey), _pinkLimits);
-            if (chirp != null && !chirp.SavedAsStandard) ChirpRubBuzzStandard.Compare(chirp, diagnostic ? null : ChirpRubBuzzStandard.Load(directory, chirp.ContextKey), _chirpLimits);
+            if (_absoluteOnly)
+            {
+                if (pink != null) PinkRubBuzzConfiguredTest.JudgeAbsolute(pink, _pinkLimits);
+                if (chirp != null) ChirpRubBuzzConfiguredTest.JudgeAbsolute(chirp, _chirpLimits);
+            }
+            else
+            {
+                if (pink != null && !pink.SavedAsStandard) PinkRubBuzzStandard.Compare(pink, diagnostic ? null : PinkRubBuzzStandard.Load(directory, pink.ContextKey), _pinkLimits);
+                if (chirp != null && !chirp.SavedAsStandard) ChirpRubBuzzStandard.Compare(chirp, diagnostic ? null : ChirpRubBuzzStandard.Load(directory, chirp.ContextKey), _chirpLimits);
+            }
         }
         catch (Exception ex)
         {
@@ -384,9 +468,9 @@ public sealed class RubBuzzView : UserControl
         _impulsiveText.Text = a == null ? "" : "CHIRP · MÉO XUNG (chẩn đoán) — " + a.Verdict + "\n" + a.Filter
             + $"\nBội HP {a.Settings.HighPassMultiple:0.#}; crest ≥ {a.Settings.CrestThresholdDb:0.#} dB và đỉnh ≥ nền +{a.Settings.PeakAboveBackgroundDb:0.#} dB; lặp ≥ 2 lượt."
             + (a.StandardHohdDeltaDb == null ? "" : "\nĐường cam: chênh HOHD so với line chuẩn (chẩn đoán); xám: từng lượt; xanh: trung vị.");
-        _impulsivePeakPlot.Visibility = _impulsiveCrestPlot.Visibility = a == null ? Visibility.Collapsed : Visibility.Visible;
+        _impulsivePeakPlot.Visibility = _impulsiveCrestPlot.Visibility = a?.HasSensitivity == true ? Visibility.Visible : Visibility.Collapsed;
         _impulsivePeakPlot.Plot.Clear(); _impulsiveCrestPlot.Plot.Clear();
-        if (a?.Median != null)
+        if (a is { HasSensitivity: true, Median: not null })
         {
             double[] x = a.FrequenciesHz.Select(Math.Log10).ToArray();
             void Curve(WpfPlot plot, double[] y, ScottPlot.Color color, float width)
@@ -416,7 +500,8 @@ public sealed class RubBuzzView : UserControl
         _levelTable.Visibility = levels == null ? Visibility.Collapsed : Visibility.Visible;
         string Metric(double? value, string unit) => value is double n ? $"{n:0.0} {unit}" : "Chưa tính";
         _levelTable.ItemsSource = levels?.Rows.Select(r => new { MucPhat = $"{r.StimulusRmsDbFs:0} dBFS RMS", BassTaiMic = Metric(r.BassDbFs, "dBFS"), HFVuotNen = Metric(r.HfExcessDb, "dB"),
-            HFCuaLoa = Metric(r.SpeakerHfDbFs, "dBFS"), HFBass = Metric(r.HfBassDb, "dB"), RC = Metric(r.RepeatCoherencePct, "%"), Xung = Metric(r.EventsPct, "%"), HopLe = r.IsUsable ? "Đủ dữ liệu" : r.ValidityReason }).ToArray();
+            HFCuaLoa = Metric(r.SpeakerHfDbFs, "dBFS"), HFBass = Metric(r.HfBassDb, "dB"), RC = r.RepeatCoherencePct is double rc ? PinkRubBuzzMetrics.DisplayCoherence(rc) : "Chưa tính",
+            Xung = Metric(r.EventsPct, "%"), HopLe = r.IsUsable ? "Đủ dữ liệu" : r.ValidityReason }).ToArray();
         if (_resultChoice is RubBuzzSoundChoice.BroadbandPink or RubBuzzSoundChoice.LevelDiagnostic && _diagnostics != null)
         {
             _status.Text = Title + " · CHẨN ĐOÁN — " + (_resultChoice == RubBuzzSoundChoice.BroadbandPink ? "PINK DẢI RỘNG" : "THEO MỨC");
@@ -428,30 +513,36 @@ public sealed class RubBuzzView : UserControl
     {
         string overall = AcousticRubBuzzConfiguredTest.Combine(new[] { _pink?.Verdict, _chirp?.Verdict }.OfType<string>().ToArray());
         _status.Text = Title + " — " + (_pink == null && _chirp == null ? "CHƯA ĐO" : Verdict(overall))
-            + (_pink?.IsValid == true ? $" · Pink {_pink.Metrics.RepeatCoherencePct:0.0} %" : "")
-            + (_chirp?.IsValid == true ? $" · Chirp {_chirp.Metrics.PeakBumpDb:0.0} dB @ {_chirp.Metrics.PeakBumpHz:0} Hz" : "");
+            + (_pink?.IsValid == true ? $" · Pink {PinkRubBuzzMetrics.DisplayCoherence(_pink.Metrics.RepeatCoherencePct)}" : "")
+            + (_chirp?.Metrics.HasMeasuredPeak == true ? $" · Chirp {_chirp.Metrics.PeakBumpDb:0.0} dB @ {_chirp.Metrics.PeakBumpHz:0} Hz" : "");
         _status.Foreground = overall == "FAIL" ? Brushes.Salmon : overall == "PASS" && (_pink != null || _chirp != null) ? Brushes.MediumSpringGreen : Brushes.Gold;
         _message.Text = _pink == null && _chirp == null ? IdleMessage
             : string.Join("\n", new[] { _pink?.Route, _chirp?.Route }.OfType<string>().Distinct()) + (_diagnostic ? "\nChẩn đoán · chỉ so ngưỡng tuyệt đối; không dùng/lưu line chuẩn." : "");
         _pinkMessage.Text = _pink == null ? "Chưa có kết quả Pink." : $"{Verdict(_pink.Verdict)} · {_pink.Message}\n"
-            + $"25–150 Hz · {_pink.Settings.LevelRmsDbFs:0.#} dBFS RMS · {_pink.Settings.DurationSeconds:0.#} s × {_pink.Captures.Length} lượt · phát {_pink.PlaybackSampleRate} Hz / thu {_pink.SampleRate} Hz · {_pink.CaptureMode}";
+            + $"25–150 Hz · {_pink.Settings.LevelRmsDbFs:0.#} dBFS RMS · {_pink.Settings.DurationSeconds:0.#} s × {_pink.Captures.Length} lượt · phát {_pink.PlaybackSampleRate} Hz / thu {_pink.SampleRate} Hz · {_pink.CaptureMode}"
+            + (_pink.Verdict == "INVALID" ? "\n" + RubBuzzManualCapture.InvalidCaptureLevels(_pink.Captures, _pink.Background) : "");
         _chirpMessage.Text = _chirp == null ? "Chưa có kết quả Chirp." : $"{Verdict(_chirp.Verdict)} · {_chirp.Message}\n"
-            + $"{_chirp.Settings.F1Hz:0}→{_chirp.Settings.F2Hz:0} Hz · {_chirp.Settings.PeakDbFs:0.#} dBFS đỉnh · {_chirp.Settings.DurationSeconds:0.##} s × {_chirp.Captures.Length} lượt · phát {_chirp.PlaybackSampleRate} Hz / thu {_chirp.SampleRate} Hz · {_chirp.CaptureMode}";
+            + $"{_chirp.Settings.F1Hz:0}→{_chirp.Settings.F2Hz:0} Hz · {_chirp.Settings.PeakDbFs:0.#} dBFS đỉnh · {_chirp.Settings.DurationSeconds:0.##} s × {_chirp.Captures.Length} lượt · phát {_chirp.PlaybackSampleRate} Hz / thu {_chirp.SampleRate} Hz · {_chirp.CaptureMode}"
+            + (_chirp.Verdict == "INVALID" ? "\n" + RubBuzzManualCapture.InvalidCaptureLevels(_chirp.Captures, _chirp.Background) : "");
         var p = _pink?.Metrics; var ps = _pink?.StandardMetrics; var c = _chirp?.Metrics; var cs = _chirp?.StandardMetrics;
         _pinkTable.ItemsSource = p?.IsValid != true ? null : new[] {
-            new Row("Tỷ lệ rè lặp lại (4–12 kHz)", $"{p.RepeatCoherencePct:0.0} %", ps == null ? "—" : $"{ps.RepeatCoherencePct:0.0} %", ps == null ? $"PASS ≤ {_pinkLimits.AbsolutePassPct:0.#} / FAIL ≥ {_pinkLimits.AbsoluteFailPct:0.#} %" : $"+{_pinkLimits.RepeatMarginPct:0.#} điểm"),
+            new Row("Tỷ lệ rè lặp lại (4–12 kHz)", PinkRubBuzzMetrics.DisplayCoherence(p.RepeatCoherencePct),
+                ps == null ? "—" : PinkRubBuzzMetrics.DisplayCoherence(ps.RepeatCoherencePct),
+                _absoluteOnly ? $"PASS < {_pinkLimits.AbsoluteFailPct:0.#}%" : ps == null ? $"PASS ≤ {_pinkLimits.AbsolutePassPct:0.#} / FAIL ≥ {_pinkLimits.AbsoluteFailPct:0.#} %" : $"+{_pinkLimits.RepeatMarginPct:0.#} điểm"),
             new Row("Cao tần 4–12 kHz", $"{p.HfDbFs:0.0} dBFS", ps == null ? "—" : $"{ps.HfDbFs:0.0} dBFS", $"+{_pinkLimits.HfMarginDb:0.#} dB"),
             new Row("Bass tại mic", $"{p.DriveDbFs:0.0} dBFS", ps == null ? "—" : $"{ps.DriveDbFs:0.0} dBFS", $"±{_pinkLimits.DriveMatchDb:0.#} dB") };
         _chirpTable.ItemsSource = c?.IsValid != true ? null : new[] {
-            new Row("Đỉnh rè (lặp lại ở mọi lượt)", $"{c.PeakBumpDb:0.0} dB @ {c.PeakBumpHz:0} Hz", cs == null ? "—" : $"{cs.PeakBumpDb:0.0} dB @ {cs.PeakBumpHz:0} Hz", cs == null ? $"PASS ≤ {_chirpLimits.AbsolutePassDb:0.#} / FAIL ≥ {_chirpLimits.AbsoluteFailDb:0.#} dB" : $"+{_chirpLimits.BumpMarginDb:0.#} dB"),
+            new Row("Đỉnh rè (lặp lại ở mọi lượt)", c.HasMeasuredPeak ? $"{c.PeakBumpDb:0.0} dB @ {c.PeakBumpHz:0} Hz"
+                : c.HasSensitiveBins ? "Không có đỉnh dương lặp lại" : c.GraphStatus, cs == null ? "—" : $"{cs.PeakBumpDb:0.0} dB @ {cs.PeakBumpHz:0} Hz",
+                _absoluteOnly ? $"PASS < {_chirpLimits.AbsoluteFailDb:0.#} dB" : cs == null ? $"PASS ≤ {_chirpLimits.AbsolutePassDb:0.#} / FAIL ≥ {_chirpLimits.AbsoluteFailDb:0.#} dB" : $"+{_chirpLimits.BumpMarginDb:0.#} dB"),
             new Row("Vượt chuẩn lớn nhất", _chirp!.DeltaBumpDb is double delta ? $"{delta:+0.0;-0.0} dB @ {_chirp.DeltaBumpHz:0} Hz" : "—", "—", $"≤ +{_chirpLimits.BumpMarginDb:0.#} dB") };
         _detailText.Text = (p == null ? "" : $"PINK · {p.Reason}\nĐộ nhạy {p.SensitivityDb:0.0} dB (≥ {_pinkLimits.MinSensitivityDb:0.#}); tiếng động lạ {100 - p.KeptPct:0.0} % (≤ {_pinkLimits.MaxForeignPct:0.#}); "
             + $"nền {p.BackgroundRmsDbFs:0.0} dBFS / HF {p.BackgroundHfDbFs:0.0} dBFS; lệch đầu/cuối {p.BackgroundDriftDb:0.0} dB; lệch lượt {p.DriveSpreadDb:0.0} dB.\n"
-            + "Từng cặp lượt: " + string.Join(" / ", p.PairCoherencePct.Select(v => $"{v:0.0} %")) + "\n")
+            + "Từng cặp lượt: " + string.Join(" / ", p.PairCoherencePct.Select(v => v < 0 ? "0% (không đồng biến)" : PinkRubBuzzMetrics.DisplayCoherence(v))) + "\n")
             + (c == null ? "" : $"CHIRP · {c.Reason}\nMức chirp {c.DriveDbFs:0.0} dB (tương đối); lệch lượt {c.DriveSpreadDb:0.0} dB; nền {c.BackgroundRmsDbFs:0.0} dBFS; lệch đầu/cuối {c.BackgroundDriftDb:0.0} dB; "
                 + $"HF vượt nền {c.ExcessAtPeakDb:0.0} dB tại đỉnh / {c.MaxExcessDb:0.0} dB lớn nhất.");
         if (_pink?.Verdict == "INVALID" || _chirp?.Verdict == "INVALID") _details.IsExpanded = true;
-        _standard.Text = _diagnostic ? "Chẩn đoán chậm/Sweep: không lưu line chuẩn." : string.Join(" · ",
+        _standard.Text = _absoluteOnly ? "Ngưỡng tuyệt đối theo cấu hình bài đo." : _diagnostic ? "Chẩn đoán chậm/Sweep: không lưu line chuẩn." : string.Join(" · ",
             new[] { _pink == null ? null : ps == null ? "Pink: chưa có line chuẩn" : $"Pink: chuẩn {_pink.StandardCreatedUtc?.LocalDateTime:g}",
                 _chirp == null ? null : cs == null ? "Chirp: chưa có line chuẩn" : $"Chirp: chuẩn {_chirp.StandardCreatedUtc?.LocalDateTime:g}" }.OfType<string>());
         RenderPlots();
@@ -475,20 +566,9 @@ public sealed class RubBuzzView : UserControl
             if (foreign.Length > 0) { var marks = _pinkPlot.Plot.Add.Scatter(foreign.Select(e => e.Seconds).ToArray(), foreign.Select(e => e.LevelDb).ToArray()); marks.LineWidth = 0; marks.MarkerSize = 3; marks.Color = ScottPlot.Colors.Red; }
             _pinkPlot.Plot.Add.HorizontalLine(m.BackgroundHfDbFs, color: ScottPlot.Colors.MediumSeaGreen);
         }
-        if (_chirp is { } chirp && chirp.Metrics.FrequenciesHz.Length > 0)
-        {
-            var m = chirp.Metrics; double[] x = m.FrequenciesHz.Select(Math.Log10).ToArray();
-            Line(_chirpPlot, x, m.BumpDb, ScottPlot.Colors.DeepSkyBlue, 2);
-            for (int i = 0; i < m.RepeatBumpDb.Length; i++)
-            {
-                bool active = selected is { IsChirp: true } && selected.Repeat == i;
-                Line(_chirpPlot, x, m.RepeatBumpDb[i], active ? ScottPlot.Colors.Gold : ScottPlot.Colors.SlateGray, active ? 3 : 1);
-            }
-            if (!_diagnostic && chirp.StandardMetrics is { } std && std.BumpDb.Length == x.Length)
-            { Line(_chirpPlot, x, std.BumpDb, ScottPlot.Colors.Gray); Line(_chirpPlot, x, std.BumpDb.Select(v => v + _chirpLimits.BumpMarginDb).ToArray(), ScottPlot.Colors.Salmon); }
-            else _chirpPlot.Plot.Add.HorizontalLine(_chirpLimits.AbsoluteFailDb, color: ScottPlot.Colors.Salmon);
-        }
-        _pinkPlot.Plot.Axes.AutoScale(); _chirpPlot.Plot.Axes.AutoScale();
+        if (_chirp is { } chirp)
+            RubBuzzQaGraph.Draw(_chirpPlot.Plot, chirp, "Chirp", selected is { IsChirp: true } ? selected.Repeat : -1);
+        _pinkPlot.Plot.Axes.AutoScale();
         _pinkCursor = _pinkPlot.Plot.Add.VerticalLine(0, color: ScottPlot.Colors.Gold); _pinkCursor.IsVisible = false;
         _chirpCursor = _chirpPlot.Plot.Add.VerticalLine(0, color: ScottPlot.Colors.Gold); _chirpCursor.IsVisible = false;
         _pinkPlot.Refresh(); _chirpPlot.Refresh();

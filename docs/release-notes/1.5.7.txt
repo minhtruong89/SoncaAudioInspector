@@ -1,0 +1,9 @@
+v1.5.7: Có 1 bài KHÔNG ĐẠT là app kết luận KHÔNG ĐẠT và gửi server ngay; bấm bài đo không hợp lệ để đo lại riêng bài đó với âm lượng cao hơn; app tự dò đúng cặp sound card khi đổi dây.
+Kết luận: một bài bắt buộc KHÔNG ĐẠT thì tổng là KHÔNG ĐẠT và gửi FACTORY FLOOR QA ngay cuối phiên, kèm danh sách bài chưa kết luận và lý do. Chỉ khi không có bài KHÔNG ĐẠT mà còn bài chưa kết luận mới là CHƯA ĐO ĐỦ. Bài đang tự lấy LINE CHUẨN hiện CHƯA KẾT LUẬN, không hiện KHÔNG ĐẠT.
+Đo lại: bấm vào bài ĐO KHÔNG HỢP LỆ hiện popup Đo lại (lý do, mức hiện tại, ô Windows phát % và BLE MUSIC % chỉ cho lần này). App đo lại riêng bài đó, tính lại kết luận và cập nhật cùng bản ghi trên server.
+Ghi chú gửi server chỉ ghi lỗi ngắn gọn, ví dụ "Mất echo (IO001); THD cao 0,70% (IO003)"; không lỗi thì để trống. Gain trước hú chỉ ghi khi hú bất thường.
+Bài tùy chọn (IO009 Gain trước hú) luôn hiện màu xám, chỉ ghi số đo, không đổi kết luận.
+Dò sound card: đầu phiên app phát một tín hiệu ngắn ra từng cặp Analog của FastTrack để biết cặp nào vào LINE IN, nên cắm đổi dây LINE IN / MIC IN vẫn đo đúng. Popup "Đã kiểm tra ngõ" ghi kết quả.
+Tab Rè (Ctrl+Shift+I) lấy đúng ngõ của bài IO008, có nút "Chuẩn bị loa như IO008", nút Đo chuẩn chạy đủ Pink + Chirp, dùng cùng ngưỡng với Auto Test. Nhãn PHÁT → / THU ← hiện rõ ở danh sách bài, khung DISTORTION, tab Rè và ảnh QA.
+Đồ thị chirp ghi rõ KHÔNG CÓ TÍN HIỆU / KHÔNG ĐỦ ĐỘ NHẠY thay cho đường phẳng 0 dB. Thiết bị âm thanh đang bị chiếm thì thử lại ở chế độ chia sẻ và ghi tên thiết bị.
+Hết đơ màn hình khi gửi kết quả cuối phiên ("Đang gửi nền…"). Popup quyết định quan trọng không còn bị phím Enter từ popup trước tự chọn. Popup "Chờ thiết bị" nằm giữa cửa sổ.

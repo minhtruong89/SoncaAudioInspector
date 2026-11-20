@@ -15,7 +15,7 @@ public partial class AudioRouting
     public void ClearForConfigurationChange()
     {
         // Keep already persisted official QA markers available for later retry. This operation only clears the display/RAM.
-        _pendingQaCompletionSession = null; _autoTestSessionFolder = null;
+        _pendingQaCompletionSession = null; _autoTestSessionFolder = null; _lastC360ProductSession = null;
         CancelAndDiscardCurrentMeasurement();
     }
     private void FreezeMeasurementIdentity() => _measurementIdentity = (Application.Current.MainWindow as MainWindow)?.MeasurementContext.Snapshot();
@@ -78,7 +78,7 @@ public partial class AudioRouting
         string detail = $"Serial {context?.Serial} · {context?.Source} · QA {context?.QaVerdict ?? "NONE"} · {comparison.Text} · xác nhận {context?.QaConfirmedAt:O} · {context?.QaConfirmedBy}";
         AppendLog("So sánh QA", detail);
         foreach (var row in _autoTestCases)
-            row.MeasurementValues = row.MeasurementValues.Concat(new[] { new MeasurementValue("So sánh QA", detail) }).ToArray();
+            row.MeasurementValues = row.MeasurementValues.Where(v => v.ThongSo != "So sánh QA").Append(new MeasurementValue("So sánh QA", detail)).ToArray();
     }
     internal Func<bool>? TrialReferenceConfirmation { get; set; }
     private bool ConfirmTrialReference() => !ResultPersistencePolicy.IsTrial

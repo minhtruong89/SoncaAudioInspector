@@ -71,6 +71,7 @@ public sealed record PinkRubBuzzMetrics(bool IsValid, string Reason)
 {
     /// <summary>"Tỷ lệ rè lặp lại": mean pairwise Pearson correlation (%) of the 4–12 kHz envelopes between repeats.</summary>
     public double RepeatCoherencePct { get; init; }
+    public static string DisplayCoherence(double percent) => $"{Math.Max(0, percent):0.0}%";
     public double[] PairCoherencePct { get; init; } = [];
     /// <summary>Mean 4–12 kHz power on frames kept after foreign-noise removal (dBFS).</summary>
     public double HfDbFs { get; init; }
@@ -114,7 +115,7 @@ public sealed record PinkRubBuzzRun(PinkRubBuzzSettings Settings, string Context
     [JsonIgnore] public float[] Background { get; init; } = [];
     public bool IsValid => Metrics.IsValid;
     public string Summary => $"{Verdict}: {Message}" + (Metrics.IsValid
-        ? $"{Environment.NewLine}Rè lặp lại {Metrics.RepeatCoherencePct:0.0}% · cao tần 4–12 kHz {Metrics.HfDbFs:0.0} dBFS · bass mic {Metrics.DriveDbFs:0.0} dBFS · độ nhạy {Metrics.SensitivityDb:0.0} dB · giữ {Metrics.KeptPct:0}% khung"
+        ? $"{Environment.NewLine}Rè lặp lại {PinkRubBuzzMetrics.DisplayCoherence(Metrics.RepeatCoherencePct)} · cao tần 4–12 kHz {Metrics.HfDbFs:0.0} dBFS · bass mic {Metrics.DriveDbFs:0.0} dBFS · độ nhạy {Metrics.SensitivityDb:0.0} dB · giữ {Metrics.KeptPct:0}% khung"
         : "");
 }
 
@@ -268,6 +269,7 @@ public static class PinkRubBuzzAnalysis
             envelope.Add(new((s0 + j * step) / (double)rate, PowerDb(envelopes.Average(e => e[j])), excluded[j]));
         return new(reasons.Count == 0, reasons.Count == 0 ? "Bản thu hợp lệ." : string.Join(" ", reasons))
         {
+            // Average signed Pearson correlations first. Display floors at zero only after aggregation (owner 2026-11-19).
             RepeatCoherencePct = pairs.Average(), PairCoherencePct = pairs.ToArray(), HfDbFs = hf, HfAllDbFs = hfAll, KeptPct = keptPct,
             DriveDbFs = driveMean, DriveSpreadDb = drive.Max() - drive.Min(), BackgroundRmsDbFs = bgRms, BackgroundHfDbFs = bgHf,
             BackgroundLfDbFs = bgLf, BackgroundDriftDb = drift, SensitivityDb = driveMean - bgHf, Repeats = captures.Count,

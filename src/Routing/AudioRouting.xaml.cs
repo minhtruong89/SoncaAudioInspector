@@ -1311,7 +1311,8 @@ public partial class AudioRouting : UserControl
 						Name = test.name,
 						Status = "WAITING",
 						StatusBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(113, 113, 122)),
-						Config = test
+						Config = test,
+						RouteModel = inOutConfig
 					});
 				}
 			}
@@ -4326,8 +4327,24 @@ public partial class AudioRouting : UserControl
 	{
 		if (sender is not FrameworkElement { DataContext: AutoTestCaseItem { Config: not null } dataContext }) return;
 		_allowInlineEffectImpulse = true;
-		if ((dataContext.Status is "PASS" or "FAIL" && (dataContext.ResponseFrequencies.Length > 0 || dataContext.FrequencyShift != null))
-			|| C360ModelDefinition.Matches(_activeInOutConfig) && dataContext.Status == "INVALID")
+		bool isC360 = C360ModelDefinition.Matches(_activeInOutConfig);
+		bool isUnconcluded = dataContext.Status is "INVALID" or "NO_SIGNAL" or "INCONCLUSIVE";
+		if (isC360 && isUnconcluded)
+		{
+			if (!IsTestingBusy) ApplyTestCaseConfig(dataContext.Config);
+			DisplayAutoTestResult(dataContext);
+			AppendLog("TestReview", $"Đang xem lại {dataContext.Id} ({dataContext.StatusDisplay}).");
+			e.Handled = true;
+			if (!IsTestingBusy)
+			{
+				string model = (Application.Current.MainWindow as MainWindow)?.ComboModels.SelectedItem?.ToString() ?? "C360";
+				if (GetC360RetestSession(model) != null)
+					_ = RetestC360InvalidRowAsync(dataContext);
+			}
+			return;
+		}
+		if (dataContext.Status is "PASS" or "FAIL" && (dataContext.ResponseFrequencies.Length > 0 || dataContext.FrequencyShift != null
+			|| dataContext.FeedbackGain != null || dataContext.Config.SpeakerStage is "AcousticRubBuzz" or "MicFeedbackGain"))
 		{
 			if (!IsTestingBusy) ApplyTestCaseConfig(dataContext.Config);
 			DisplayAutoTestResult(dataContext);
@@ -4359,14 +4376,19 @@ public partial class AudioRouting : UserControl
         _reviewedAutoTestCase = test;
         UpdateSampleRateWarning();
         ShowInlineImpulse(test);
-		TxtQualityChartHeading.Text = test.Config.SpeakerStage == "MicFrequencyShift" ? "DI TẦN MIC" : test.Config.SpeakerStage == "MicEffects" ? "ECHO / REVERB" : "DISTORTION";
-		PanelThdInspection.Visibility = test.Config.SpeakerStage is "MicFrequencyShift" or "MicEffects" ? Visibility.Collapsed : Visibility.Visible;
+		TxtQualityChartHeading.Text = test.Config.SpeakerStage == "MicFrequencyShift" ? "DI TẦN MIC"
+			: test.Config.SpeakerStage == "MicEffects" ? "ECHO / REVERB"
+			: test.Config.SpeakerStage == "MicFeedbackGain" ? (test.Config.IsOptional ? "GAIN TRƯỚC HÚ (TÙY CHỌN)" : "GAIN TRƯỚC HÚ")
+			: "DISTORTION";
+		PanelThdInspection.Visibility = test.Config.SpeakerStage is "MicFrequencyShift" or "MicEffects" or "MicFeedbackGain" ? Visibility.Collapsed : Visibility.Visible;
 		if (test.Config.SpeakerStage == "MicFrequencyShift")
 		{
 			ShowC360FrequencyShiftPlot(test); ClearThdPlots(); ShowC360Review(test, _selectedThdInspectFrequencyHz); UpdateMeasurementDetails(); return;
 		}
 		// IO008 Rè (v1.5.6): the chirp Rè graph = the uploaded QA image, and the Rè verdict; not the mic pre-check sweep.
 		if (test.Config.SpeakerStage == "AcousticRubBuzz") { ShowC360RubBuzzResult(test); return; }
+		// IO009 Gain trước hú (owner 2026-11-19, A2): show plot + DISTORTION metrics, always gray when optional.
+		if (test.Config.SpeakerStage == "MicFeedbackGain") { ShowC360FeedbackGainResult(test); return; }
 		if (test.Config.RubBuzzTestFreq is double rubBuzzFrequency)
 		{
 			PlotFreqResponse.Plot.Clear();
@@ -5492,7 +5514,50 @@ public partial class AudioRouting : UserControl
 			AppendLog("Server", "Skipped FAIL upload because not all configured audio devices were connected.");
             throw new IOException("Chưa xác nhận đủ thiết bị audio theo cấu hình.");
 		}
-		List<string> list2 = saved.GraphPaths.Where(File.Exists).Distinct<string>(StringComparer.OrdinalIgnoreCase).ToList();
+		var activeConfig = _activeInOutConfig;
+		var (list2, preparedSteps, faultNote) = await Task.Run(() =>
+		{
+			var existingGraphs = saved.GraphPaths.Where(File.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+			var mappedSteps = saved.Cases.Select((autoTestCaseItem, index) =>
+			{
+				string text7 = string.IsNullOrWhiteSpace(autoTestCaseItem.Id) ? $"IO{index + 1:000}" : autoTestCaseItem.Id;
+				string text8 = !string.IsNullOrEmpty(autoTestCaseItem.Config?.PlaybackOut) ? autoTestCaseItem.Config.PlaybackOut : "Line In 3.5mm";
+				string text9 = !string.IsNullOrEmpty(autoTestCaseItem.Config?.RecordingIn) ? autoTestCaseItem.Config.RecordingIn : "Measurement Mic";
+				string? value4 = null;
+				string? value5 = null;
+				activeConfig?.Devices?.Input?.TryGetValue(text8, out value4);
+				activeConfig?.Devices?.Output?.TryGetValue(text9, out value5);
+				var acquisition = autoTestCaseItem.Acquisition;
+				if (!string.IsNullOrWhiteSpace(acquisition?.PlaybackDeviceName)) value4 = acquisition.PlaybackDeviceName;
+				if (!string.IsNullOrWhiteSpace(acquisition?.RecordingDeviceName)) value5 = acquisition.RecordingDeviceName;
+				string value6 = (string.IsNullOrWhiteSpace(value4) || text8.Contains(value4, StringComparison.OrdinalIgnoreCase)) ? text8 : (text8 + " (" + value4 + ")");
+				string value7 = (string.IsNullOrWhiteSpace(value5) || text9.Contains(value5, StringComparison.OrdinalIgnoreCase)) ? text9 : (text9 + " (" + value5 + ")");
+				double value8 = acquisition?.PlaybackLevelDbfs ?? autoTestCaseItem.Config?.PlaybackLevelDbfs ?? double.NaN;
+				double value9 = acquisition?.ThdLimitPercent ?? autoTestCaseItem.Config?.Thd1000Hz ?? 0.5;
+				string details = $"Out: {value6}{Environment.NewLine}In: {value7}{Environment.NewLine}FRA: {autoTestCaseItem.FreqStatus}{Environment.NewLine}THD&Detail: {autoTestCaseItem.ThdStatus}{Environment.NewLine}Noise: {autoTestCaseItem.NoiseStatus}{Environment.NewLine}Playback Out: {text8}{Environment.NewLine}Recording In: {text9}{Environment.NewLine}Signal Level: {value8:F1} dBFS{Environment.NewLine}App Sample Rate: {acquisition?.PlaybackSampleRate} Hz{Environment.NewLine}Capture Sample Rate: {acquisition?.RecordingSampleRate} Hz{Environment.NewLine}Playback Mode: {(acquisition?.ExclusivePlayback == true ? "EXCL" : "Shared")}{Environment.NewLine}THD Limit: {value9:F1}{Environment.NewLine}Acquisition: {JsonSerializer.Serialize(acquisition)}";
+				details += Environment.NewLine + $"freq_range: [{MeasurementCriteria.Range(autoTestCaseItem.Config).MinimumHz:0.##}, {MeasurementCriteria.Range(autoTestCaseItem.Config).MaximumHz:0.##}] Hz; THD_1000Hz: {value9:0.###}%";
+				details += Environment.NewLine + $"THD_80: {autoTestCaseItem.Config?.EvaluateThd80 == true}; THD_4000: {autoTestCaseItem.Config?.EvaluateThd4000 == true}; TestVolume: {JsonSerializer.Serialize(activeConfig?.TestVolume)}";
+				details += Environment.NewLine + $"AllowLineOutliers: {autoTestCaseItem.Config?.AllowLineOutliers == true}; AllowedLineOutlierPercent: {autoTestCaseItem.Config?.EffectiveLineOutlierPercent ?? 0:0.##}%; SweepLengthSamples: {autoTestCaseItem.Config?.SweepLengthSamples?.ToString() ?? "legacy duration"}";
+				details += Environment.NewLine + autoTestCaseItem.AdditionalStatus + Environment.NewLine + string.Join(Environment.NewLine, autoTestCaseItem.MeasurementValues.Select(v => v.ThongSo + ": " + v.GiaTri));
+				details = AppendResponseLimitQaDetails(details, autoTestCaseItem);
+				details = AudioQaRouteDetails.Header(autoTestCaseItem, activeConfig) + Environment.NewLine + details;
+				bool isOptional = autoTestCaseItem.Config?.IsOptional == true;
+				string? shortReason = null;
+				if (isOptional)
+				{
+					details = C360VerdictPolicy.FormatOptionalStepDetails(autoTestCaseItem, details);
+					shortReason = autoTestCaseItem.OptionalMeasurementSummary;
+				}
+				else if (!C360VerdictPolicy.IsPassStatus(autoTestCaseItem.Status) && !C360VerdictPolicy.IsFailStatus(autoTestCaseItem.Status))
+				{
+					details = C360VerdictPolicy.FormatUnconcludedStepDetails(autoTestCaseItem, details);
+					shortReason = C360VerdictPolicy.ShortUnconcludedReason(autoTestCaseItem);
+				}
+				return new ServerEngine.AudioQaStepResult(text7 + " - " + autoTestCaseItem.Name, autoTestCaseItem.Status, details, isOptional, shortReason);
+			}).ToArray();
+			string conciseNote = AutoTestFaultNotes.Build(saved.Cases, saved.Identity?.OperatorNote);
+			return (existingGraphs, mappedSteps, conciseNote);
+		});
 		string text4 = completedAutoTestSessionFolder ?? AppDomain.CurrentDomain.BaseDirectory;
 		if (list2.Count != saved.Cases.Length)
 		{
@@ -5503,32 +5568,8 @@ public partial class AudioRouting : UserControl
 		AppendLog("Server", $"Upload một log QA cho sản phẩm {serialNumberForUpload}, phiên {uploadSessionId}, gồm {saved.Cases.Length} bài đo.");
         if (!ReferenceEquals(saved, _pendingQaCompletionSession))
             throw new OperationCanceledException("Đã bỏ phiên QA; không gửi kết quả sau khi đổi model hoặc xóa kết quả.");
-		if (!(await ServerEngine.UploadAudioQaResultAsync(steps: saved.Cases.Select(delegate(AutoTestCaseItem autoTestCaseItem, int index)
-		{
-			string text7 = BuildAutoTestId(index);
-			string text8 = ((!string.IsNullOrEmpty(autoTestCaseItem.Config?.PlaybackOut)) ? autoTestCaseItem.Config.PlaybackOut : "Line In 3.5mm");
-			string text9 = ((!string.IsNullOrEmpty(autoTestCaseItem.Config?.RecordingIn)) ? autoTestCaseItem.Config.RecordingIn : "Measurement Mic");
-			string value4 = null;
-			string value5 = null;
-			_activeInOutConfig?.Devices?.Input?.TryGetValue(text8, out value4);
-			_activeInOutConfig?.Devices?.Output?.TryGetValue(text9, out value5);
-				var acquisition = autoTestCaseItem.Acquisition;
-                if (!string.IsNullOrWhiteSpace(acquisition?.PlaybackDeviceName)) value4 = acquisition.PlaybackDeviceName;
-                if (!string.IsNullOrWhiteSpace(acquisition?.RecordingDeviceName)) value5 = acquisition.RecordingDeviceName;
-				string value6 = ((string.IsNullOrWhiteSpace(value4) || text8.Contains(value4, StringComparison.OrdinalIgnoreCase)) ? text8 : (text8 + " (" + value4 + ")"));
-			string value7 = ((string.IsNullOrWhiteSpace(value5) || text9.Contains(value5, StringComparison.OrdinalIgnoreCase)) ? text9 : (text9 + " (" + value5 + ")"));
-			double value8 = acquisition?.PlaybackLevelDbfs ?? autoTestCaseItem.Config?.PlaybackLevelDbfs ?? double.NaN;
-			double value9 = acquisition?.ThdLimitPercent ?? autoTestCaseItem.Config?.Thd1000Hz ?? 0.5;
-			string details = $"Out: {value6}{Environment.NewLine}In: {value7}{Environment.NewLine}FRA: {autoTestCaseItem.FreqStatus}{Environment.NewLine}THD&Detail: {autoTestCaseItem.ThdStatus}{Environment.NewLine}Noise: {autoTestCaseItem.NoiseStatus}{Environment.NewLine}Playback Out: {text8}{Environment.NewLine}Recording In: {text9}{Environment.NewLine}Signal Level: {value8:F1} dBFS{Environment.NewLine}App Sample Rate: {acquisition?.PlaybackSampleRate} Hz{Environment.NewLine}Capture Sample Rate: {acquisition?.RecordingSampleRate} Hz{Environment.NewLine}Playback Mode: {(acquisition?.ExclusivePlayback == true ? "EXCL" : "Shared")}{Environment.NewLine}THD Limit: {value9:F1}{Environment.NewLine}Acquisition: {JsonSerializer.Serialize(acquisition)}";
-			details += Environment.NewLine + $"freq_range: [{MeasurementCriteria.Range(autoTestCaseItem.Config).MinimumHz:0.##}, {MeasurementCriteria.Range(autoTestCaseItem.Config).MaximumHz:0.##}] Hz; THD_1000Hz: {value9:0.###}%";
-            details += Environment.NewLine + $"THD_80: {autoTestCaseItem.Config?.EvaluateThd80 == true}; THD_4000: {autoTestCaseItem.Config?.EvaluateThd4000 == true}; TestVolume: {JsonSerializer.Serialize(_activeInOutConfig?.TestVolume)}";
-            details += Environment.NewLine + $"AllowLineOutliers: {autoTestCaseItem.Config?.AllowLineOutliers == true}; AllowedLineOutlierPercent: {autoTestCaseItem.Config?.EffectiveLineOutlierPercent ?? 0:0.##}%; SweepLengthSamples: {autoTestCaseItem.Config?.SweepLengthSamples?.ToString() ?? "legacy duration"}";
-            details += Environment.NewLine + autoTestCaseItem.AdditionalStatus + Environment.NewLine + string.Join(Environment.NewLine, autoTestCaseItem.MeasurementValues.Select(v => v.ThongSo + ": " + v.GiaTri));
-			details = AppendResponseLimitQaDetails(details, autoTestCaseItem);
-			details = AudioQaRouteDetails.Header(autoTestCaseItem, _activeInOutConfig) + Environment.NewLine + details;
-				return new ServerEngine.AudioQaStepResult(text7 + " - " + autoTestCaseItem.Name, autoTestCaseItem.Status, details, autoTestCaseItem.Config?.IsOptional == true);
-			}), product: uploadProduct!, passed: suitePassed, graphImagePaths: list2, deviceReady: devicesReadyForServerUpload, uploadSessionId: uploadSessionId,
-            configuration: new AudioQaConfiguration(saved.Identity?.ConfigRevisionId, saved.Serial, saved.Identity?.QaVerdict ?? "NONE", isTrial, saved.Model, saved.Identity?.TrialConfigJson, OperatorNote: FeedbackGainDiagnostics.AppendHowlNote(saved.Identity?.OperatorNote, saved.Cases)))))
+		if (!(await ServerEngine.UploadAudioQaResultAsync(steps: preparedSteps, product: uploadProduct!, passed: suitePassed, graphImagePaths: list2, deviceReady: devicesReadyForServerUpload, uploadSessionId: uploadSessionId,
+            configuration: new AudioQaConfiguration(saved.Identity?.ConfigRevisionId, saved.Serial, saved.Identity?.QaVerdict ?? "NONE", isTrial, saved.Model, saved.Identity?.TrialConfigJson, OperatorNote: saved.Identity?.OperatorNote, Note: faultNote))))
 		{
             if (ServerEngine.LastAudioQaRejected)
             {
@@ -5867,7 +5908,7 @@ public partial class AudioRouting : UserControl
                 else SaveFullResponseGraphPng(text3);
 				if (_isExecutingAutoSuite)
 				{
-					_autoTestGraphPaths.Add(text3);
+					UpsertAutoTestGraphPath(text3);
 				}
 				AppendLog("Export", (_testRunner.IsRubBuzzTest ? "Đã lưu ảnh phổ rè/rung: " : "Saved FEQ screenshot: ") + text2);
 			}

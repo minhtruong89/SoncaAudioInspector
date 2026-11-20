@@ -20,7 +20,7 @@ public sealed record AppMe(string StaffId, string Name, string Role);
 public sealed record ConfigPublicKey(string Algorithm, string SignatureFormat, string PublicKeyPem);
 public sealed record AudioQaConfiguration(string? ConfigRevisionId, string? SerialNumber, string QaVerdict = "NONE",
     bool IsTrial = false, string? SpeakerModel = null, string? ConfigSnapshot = null, string Phase = "AUTOTEST", string? TrialStatus = null,
-    string? OperatorNote = null);
+    string? OperatorNote = null, string? Note = null);
 
 public static partial class ServerEngine
 {

@@ -56,6 +56,9 @@ function SendArchive([string]$archive, [string]$command) {
     Write-Host "Binary stdin <- $archive (FileStream -> SSH StandardInput.BaseStream)"
     if ($WhatIf) { return }
     Pace
+    # Windows PowerShell 5.1 opens StandardInput with Console.InputEncoding. On code page 65001 that is UTF-8 with a BOM,
+    # written before the archive bytes, and the remote tar rejects the stream ("does not look like a tar archive", 2026-11-20).
+    try { [Console]::InputEncoding = New-Object Text.UTF8Encoding $false } catch { Write-Host "Không đặt được InputEncoding: $($_.Exception.Message)" }
     $start = [Diagnostics.ProcessStartInfo]::new($ssh)
     $start.UseShellExecute = $false; $start.RedirectStandardInput = $true
     $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true

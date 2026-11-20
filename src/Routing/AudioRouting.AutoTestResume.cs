@@ -8,6 +8,7 @@ public partial class AudioRouting
 {
     private sealed class C360AutoTestResumeSession(string model, string configuration, string serial, string folder, AutoTestCaseItem[] cases) : C360BleRestoreState
     {
+        public C360PortSync? PortSync { get; set; }
         public string Model { get; } = model;
         public string Configuration { get; } = configuration;
         public string Serial { get; } = serial;
@@ -15,10 +16,16 @@ public partial class AudioRouting
         public AutoTestCaseItem[] Cases { get; } = cases;
         public string? MixerKey { get; set; }
         public int Continuations { get; set; }
+        public MeasurementIdentity? Identity { get; set; }
+        public bool HasUploadedOnce { get; set; }
         public Dictionary<C360ElectronicStage, C360ElectronicResult> Completed { get; } = new();
+        /// <summary>Owner 2026-11-19 (A1/A4): latest result for every stage in this product session (including INVALID/INCONCLUSIVE/optional),
+        /// so single-step retests recalculate the full suite verdict and re-upload under the same uploadSessionId.</summary>
+        public Dictionary<C360ElectronicStage, C360ElectronicResult> AllResults { get; } = new();
     }
 
     private C360AutoTestResumeSession? _c360AutoTestResumeSession;
+    private C360AutoTestResumeSession? _lastC360ProductSession;
     private bool _allowInlineEffectImpulse = true;
     private bool _autoTestInterrupted;
 
@@ -45,6 +52,16 @@ public partial class AudioRouting
     {
         var saved = _c360AutoTestResumeSession;
         return saved != null && ResumeIdentityMatches(saved.Serial) && saved.Model == model && saved.Configuration == AutoTestConfigurationKey()
+            && Directory.Exists(saved.Folder) && saved.Cases.SequenceEqual(_autoTestCases)
+            ? saved : null;
+    }
+
+    /// <summary>Owner 2026-11-19 (A4): locates the active or most recently completed C360 product session matching the current model &amp; rows,
+    /// so clicking an INVALID/NO_SIGNAL/INCONCLUSIVE row retests just that step and updates the same uploadSessionId.</summary>
+    private C360AutoTestResumeSession? GetC360RetestSession(string model)
+    {
+        var saved = _c360AutoTestResumeSession ?? _lastC360ProductSession;
+        return saved != null && saved.Model == model && saved.Configuration == AutoTestConfigurationKey()
             && Directory.Exists(saved.Folder) && saved.Cases.SequenceEqual(_autoTestCases)
             ? saved : null;
     }

@@ -67,6 +67,9 @@ public sealed class C360RepeatedBench(IC360ElectronicBench control, AudioBenchPr
             results.Add(await captureBench(run).CaptureAsync(stage, setup, token));
             token.ThrowIfCancellationRequested();
             var first = results[^1];
+            // Owner 2026-11-19 (A1 #7, A6): auto-reference already ran its 3 dedicated captures; preserve INCONCLUSIVE cleanly without repeating or turning into INVALID/FAIL.
+            if (first.MissingReference && string.Equals(first.Status, "INCONCLUSIVE", StringComparison.OrdinalIgnoreCase))
+                return first with { Attempts = results.Select((r, i) => new C360RunAttempt(i + 1, r.Status, r.Summary)).ToArray() };
             if (first.Reference != null && SingleRunMarginPolicy.CanAccept(setup.TestConfiguration?.IsSingleRunMarginEnabled == true,
                 setup.TestConfiguration?.EffectiveSingleRunMarginDb ?? 1, run, first.Status, false, first.ResponseAssessment, out double margin))
                 return first with { Summary = "1/1 lượt đạt. " + SingleRunMarginPolicy.Describe(margin, setup.TestConfiguration!.EffectiveSingleRunMarginDb)

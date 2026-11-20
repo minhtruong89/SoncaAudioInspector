@@ -717,7 +717,7 @@ public partial class AudioEngine : IDisposable
 
 				List<float> capturedSamples = new List<float>();
 
-				string openingStage = "ngo thu '" + activeRecordingDevice.FriendlyName + "'";
+				string openingStage = "ngõ thu '" + activeRecordingDevice.FriendlyName + "'";
 
 				try
 
@@ -817,7 +817,9 @@ public partial class AudioEngine : IDisposable
 
 						{
 
-							FailCapture(e.Exception ?? new IOException("Thiết bị thu dừng trước khi đo xong."));
+							var error = e.Exception ?? new IOException("Thiết bị thu dừng trước khi đo xong.");
+							FailCapture(AudioSessionDiagnostics.IsDeviceInUse(error)
+								? new AudioEndpointInUseException($"THU ← {activeRecordingDevice.FriendlyName}", error) : error);
 
 						}
 
@@ -855,7 +857,7 @@ public partial class AudioEngine : IDisposable
 						playbackProvider = new MonoToStereoSampleProvider(playbackProvider);
 					}
 
-					openingStage = "ngo ph\ufffdt '" + activePlaybackDevice.FriendlyName + "'";
+					openingStage = "ngõ phát '" + activePlaybackDevice.FriendlyName + "'";
 
 					_wasapiOut = new WasapiOut(activePlaybackDevice, UseExclusivePlayback ? AudioClientShareMode.Exclusive : AudioClientShareMode.Shared, useEventSync: false, UseExclusivePlayback ? 50 : 150);
 
@@ -869,7 +871,9 @@ public partial class AudioEngine : IDisposable
 
 						{
 
-							FailCapture(e.Exception ?? new IOException("Thiết bị phát dừng trước khi đo xong."));
+							var error = e.Exception ?? new IOException("Thiết bị phát dừng trước khi đo xong.");
+							FailCapture(AudioSessionDiagnostics.IsDeviceInUse(error)
+								? new AudioEndpointInUseException($"PHÁT → {activePlaybackDevice.FriendlyName}", error) : error);
 
 						}
 
@@ -897,11 +901,11 @@ public partial class AudioEngine : IDisposable
 
 						cancellationToken.ThrowIfCancellationRequested();
 
-						openingStage = "ngo thu '" + activeRecordingDevice.FriendlyName + "'";
+						openingStage = "ngõ thu '" + activeRecordingDevice.FriendlyName + "'";
 
 						_wasapiCapture.StartRecording();
 
-						openingStage = "ngo ph\ufffdt '" + activePlaybackDevice.FriendlyName + "'";
+						openingStage = "ngõ phát '" + activePlaybackDevice.FriendlyName + "'";
 
 						_wasapiOut.Play();
 
@@ -1015,6 +1019,10 @@ public partial class AudioEngine : IDisposable
 
 				}
 
+				catch (COMException ex4) when (AudioSessionDiagnostics.IsDeviceInUse(ex4))
+				{
+					throw new AudioEndpointInUseException(openingStage, ex4);
+				}
 				catch (COMException ex4) when (IsDeviceInvalidated(ex4))
 
 				{

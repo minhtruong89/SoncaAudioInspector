@@ -21,23 +21,35 @@ public sealed record AudioQaAcquisitionSnapshot(double PlaybackLevelDbfs, int Pl
 
 public class AutoTestCaseItem : INotifyPropertyChanged
 {
+	/// <summary>Owner 2026-11-19 (A2): neutral gray brush for optional tests (e.g. IO009), never red/green.</summary>
+	public static readonly SolidColorBrush OptionalBrush = CreateFrozenBrush(161, 161, 170);
+	public static readonly SolidColorBrush DefaultWaitingBrush = CreateFrozenBrush(113, 113, 122);
+
+	private static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b)
+	{
+		var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+		brush.Freeze();
+		return brush;
+	}
+
 	private string _status = "WAITING";
 
-	private Brush _statusBrush = new SolidColorBrush(Color.FromRgb(113, 113, 122));
+	private Brush _statusBrush = DefaultWaitingBrush;
 
 	private string _freqStatus = "ĐANG CHỜ";
 
-	private Brush _freqBrush = new SolidColorBrush(Color.FromRgb(113, 113, 122));
+	private Brush _freqBrush = DefaultWaitingBrush;
 
 	private string _thdStatus = "ĐANG CHỜ";
 
-	private Brush _thdBrush = new SolidColorBrush(Color.FromRgb(113, 113, 122));
+	private Brush _thdBrush = DefaultWaitingBrush;
 
 	public string Id { get; set; } = "";
 
 	public string Name { get; set; } = "";
 	public string DisplayName => Id + " — " + Name;
-    public string RouteText => "IN: " + Config.PlaybackOut + " · OUT: " + Config.RecordingIn;
+    public string RouteText => AudioQaRouteDetails.Route(this, RouteModel);
+    internal InOutConfig? RouteModel { get; set; }
 	public string QualityLabel => Config.SpeakerStage == "MicEffects" ? "• Effect: " : Config.SpeakerStage == "MicFrequencyShift" ? "• Di tần: " : "• Distortion sweep: ";
 
 	public TestConfig Config { get; set; } = new TestConfig();
@@ -61,7 +73,12 @@ public class AutoTestCaseItem : INotifyPropertyChanged
 
 	public string ResponseLevelUnit { get; set; } = "dBFS";
 
-	public AudioQaAcquisitionSnapshot? Acquisition { get; set; }
+    private AudioQaAcquisitionSnapshot? _acquisition;
+    public AudioQaAcquisitionSnapshot? Acquisition
+    {
+        get => _acquisition;
+        set { _acquisition = value; OnPropertyChanged(nameof(RouteText)); }
+    }
 
 	public double[] ResponseFrequencies { get; set; } = Array.Empty<double>();
 
@@ -72,6 +89,14 @@ public class AutoTestCaseItem : INotifyPropertyChanged
 	public StandardAcousticResult? ImpulseResult { get; set; }
 	[System.Text.Json.Serialization.JsonIgnore]
 	public FrequencyShiftResult? FrequencyShift { get; set; }
+	[System.Text.Json.Serialization.JsonIgnore]
+	public FeedbackGainResult? FeedbackGain { get; set; }
+	private string _optionalMeasurementSummary = "";
+	public string OptionalMeasurementSummary
+	{
+		get => _optionalMeasurementSummary;
+		set { _optionalMeasurementSummary = value ?? ""; OnPropertyChanged(nameof(OptionalMeasurementSummary)); OnPropertyChanged(nameof(StatusDisplay)); }
+	}
 	[System.Text.Json.Serialization.JsonIgnore]
 	public RubBuzzMetrics? RubBuzzMetrics { get; set; }
 	[System.Text.Json.Serialization.JsonIgnore]
@@ -120,10 +145,15 @@ public class AutoTestCaseItem : INotifyPropertyChanged
 	{
 		"WAITING" => "ĐANG CHỜ", 
 		"RUNNING" => "ĐANG ĐO", 
+		_ when Config?.IsOptional == true => string.IsNullOrWhiteSpace(_optionalMeasurementSummary)
+			? "TÙY CHỌN"
+			: "TÙY CHỌN · " + _optionalMeasurementSummary,
 		"PASS" => "ĐẠT", 
 		"FAIL" => "KHÔNG ĐẠT", 
 		"RETRY" => "TÍN HIỆU CHƯA ỔN ĐỊNH",
 		"INVALID" => "ĐO KHÔNG HỢP LỆ",
+		"NO_SIGNAL" => "KHÔNG CÓ TÍN HIỆU",
+		"INCONCLUSIVE" => "CHƯA KẾT LUẬN",
         "REVIEW" => "CẦN DUYỆT",
 		_ => _status, 
 	};

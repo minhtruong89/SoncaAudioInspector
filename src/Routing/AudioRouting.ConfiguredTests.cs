@@ -73,27 +73,26 @@ public partial class AudioRouting
                 test.AdditionalResults = results.Append(new ConfiguredTestResult(additionalTest.Metadata.DisplayName, "RUNNING", config.UsesAcousticRubBuzz ? "Đang thu nền và phát pink/chirp…" : "Đang thu nền và phát tone bước…")).ToArray();
                 try
                 {
-                    string route = $"Out: {playback.FriendlyName} · In: {recording.FriendlyName}";
-                    using var pinkLevels = config.UsesAcousticRubBuzz ? new WindowsAudioLevels(playback, recording, config) : null;
+                    bool rattle = config.UsesAcousticRubBuzz;
+                    string route = AudioQaRouteDetails.Format(config.PlaybackOut, playback.FriendlyName, recording.FriendlyName);
+                    using var pinkLevels = rattle ? new WindowsAudioLevels(playback, recording, config) : null;
                     var context = new AdditionalTestContext(_audioEngine.PlaybackSampleRate, Math.Max(32000, _audioEngine.RecordingSampleRate), _testRunner.PlaybackFrequencyScale, route)
-                    { AcquisitionKey = config.UsesAcousticRubBuzz ? PinkRubBuzzContext(config, playback, recording) : "",
-                        ReferenceDirectory = config.UsesAcousticRubBuzz ? PinkRubBuzzDirectory : "" };
-                    var result = await AdditionalTestRegistry.RunAsync(additionalTest, config, context, async (plan, token) =>
+                    { AcquisitionKey = rattle ? PinkRubBuzzContext(config, playback, recording) : "",
+                        ReferenceDirectory = rattle ? PinkRubBuzzDirectory : "" };
+                    Task<ConfiguredTestResult> Run(bool exclusive) => AdditionalTestRegistry.RunAsync(additionalTest, config,
+                        rattle && !exclusive ? context with { AcquisitionKey = context.AcquisitionKey + ":shared" } : context, async (plan, token) =>
                     {
                         if (!_audioEngine.UseExclusivePlayback && AudioEngine.IsWindowsMonoAudioEnabled())
                             throw new InvalidOperationException("Tắt Windows Mono audio trước khi đo để giữ đúng kênh phát/thu.");
                         string contextKey = DiagnosticContextKey();
-                        // Pink rattle needs an unprocessed capture path (Windows effects gate the floor and HF).
-                        _audioEngine.UseExclusiveCapture = config.UsesAcousticRubBuzz;
+                        _audioEngine.UseExclusiveCapture = exclusive;
                         RubBuzzCapturedAudio background; BackgroundAllowance? accepted = null;
-                        if (config.UsesAcousticRubBuzz)
+                        if (rattle)
                         {
                             // Same station allowance and noisy-floor dialog as the manual Rè tab.
-                            (background, accepted) = await RubBuzzManualCapture.GateBackgroundAsync(plan.BackgroundSeconds, async (seconds, ct) =>
-                            {
-                                var bg = await _audioEngine.CaptureSilenceAsync(recording, null, seconds, ct);
-                                return new RubBuzzCapturedAudio(bg.DutSamples, bg.DutSampleRate);
-                            }, LoadRubBuzzBackgroundAllowance, AskRubBuzzBackgroundAsync, () => { }, token);
+                            (background, accepted) = await RubBuzzManualCapture.GateBackgroundAsync(plan.BackgroundSeconds,
+                                (seconds, ct) => CaptureRubBuzzBackgroundAsync(recording, seconds, ct),
+                                LoadRubBuzzBackgroundAllowance, AskRubBuzzBackgroundAsync, () => { }, token);
                         }
                         else
                         {
@@ -119,8 +118,17 @@ public partial class AudioRouting
                                 throw new InvalidOperationException("Route/gain/định dạng thu đã đổi giữa các bước; đo lại.");
                             captures.Add(captured);
                         }
-                        return new AdditionalTestCaptureData(background.SampleRate, background.Samples, captures, route) { Background = accepted };
+                        return new AdditionalTestCaptureData(background.SampleRate, background.Samples, captures, route)
+                            { Background = accepted, CaptureMode = exclusive ? "WASAPI Exclusive" : "WASAPI Shared" };
                     }, cancellation.Token);
+                    bool oldExclusivePlayback = _audioEngine.UseExclusivePlayback;
+                    ConfiguredTestResult result;
+                    try
+                    {
+                        result = rattle ? await WithRubBuzzSharedFallbackAsync(playback, recording, Run, cancellation.Token)
+                            : await Run(false);
+                    }
+                    finally { _audioEngine.UseExclusivePlayback = oldExclusivePlayback; }
                     Add(result);
                 }
                 catch (OperationCanceledException) { throw; }
@@ -130,7 +138,7 @@ public partial class AudioRouting
                     var help = RubBuzzFailureGuide.Explain(ex);
                     bool deviceError = config.UsesAcousticRubBuzz && (ex is System.Runtime.InteropServices.COMException or NotSupportedException or System.IO.IOException
                         or UnauthorizedAccessException || AudioSessionDiagnostics.IsDeviceInUse(ex));
-                    Add(new(additionalTest.Metadata.DisplayName, "INVALID", (deviceError ? "Không mở được mic Exclusive: " : "Không hoàn tất bản thu: ")
+                    Add(new(additionalTest.Metadata.DisplayName, "INVALID", (deviceError ? "Không mở được thiết bị âm thanh: " : "Không hoàn tất bản thu: ")
                         + GetMeasurementErrorMessage(ex) + (help != null ? " · " + help.Compact : "")));
                 }
                 finally { _audioEngine.UseExclusiveCapture = false; _audioEngine.StopAllAudio(); }

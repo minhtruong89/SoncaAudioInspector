@@ -6,6 +6,7 @@ public enum RubBuzzSoundChoice { PinkAndChirp, Pink, Chirp, SlowChirp, Sweep512K
 public sealed record RubBuzzManualResult(PinkRubBuzzRun? Pink, ChirpRubBuzzRun? Chirp, RubBuzzSoundChoice Choice)
 {
     public bool AllowsStandard => RubBuzzManualCapture.AllowsStandard(Choice);
+    public bool AbsoluteOnly { get; init; }
     public ChirpImpulsiveResult? Impulsive { get; init; }
     public BroadbandPinkResult? Broadband { get; init; }
     public RubBuzzLevelDiagnostics? Levels { get; init; }
@@ -22,6 +23,15 @@ public static class RubBuzzManualCapture
         "Sweep 20 Hz–20 kHz · 512K (giống REW)",
         "Pink dải rộng (dạng IEC/AES) · méo không kết hợp", "Chẩn đoán theo mức"];
     public static bool AllowsStandard(RubBuzzSoundChoice choice) => choice is >= RubBuzzSoundChoice.PinkAndChirp and <= RubBuzzSoundChoice.Chirp;
+    public static string InvalidCaptureLevels(float[][] captures, float[] background)
+    {
+        static double Level(float[] samples) => 10 * Math.Log10(Math.Max(1e-20, samples.Average(v => (double)v * v)));
+        if (background.Length == 0 || captures.Length == 0 || captures.Any(c => c.Length == 0)) return "Mức thu và SNR chưa xác định.";
+        double low = captures.Min(Level), floor = Level(background);
+        return double.IsFinite(low) && double.IsFinite(floor)
+            ? $"RMS bản thu thấp nhất {low:0.0} dBFS · nền {floor:0.0} dBFS · SNR RMS ước tính {low - floor:0.0} dB."
+            : "Mức thu và SNR chưa xác định do mẫu thu không hữu hạn.";
+    }
     public static RubBuzzSoundChoice DefaultChoice(TestConfig? config) => config?.RubBuzzMode switch
         { "PinkNoise" => RubBuzzSoundChoice.Pink, "Chirp" => RubBuzzSoundChoice.Chirp, _ => RubBuzzSoundChoice.PinkAndChirp };
     public static TestConfig Configuration(TestConfig? source, RubBuzzSoundChoice choice)
@@ -71,14 +81,14 @@ public static class RubBuzzManualCapture
         Func<AdditionalTestStepStimulus, CancellationToken, Task<RubBuzzCapturedAudio>> stepAsync,
         Action validateContext, Action<bool> exclusiveCapture, Action stop, CancellationToken token,
         Func<BackgroundAllowance>? allowance = null, Func<BackgroundCheck, CancellationToken, Task<bool>>? askRetry = null,
-        BroadbandPinkSettings? broadband = null, ChirpImpulsiveSettings? impulsive = null)
+        BroadbandPinkSettings? broadband = null, ChirpImpulsiveSettings? impulsive = null, bool useExclusive = true)
     {
         var config = Configuration(source, choice);
         (impulsive ?? new ChirpImpulsiveSettings()).Validate();
         var plan = AcousticRubBuzzConfiguredTest.PlanManual(config, context, choice, broadband);
         try
         {
-            token.ThrowIfCancellationRequested(); validateContext(); exclusiveCapture(true);
+            token.ThrowIfCancellationRequested(); validateContext(); exclusiveCapture(useExclusive);
             var (background, accepted) = await GateBackgroundAsync(plan.BackgroundSeconds, backgroundAsync,
                 allowance ?? (() => BackgroundAllowance.Default), askRetry, validateContext, token);
             AcousticRubBuzzConfiguredTest.Validate(config, context with { RecordingSampleRate = background.SampleRate });
@@ -96,10 +106,11 @@ public static class RubBuzzManualCapture
             var analysisContext = context with { SaveAsStandard = false,
                 ReferenceDirectory = AllowsStandard(choice) ? context.ReferenceDirectory : "" };
             var result = await Task.Run(() => AcousticRubBuzzConfiguredTest.AnalyzeManual(config,
-                new(background.SampleRate, background.Samples, captures, context.RouteLabel) { Background = accepted },
+                new(background.SampleRate, background.Samples, captures, context.RouteLabel)
+                    { Background = accepted, CaptureMode = useExclusive ? "WASAPI Exclusive" : "WASAPI Shared" },
                 analysisContext, choice, plan, broadband, impulsive), token);
             token.ThrowIfCancellationRequested();
-            return result;
+            return result with { AbsoluteOnly = context.AbsoluteOnly };
         }
         finally { try { exclusiveCapture(false); } finally { stop(); } }
     }

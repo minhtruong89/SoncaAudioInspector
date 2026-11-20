@@ -36,6 +36,30 @@ public static class LocalQaStorage
             !File.Exists(path) || !string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), folder, StringComparison.OrdinalIgnoreCase))
             || !graphPaths.Select(Path.GetFileName).SequenceEqual(pending.GraphFiles, StringComparer.OrdinalIgnoreCase)) return null;
         string path = Path.Combine(folder, PendingName);
+        // Owner 2026-11-19 (A1/A4): re-uploading the same session (same uploadSessionId after retesting an INVALID step)
+        // supersedes any earlier completion/rejection marker in this session folder.
+        string completePath = Path.Combine(folder, CompleteName);
+        if (File.Exists(completePath))
+        {
+            var previous = AtomicFile.ReadJson<UploadedGraphs>(completePath);
+            if (previous?.UploadSessionId == pending.UploadSessionId)
+            {
+                try { File.Delete(completePath); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+        string rejectedPath = Path.Combine(folder, RejectedName);
+        if (File.Exists(rejectedPath))
+        {
+            var previousRejected = AtomicFile.ReadJson<RejectedUpload>(rejectedPath);
+            if (previousRejected?.UploadSessionId == pending.UploadSessionId)
+            {
+                try { File.Delete(rejectedPath); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
         AtomicFile.WriteAllText(path, JsonSerializer.Serialize(pending), keepBackup: false);
         return path;
 
@@ -61,7 +85,7 @@ public static class LocalQaStorage
         if (File.Exists(completePath))
         {
             var complete = AtomicFile.ReadJson<UploadedGraphs>(completePath);
-            if (complete?.UploadSessionId == pending.UploadSessionId) return null;
+            if (complete?.UploadSessionId == pending.UploadSessionId && complete.UploadedUtc >= pending.CreatedUtc) return null;
         }
         return pending;
     }

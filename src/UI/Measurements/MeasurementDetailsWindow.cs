@@ -26,6 +26,7 @@ public sealed class MeasurementDetailsWindow : Window
     public ImpedanceView? Impedance { get; private set; }
     private readonly TabControl _tabs = new();
     private readonly TabItem _impedanceTab = new() { Header = "Impedance · Ω" };
+    private readonly TabItem _rubBuzzTab = new() { Header = RubBuzzTabHeader };
     private readonly PinkNoiseView _pinkNoise;
     public RubBuzzView RubBuzz { get; } = new();
     public Func<RubBuzzSoundChoice, System.Threading.CancellationToken, Task<RubBuzzManualResult>>? RubBuzzRunner { get; set; }
@@ -34,7 +35,13 @@ public sealed class MeasurementDetailsWindow : Window
     private readonly System.Windows.Threading.DispatcherTimer _routeTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     public void RefreshRouteInfo()
     {
-        try { var route = RouteProvider?.Invoke(); _route.Text = MeasurementRouteInfo.Format(route); RubBuzz.RefreshPlaybackRoute(route?.PlaybackId); RubBuzz.RefreshCapturePathEnhancements(); }
+        try
+        {
+            bool rattle = _tabs.SelectedItem == _rubBuzzTab;
+            _route.Visibility = rattle ? Visibility.Collapsed : Visibility.Visible;
+            if (rattle) { RubBuzz.RefreshTestRoute(); RubBuzz.RefreshCapturePathEnhancements(); }
+            else _route.Text = MeasurementRouteInfo.Format(RouteProvider?.Invoke());
+        }
         catch { _route.Text = MeasurementRouteInfo.Format(null); }
     }
     public Func<PinkNoiseSettings, System.Threading.CancellationToken, Task>? PinkNoiseRunner { get; set; }
@@ -86,10 +93,12 @@ public sealed class MeasurementDetailsWindow : Window
         rattleTools.Items.Add(new TabItem { Header = "Rò khí · ALD", Content = _airLeak });
         rattleTools.Items.Add(new TabItem { Header = "Pink nghe thử · v1.1", Content = new ScrollViewer { Content = _pinkNoise, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } });
         RubBuzz.AdvancedTools.Children.Add(rattleTools);
-        tabs.Items.Add(new TabItem { Header = RubBuzzTabHeader, Content = new ScrollViewer { Content = RubBuzz, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } });
+        _rubBuzzTab.Content = RubBuzz; tabs.Items.Add(_rubBuzzTab);
         tabs.Items.Add(new TabItem { Header = "Phiên bản · " + AppVersion.Display, Content = VersionInfo });
-        tabs.SelectionChanged += (_, _) =>
+        tabs.SelectionChanged += async (_, e) =>
         {
+            if (!ReferenceEquals(e.Source, tabs)) return;
+            if (e.RemovedItems.Contains(_rubBuzzTab)) await RubBuzz.LeaveRouteAsync();
             RefreshRouteInfo();
             if (tabs.SelectedItem == _impedanceTab && Impedance == null && ImpedanceFactory != null)
                 _impedanceTab.Content = new ScrollViewer { Content = Impedance = ImpedanceFactory(), VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -97,7 +106,7 @@ public sealed class MeasurementDetailsWindow : Window
         Closing += async (_, e) => { if (Impedance?.IsBusy != true) return; e.Cancel = true; await Impedance.StopForShutdownAsync(); Close(); };
         _routeTimer.Tick += (_, _) => RefreshRouteInfo();
         Loaded += (_, _) => { RefreshRouteInfo(); _routeTimer.Start(); };
-        Closed += (_, _) => { _routeTimer.Stop(); CancelDiagnostic(); RubBuzz.Shutdown(); };
+        Closed += async (_, _) => { _routeTimer.Stop(); CancelDiagnostic(); await RubBuzz.LeaveRouteAsync(); RubBuzz.Shutdown(); };
     }
 
     private async Task RunPinkNoiseAsync(PinkNoiseSettings settings)

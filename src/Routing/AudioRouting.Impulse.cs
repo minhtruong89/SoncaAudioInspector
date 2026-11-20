@@ -53,7 +53,11 @@ public partial class AudioRouting
                 ImpedanceFactory = () => new ImpedanceView(RunImpedanceCaptureAsync, ImpedanceContext, GetUserDataDirectory()) };
             if (Window.GetWindow(this) is MainWindow shell) _measurementDetailsWindow.VersionInfo.Bind(shell.UpdateState);
             _measurementDetailsWindow.RubBuzz.RouteProvider = CurrentMeasurementRoute;
-            _measurementDetailsWindow.RubBuzz.CapturePathProvider = CurrentCapturePathEnhancements;
+            _measurementDetailsWindow.RubBuzz.TestRouteProvider = ReadRubBuzzRoute;
+            _measurementDetailsWindow.RubBuzz.PrepareRunner = PrepareManualRubBuzzAsync;
+            _measurementDetailsWindow.RubBuzz.ReleasePreparation = ReleaseManualRubBuzzAsync;
+            _measurementDetailsWindow.RubBuzz.CapturePathProvider = () => ReadRubBuzzRoute() is { IsMatched: true } route
+                ? CapturePathEnhancements.Read(route.RecordingId, route.RecordingName) : null;
             _measurementDetailsWindow.RubBuzz.RenderDevicesProvider = RubBuzzAudioPlayer.ActiveDevices;
             _measurementDetailsWindow.RubBuzz.FailureNotifier = ShowRubBuzzFailure;
             SelectionChangedEventHandler routeChanged = (_, _) => Dispatcher.BeginInvoke(() => _measurementDetailsWindow?.RefreshRouteInfo());
@@ -121,9 +125,7 @@ public partial class AudioRouting
         _measurementDetailsWindow?.RefreshRouteInfo();
         bool discarded = _discardCurrentMeasurementRequested && !pending;
         if (_isExecutingAutoSuite && _reviewedAutoTestCase != null && !discarded) pending = false;
-        var selectedRubBuzzTest = _reviewedAutoTestCase ?? _currentRunningTestCase;
-        _measurementDetailsWindow?.RubBuzz.SetDefaultChoice(selectedRubBuzzTest?.Config ?? _appliedTestConfig,
-            selectedRubBuzzTest ?? (object?)_appliedTestConfig);
+        _measurementDetailsWindow?.RubBuzz.SetTestRoutes(_activeInOutConfig?.Tests ?? []);
         if (!pending && !discarded && _reviewedAutoTestCase is { Config.SpeakerStage: "MicFrequencyShift" } frequencyShift)
         {
             TxtMeasurementSummary.Text = frequencyShift.ThdStatus;
@@ -144,7 +146,8 @@ public partial class AudioRouting
         var pinkTest = _reviewedAutoTestCase ?? _currentRunningTestCase;
         var pink = pending || discarded ? null : pinkTest?.AdditionalResults.Select(r => r.PinkRubBuzz).LastOrDefault(r => r != null);
         var chirp = pending || discarded ? null : pinkTest?.AdditionalResults.Select(r => r.ChirpRubBuzz).LastOrDefault(r => r != null);
-        _measurementDetailsWindow.RubBuzz.Update(pink, chirp, PinkRubBuzzDirectory, pinkTest?.Config.RubBuzzPinkLimits, pinkTest?.Config.RubBuzzChirpLimits);
+        _measurementDetailsWindow.RubBuzz.Update(pink, chirp, PinkRubBuzzDirectory, pinkTest?.Config.RubBuzzPinkLimits,
+            pinkTest?.Config.RubBuzzChirpLimits, absoluteOnly: pinkTest?.Config.SpeakerStage == C360ModelDefinition.AcousticRubBuzzStage);
         var measured = pending || discarded ? new Dictionary<double, double>() : _reviewedAutoTestCase != null
             ? _reviewedAutoTestCase.ResponseFrequencies.Zip(_reviewedAutoTestCase.ResponseLevels).ToDictionary(p => p.First, p => p.Second)
             : _freqs.Zip(_dbValues).ToDictionary(p => p.First, p => p.Second);

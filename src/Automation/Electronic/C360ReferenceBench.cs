@@ -77,8 +77,9 @@ public sealed class C360ReferenceBench(IC360ElectronicBench bench, C360ModelPlan
             {
                 var made = await SaveReferenceAsync(stage, setup, test, key, path, token);
                 if (made.Reference == null)
-                    return made with { Status = made.Status == "PASS" ? "INVALID" : made.Status, MissingReference = true,
-                        Summary = "Tự lấy LINE CHUẨN chưa xong — không kết luận. " + made.Summary };
+                    // Owner 2026-11-19 (A1 #7, A6): unfinished auto-LINE-CHUẨN is always INCONCLUSIVE (yellow), never FAIL.
+                    return made with { Status = "INCONCLUSIVE", MissingReference = true,
+                        Summary = "Tự lấy LINE CHUẨN chưa xong — chưa kết luận. " + made.Summary };
                 saved = made.Reference;
                 autoNote = "ĐÃ TỰ LẤY LINE CHUẨN từ loa đang đo. ";
             }
@@ -106,32 +107,74 @@ public sealed class C360ReferenceBench(IC360ElectronicBench bench, C360ModelPlan
             return new C360ElectronicResult(stage, "PASS", "ĐÃ CÓ LINE CHUẨN khớp cấu hình; bỏ qua đo lại.") { Reference = existing, FrequencyShift = existing.FrequencyShift };
         return await SaveReferenceAsync(stage, setup, test, key, path, token);
     }
+    /// <summary>Owner 2026-11-19 (A6): returns why a capture cannot count toward a response LINE CHUẨN, or null if usable.
+    /// THD exceeding limit does NOT disqualify a response-reference capture (THD still judges the product measurement).</summary>
+    public static string? ResponseReferenceSkipReason(C360ElectronicStage stage, C360ElectronicResult current)
+    {
+        if (stage is C360ElectronicStage.MicEffects or C360ElectronicStage.MicFrequencyShift)
+            return current.Status == "PASS" ? null : $"trạng thái {current.Status}";
+        if (string.Equals(current.Status, "NO_SIGNAL", StringComparison.OrdinalIgnoreCase))
+            return "không có tín hiệu";
+        if (current.Measurement == null)
+            return "thiếu dữ liệu đáp tuyến";
+        if (current.Measurement.IsClipped)
+            return "bản thu bị clipping";
+        if (string.Equals(current.Measurement.Validity, "INVALID", StringComparison.OrdinalIgnoreCase))
+            return "bản thu không hợp lệ";
+        if (current.Status is not ("PASS" or "FAIL"))
+        {
+            string line = C360VerdictPolicy.FirstMeaningfulLine(current.Summary);
+            return line.Length > 0 ? line : $"trạng thái {current.Status}";
+        }
+        return null;
+    }
+
     private async Task<C360ElectronicResult> SaveReferenceAsync(C360ElectronicStage stage, C360ElectronicSetup setup, TestConfig test,
         string key, string path, CancellationToken token)
     {
-        var captures = new List<C360ElectronicResult>(); string reason = "";
+        var captures = new List<(int Run, C360ElectronicResult Result)>();
+        var skipReasons = new List<string>();
+        string pairReason = "";
+        C360ElectronicResult? lastCapture = null;
         for (int run = 1; run <= 3; run++)
         {
             token.ThrowIfCancellationRequested();
             var current = await (runBench?.Invoke(run) ?? bench).CaptureAsync(stage, setup, token);
-            if (current.Status != "PASS") return current with { Summary = $"Chưa lưu LINE CHUẨN (lượt {run}/3): " + current.Summary };
-            captures.Add(current);
+            lastCapture = current;
+            if (ResponseReferenceSkipReason(stage, current) is string skip)
+            {
+                skipReasons.Add($"lượt {run}/3 không tính vào chuẩn vì {skip}");
+                if (captures.Count + (3 - run) < 2) break;
+                continue;
+            }
+            captures.Add((run, current));
             for (int previous = 0; previous < captures.Count - 1; previous++)
             {
                 try
                 {
-                    var reference = C360Reference.Create(key, new[] { captures[previous], current }, test);
+                    var reference = C360Reference.Create(key, new[] { captures[previous].Result, current }, test);
                     token.ThrowIfCancellationRequested(); Directory.CreateDirectory(referenceDirectory);
                     AtomicFile.WriteAllText(path, JsonSerializer.Serialize(reference, C360Reference.Json));
                     var readback = JsonSerializer.Deserialize<C360Reference>(File.ReadAllText(path), C360Reference.Json);
                     if (readback?.Key != key || readback.Runs < 2) throw new IOException("Không đọc lại được mẫu chuẩn vừa lưu.");
-                    return current with { Summary = $"ĐÃ LƯU LINE CHUẨN: trung bình lượt {previous + 1} và {run}. " + current.Summary, Reference = reference };
+                    return current with { Status = "PASS", Summary = $"ĐÃ LƯU LINE CHUẨN: trung bình lượt {captures[previous].Run} và {run}. " + current.Summary, Reference = reference };
                 }
-                catch (InvalidOperationException ex) { reason = $"Lượt {previous + 1} và {run}: " + ex.Message; }
+                catch (InvalidOperationException ex) { pairReason = $"lượt {captures[previous].Run} và {run} không tính vào chuẩn vì {ex.Message}"; }
             }
         }
-        int? offRate = captures.Select(c => c.Measurement?.SampleRate).FirstOrDefault(rate => rate is > 0 and not 44100);
-        return captures.Last() with { Status = "INVALID", Summary = "CHUẨN CHƯA ỔN ĐỊNH: đã đo 3 lượt đạt tiêu chí riêng, chưa có hai lượt lặp ổn định. " + reason
-            + (offRate is int rate ? $" Bản thu ở {rate} Hz, chuẩn đo 44100 Hz: đặt Default Format ngõ thu 44,1 kHz rồi tìm lại." : "") };
+        int? offRate = captures.Select(c => c.Result.Measurement?.SampleRate).FirstOrDefault(rate => rate is > 0 and not 44100);
+        var reasons = new List<string>(skipReasons);
+        if (pairReason.Length > 0) reasons.Add(pairReason);
+        string details = reasons.Count > 0 ? string.Join("; ", reasons) : "chưa có hai lượt lặp ổn định.";
+        string prefix = captures.Count >= 2
+            ? "CHUẨN CHƯA ỔN ĐỊNH: đã đo 3 lượt hợp lệ, chưa có hai lượt lặp ổn định. "
+            : "Chưa lưu LINE CHUẨN: ";
+        return (lastCapture ?? new C360ElectronicResult(stage, "INCONCLUSIVE", details)) with
+        {
+            Status = "INCONCLUSIVE",
+            MissingReference = true,
+            Summary = prefix + details
+                + (offRate is int rate ? $" Bản thu ở {rate} Hz, chuẩn đo 44100 Hz: đặt Default Format ngõ thu 44,1 kHz rồi tìm lại." : "")
+        };
     }
 }

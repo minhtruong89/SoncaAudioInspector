@@ -858,51 +858,63 @@ namespace SoncaAudioInspector
                 var graphSnapshot = graphImagePaths?.Distinct(StringComparer.OrdinalIgnoreCase).ToArray() ?? Array.Empty<string>();
                 if (graphSnapshot.Length == 0 || graphSnapshot.Any(path => !File.Exists(path)))
                     throw new IOException("Chưa có đủ ảnh QA để gửi; kết quả chưa được xác nhận upload.");
-                pendingPath = LocalQaStorage.SavePending(new PendingAudioQaUpload(CurrentApiBaseUrl, StaffID ?? "",
-                    product.Id, passed, stepSnapshot, graphSnapshot.Select(Path.GetFileName).Select(name => name!).ToArray(),
-                    deviceReady, uploadSessionId ?? "", DateTimeOffset.UtcNow, Configuration: configuration, OperatorNote: operatorNote), graphSnapshot);
-                LastAudioQaPendingPath = pendingPath;
-                if (pendingPath == null) throw new IOException("Chưa lưu được phiếu QA chờ gửi trên đĩa; chưa gửi HTTP.");
-
-                var images = new List<object>();
-                foreach (string imagePath in graphSnapshot)
+                string apiBase = CurrentApiBaseUrl, staff = StaffID ?? "", staffName = UserName ?? "";
+                string qaRoot = LocalQaStorage.Root;
+                // Owner 2026-11-19 (A5): keep disk writes, PNG base64 encoding and JSON payload serialization off the WPF UI thread.
+                var (savedPending, payloadBytes) = await Task.Run(async () =>
                 {
-                    if (!File.Exists(imagePath)) continue;
-                    byte[] imageBytes = await File.ReadAllBytesAsync(imagePath);
-                    string fileName = Path.GetFileName(imagePath);
-                    images.Add(new
+                    string? localPending = LocalQaStorage.SavePending(new PendingAudioQaUpload(apiBase, staff,
+                        product.Id, passed, stepSnapshot, graphSnapshot.Select(Path.GetFileName).Select(name => name!).ToArray(),
+                        deviceReady, uploadSessionId ?? "", DateTimeOffset.UtcNow, Configuration: configuration, OperatorNote: operatorNote), graphSnapshot, qaRoot);
+                    if (localPending == null) throw new IOException("Chưa lưu được phiếu QA chờ gửi trên đĩa; chưa gửi HTTP.");
+
+                    var images = new List<object>(graphSnapshot.Length);
+                    foreach (string imagePath in graphSnapshot)
                     {
-                        fileName = string.IsNullOrWhiteSpace(fileName) ? "audio-qa-response.png" : fileName,
-                        contentType = "image/png",
-                        base64 = Convert.ToBase64String(imageBytes)
-                    });
-                }
+                        if (!File.Exists(imagePath)) continue;
+                        byte[] imageBytes = await File.ReadAllBytesAsync(imagePath);
+                        string fileName = Path.GetFileName(imagePath);
+                        images.Add(new
+                        {
+                            fileName = string.IsNullOrWhiteSpace(fileName) ? "audio-qa-response.png" : fileName,
+                            contentType = "image/png",
+                            base64 = Convert.ToBase64String(imageBytes)
+                        });
+                    }
 
-                var body = new Dictionary<string, object?>
-                {
-                    ["productId"] = product.Id, ["status"] = passed ? "PASS" : "FAIL",
-                    ["note"] = passed ? "Audio auto test passed" : "Audio auto test failed",
-                    ["deviceReady"] = deviceReady, ["uploadSessionId"] = string.IsNullOrWhiteSpace(uploadSessionId) ? null : uploadSessionId.Trim(),
-                    ["staffName"] = UserName, ["steps"] = stepList, ["images"] = images,
-                    ["qaVerdict"] = configuration?.QaVerdict ?? "NONE", ["appVerdict"] = passed ? "PASS" : "FAIL",
-                    ["station"] = Environment.MachineName, ["appVersion"] = AppVersion.Numeric
-                };
-                if (operatorNote != null) body["operatorNote"] = operatorNote;
-                if (!string.IsNullOrWhiteSpace(configuration?.ConfigRevisionId)) body["configRevisionId"] = configuration.ConfigRevisionId;
-                if (configuration?.IsTrial == true)
-                {
-                    if (string.IsNullOrWhiteSpace(configuration.SpeakerModel) || string.IsNullOrWhiteSpace(configuration.ConfigSnapshot))
-                        throw new InvalidOperationException("Thiếu snapshot cấu hình thử; không gửi vào dữ liệu chính thức.");
-                    body["speakerModel"] = configuration.SpeakerModel;
-                    body["phase"] = configuration.Phase;
-                    body["configSnapshot"] = JsonSerializer.Deserialize<JsonElement>(configuration.ConfigSnapshot);
-                }
-                string? serialNumber = configuration?.SerialNumber ?? product.SerialNumber;
-                if (!string.IsNullOrWhiteSpace(serialNumber)) body["serialNumber"] = serialNumber;
+                    var body = new Dictionary<string, object?>
+                    {
+                        ["productId"] = product.Id, ["status"] = passed ? "PASS" : "FAIL",
+                        ["note"] = configuration?.Note ?? (passed ? "Audio auto test passed" : "Audio auto test failed"),
+                        ["deviceReady"] = deviceReady, ["uploadSessionId"] = string.IsNullOrWhiteSpace(uploadSessionId) ? null : uploadSessionId.Trim(),
+                        ["staffName"] = staffName, ["steps"] = stepList, ["images"] = images,
+                        ["qaVerdict"] = configuration?.QaVerdict ?? "NONE", ["appVerdict"] = passed ? "PASS" : "FAIL",
+                        ["station"] = Environment.MachineName, ["appVersion"] = AppVersion.Numeric
+                    };
+                    if (operatorNote != null) body["operatorNote"] = operatorNote;
+                    if (!string.IsNullOrWhiteSpace(configuration?.ConfigRevisionId)) body["configRevisionId"] = configuration.ConfigRevisionId;
+                    if (configuration?.IsTrial == true)
+                    {
+                        if (string.IsNullOrWhiteSpace(configuration.SpeakerModel) || string.IsNullOrWhiteSpace(configuration.ConfigSnapshot))
+                            throw new InvalidOperationException("Thiếu snapshot cấu hình thử; không gửi vào dữ liệu chính thức.");
+                        body["speakerModel"] = configuration.SpeakerModel;
+                        body["phase"] = configuration.Phase;
+                        body["configSnapshot"] = JsonSerializer.Deserialize<JsonElement>(configuration.ConfigSnapshot);
+                    }
+                    string? serialNumber = configuration?.SerialNumber ?? product.SerialNumber;
+                    if (!string.IsNullOrWhiteSpace(serialNumber)) body["serialNumber"] = serialNumber;
+                    return (localPending, JsonSerializer.SerializeToUtf8Bytes(body, JsonOptions));
+                });
+                pendingPath = savedPending;
+                LastAudioQaPendingPath = pendingPath;
+                int expectedImages = graphSnapshot.Length;
+
+                var jsonContent = new ByteArrayContent(payloadBytes);
+                jsonContent.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
                 using HttpResponseMessage response = await SendAuthorizedAsync(
                     HttpMethod.Post,
                     configuration?.IsTrial == true ? "api/app/qa-audio/trial" : "api/app/qa-audio",
-                    JsonContent(body));
+                    jsonContent);
                 string responseJson = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
                 {
@@ -911,12 +923,12 @@ namespace SoncaAudioInspector
                     if (response.StatusCode == HttpStatusCode.Conflict && error.Message.Contains("Cấu hình chưa được duyệt", StringComparison.OrdinalIgnoreCase))
                     {
                         LastAudioQaRejected = true; LastError = UnapprovedConfigurationMessage;
-                        if (pendingPath != null) LocalQaStorage.RejectPending(pendingPath, LastError);
+                        if (pendingPath != null) await Task.Run(() => LocalQaStorage.RejectPending(pendingPath, LastError));
                         LastAudioQaPendingPath = null;
                         return false;
                     }
                     if (pendingPath != null && response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-                        LocalQaStorage.MarkRetrySafe(pendingPath);
+                        await Task.Run(() => LocalQaStorage.MarkRetrySafe(pendingPath));
                     return false;
                 }
 
@@ -927,16 +939,20 @@ namespace SoncaAudioInspector
                     throw new IOException("Server chưa xác nhận lưu vào dữ liệu thử; giữ phiếu chờ tại máy.");
                 string logId = log.TryGetProperty("logId", out var id) ? id.GetString() ?? "" : "";
                 string[] urls = log.TryGetProperty("imageUrl", out var imageUrl) ? (imageUrl.GetString() ?? "").Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries) : [];
-                if (string.IsNullOrWhiteSpace(logId) || urls.Length != images.Count)
+                if (string.IsNullOrWhiteSpace(logId) || urls.Length != expectedImages)
                 {
-                    LastError = $"Server đã nhận yêu cầu nhưng chưa xác nhận đủ ảnh QA ({urls.Length}/{images.Count}). Giữ bản lưu tại máy; kiểm tra log server trước khi gửi lại.";
+                    LastError = $"Server đã nhận yêu cầu nhưng chưa xác nhận đủ ảnh QA ({urls.Length}/{expectedImages}). Giữ bản lưu tại máy; kiểm tra log server trước khi gửi lại.";
                     return false;
                 }
-                LastAudioQaUploadReceipt = new((int)response.StatusCode, logId, urls, images.Count, dataSet);
+                LastAudioQaUploadReceipt = new((int)response.StatusCode, logId, urls, expectedImages, dataSet);
                 if (pendingPath != null)
                 {
-                    try { LocalQaStorage.MarkUploaded(LocalQaStorage.Root, pendingPath); }
-                    catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Ghi xác nhận upload QA: " + ex.Message); }
+                    string markPath = pendingPath;
+                    await Task.Run(() =>
+                    {
+                        try { LocalQaStorage.MarkUploaded(qaRoot, markPath); }
+                        catch (Exception ex) { System.Diagnostics.Debug.WriteLine("Ghi xác nhận upload QA: " + ex.Message); }
+                    });
                 }
                 _ = Task.Run(() =>
                 {
@@ -962,11 +978,16 @@ namespace SoncaAudioInspector
                 && (configuration?.TrialStatus is null or "PASS" or "FAIL");
 
         public static bool IsCompletedAutoTestPending(PendingAudioQaUpload? pending)
-            => pending != null
-                && IsCompletedAutoTestConfiguration(pending.Configuration)
-                && pending.Steps is { Length: > 0 }
-                && pending.Steps.Any(s => s?.Optional != true)
-                && pending.Steps.All(s => s?.Optional == true || s?.Status?.Trim().ToUpperInvariant() is "PASS" or "PASSED" or "FAIL" or "FAILED");
+        {
+            if (pending == null || !IsCompletedAutoTestConfiguration(pending.Configuration) || pending.Steps is not { Length: > 0 })
+                return false;
+            try
+            {
+                ValidateAndMapQaSteps(pending.Steps, pending.Passed);
+                return true;
+            }
+            catch (InvalidOperationException) { return false; }
+        }
 
         public sealed record PendingAudioQaItem(string Path, PendingAudioQaUpload Result);
 
@@ -1076,31 +1097,71 @@ namespace SoncaAudioInspector
             return steps.Select((s, i) => new MappedAudioQaStep(i + 1, s.Name, s.Status, s.Details)).ToArray();
         }
         public sealed record MappedAudioQaStep(int stepIndex, string stepName, string status, string details, bool optional = false);
-        public const string OptionalStepNote = "BÀI TÙY CHỌN — không tính vào PASS/FAIL tổng.";
+        /// <summary>Owner 2026-11-19 (COMMON #2, A2): optional step prefix; always sent as PENDING (gray on web/app).</summary>
+        public const string OptionalStepPrefix = "TÙY CHỌN — ";
+        /// <summary>Owner 2026-11-19 (COMMON #2, A1): unconcluded step prefix in a FAIL session; sent as PENDING.</summary>
+        public const string InconclusiveStepPrefix = "CHƯA KẾT LUẬN — ";
+        public const string OptionalStepNote = OptionalStepPrefix;
         public static IReadOnlyList<MappedAudioQaStep> ValidateAndMapQaSteps(IReadOnlyList<AudioQaStepResult> steps, bool passed)
         {
             if (steps.Count == 0) throw new InvalidOperationException("Chưa có bước đo nào trong kết quả QA; không upload.");
             if (steps.All(s => s?.Optional == true)) throw new InvalidOperationException("Chỉ có bài tùy chọn; không upload kết luận QA.");
-            var mapped = new List<MappedAudioQaStep>();
+            bool hasRequiredFail = steps.Any(s => s?.Optional != true && C360VerdictPolicy.IsFailStatus(s?.Status));
+            var mapped = new List<MappedAudioQaStep>(steps.Count);
             for (int i = 0; i < steps.Count; i++)
             {
                 var step = steps[i];
+                if (step == null) throw new InvalidOperationException($"Bước đo #{i + 1} bị rỗng; không upload.");
                 string status;
-                // An optional step that was skipped or not concluded is sent as PENDING (the server's "not judged") with a note.
-                if (step?.Optional == true)
-                    status = step.Status?.Trim().ToUpperInvariant() is "PASS" or "PASSED" ? "PASS" : step.Status?.Trim().ToUpperInvariant() is "FAIL" or "FAILED" ? "FAIL" : "PENDING";
+                string details = step.Details ?? "";
+                if (step.Optional)
+                {
+                    // Owner 2026-11-19 (COMMON #2, A2): optional tests (e.g. IO009) are always reported as PENDING (gray) with prefix "TÙY CHỌN — ".
+                    status = "PENDING";
+                    if (!details.StartsWith(OptionalStepPrefix, StringComparison.Ordinal))
+                    {
+                        string headline = !string.IsNullOrWhiteSpace(step.ShortReason)
+                            ? step.ShortReason.Trim()
+                            : !string.IsNullOrWhiteSpace(details)
+                                ? C360VerdictPolicy.FirstMeaningfulLine(details)
+                                : step.Status ?? "TÙY CHỌN";
+                        details = details.Length > 0 && !string.Equals(details.Trim(), headline, StringComparison.Ordinal)
+                            ? OptionalStepPrefix + headline + Environment.NewLine + details
+                            : OptionalStepPrefix + headline;
+                    }
+                }
+                else if (C360VerdictPolicy.IsPassStatus(step.Status))
+                {
+                    status = "PASS";
+                }
+                else if (C360VerdictPolicy.IsFailStatus(step.Status))
+                {
+                    status = "FAIL";
+                }
+                else if (!passed && hasRequiredFail && C360VerdictPolicy.IsUnconcludedStatus(step.Status))
+                {
+                    // Owner 2026-11-19 (COMMON #1–#2, A1): a FAIL suite uploads immediately; unconcluded steps go as PENDING with "CHƯA KẾT LUẬN — <lý do>".
+                    status = "PENDING";
+                    if (!details.StartsWith(InconclusiveStepPrefix, StringComparison.Ordinal))
+                    {
+                        string reason = !string.IsNullOrWhiteSpace(step.ShortReason)
+                            ? step.ShortReason.Trim()
+                            : !string.IsNullOrWhiteSpace(details)
+                                ? C360VerdictPolicy.FirstMeaningfulLine(details)
+                                : step.Status ?? "INVALID";
+                        details = details.Length > 0 && !string.Equals(details.Trim(), reason, StringComparison.Ordinal)
+                            ? InconclusiveStepPrefix + reason + Environment.NewLine + details
+                            : InconclusiveStepPrefix + reason;
+                    }
+                }
                 else
                 {
-                    try { status = MapStepStatus(step?.Status); }
-                    catch (InvalidOperationException)
-                    { throw new InvalidOperationException($"Không upload kết quả QA chưa kết luận: bước '{step?.Name}' đang ở trạng thái '{step?.Status}'."); }
+                    throw new InvalidOperationException($"Không upload kết quả QA chưa kết luận: bước '{step.Name}' đang ở trạng thái '{step.Status}'.");
                 }
-                string details = step!.Optional && !step.Details.StartsWith(OptionalStepNote, StringComparison.Ordinal)
-                    ? OptionalStepNote + (status == "PENDING" ? $" Đã bỏ qua / chưa kết luận ({step.Status})." : "") + (step.Details.Length > 0 ? Environment.NewLine + step.Details : "")
-                    : step.Details;
                 mapped.Add(new(i + 1, step.Name, status, details, step.Optional));
             }
-            if (passed != mapped.Where(s => !s.optional).All(s => s.status == "PASS"))
+            var required = mapped.Where(s => !s.optional).ToArray();
+            if (passed ? !required.All(s => s.status == "PASS") : !required.Any(s => s.status == "FAIL"))
                 throw new InvalidOperationException("Không upload QA: kết luận tổng mâu thuẫn với các bước đo.");
             return mapped;
         }
@@ -1881,7 +1942,7 @@ namespace SoncaAudioInspector
         public sealed record RememberedLogin(string Account, string Password, DateTimeOffset SavedAtUtc);
 
         /// <summary><paramref name="Optional"/>: optional test (IO009) — reported, never part of the overall verdict.</summary>
-        public sealed record AudioQaStepResult(string Name, string Status, string Details, bool Optional = false);
+        public sealed record AudioQaStepResult(string Name, string Status, string Details, bool Optional = false, string? ShortReason = null);
 
         public sealed record VisualQaUploadResult(
             string? LogId,

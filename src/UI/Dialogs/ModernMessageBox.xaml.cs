@@ -1,10 +1,13 @@
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace SoncaAudioInspector
 {
     public partial class ModernMessageBox : Window
     {
+        public static readonly TimeSpan DefaultImportantDecisionGuard = TimeSpan.FromMilliseconds(800);
+
         public enum MessageBoxType
         {
             Info,
@@ -15,6 +18,9 @@ namespace SoncaAudioInspector
 
         private bool _result = false;
         public bool Accepted => _result;
+        private DateTime _acceptKeyboardAfterUtc = DateTime.MinValue;
+        private bool _keyboardGuardInstalled;
+        public bool IsKeyboardConfirmGuarded => DateTime.UtcNow < _acceptKeyboardAfterUtc;
         private System.Windows.Threading.DispatcherTimer? _autoRetryTimer;
         private System.Windows.Threading.DispatcherTimer? _autoCloseTimer;
         private System.Func<bool>? _pollFunc;
@@ -97,6 +103,34 @@ namespace SoncaAudioInspector
         {
             var dialog = new ModernMessageBox(message, title, MessageBoxType.Confirmation);
             dialog.BtnYes.Content = yes; dialog.BtnNo.Content = no; return dialog;
+        }
+        /// <summary>Owner 2026-11-19 (A7): prevents stray Enter/Space from an earlier dialog from accidentally accepting an important decision popup.</summary>
+        public void EnableImportantDecisionGuard(TimeSpan? duration = null)
+        {
+            BtnYes.IsDefault = false;
+            var wait = duration ?? DefaultImportantDecisionGuard;
+            _acceptKeyboardAfterUtc = DateTime.UtcNow + wait;
+            if (_keyboardGuardInstalled) return;
+            _keyboardGuardInstalled = true;
+            Loaded += (_, _) => _acceptKeyboardAfterUtc = DateTime.UtcNow + wait;
+            PreviewKeyDown += (_, e) =>
+            {
+                if ((e.Key is Key.Enter or Key.Return or Key.Space) && IsKeyboardConfirmGuarded)
+                    e.Handled = true;
+            };
+        }
+        public static ModernMessageBox CreateImportantConfirmation(string message, string title, string yes, string no, TimeSpan? guardDuration = null)
+        {
+            var dialog = CreateConfirmation(message, title, yes, no);
+            dialog.EnableImportantDecisionGuard(guardDuration);
+            return dialog;
+        }
+        public static bool ShowImportantConfirmation(Window? owner, string message, string title, string yes, string no, TimeSpan? guardDuration = null)
+        {
+            var dialog = CreateImportantConfirmation(message, title, yes, no, guardDuration);
+            if (owner?.IsVisible == true) dialog.Owner = owner;
+            dialog.ShowDialog();
+            return dialog.Accepted;
         }
         public void SetAdditionalContent(object content)
         {

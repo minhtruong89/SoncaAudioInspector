@@ -8,6 +8,8 @@ public static class C360SignalCheck
     public static bool IsMissingAnalogSignal(C360ElectronicStage stage, C360ElectronicResult result)
     {
         if (!C360ModelDefinition.UsesAnalogPlayback(stage) || result.Status is "PASS" or "RUNNING") return false;
+        // Real sweep evidence wins over the whole-recording RMS for cable prompts.
+        if (result.Measurement is { ImpulsePeakToBackgroundDb: >= C360PortProbeReading.MinimumMatchedDb, IsClipped: false }) return false;
         if (result.Status == "NO_SIGNAL") return true;
         if (result.Measurement is { } m)
             return MeasurementSignalStatus.MissingStimulus(m) || double.IsFinite(m.EstimatedSnrDb) && m.EstimatedSnrDb < MinimumUsableSnrDb;
@@ -41,12 +43,16 @@ public sealed class C360PortSync(IReadOnlyDictionary<string, string> configured,
     private readonly Dictionary<string, string> _override = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _confirmed = new(StringComparer.OrdinalIgnoreCase);
     public List<string> Notes { get; } = [];
+    internal bool Probed { get; set; }
     public IReadOnlyDictionary<string, string> Configured => configured;
     public string Name(string endpoint) => names?.GetValueOrDefault(endpoint) is { Length: > 0 } name ? name : endpoint;
     public string EndpointFor(string port) => _override.TryGetValue(port, out var id) ? id : configured.GetValueOrDefault(port, "");
+    public bool CanConfirm(string port, C360ElectronicResult result)
+        => !port.Equals("MIC IN", StringComparison.OrdinalIgnoreCase) || C360PortProbe.FromSweep(result).Heard;
     public C360ElectronicSetup Apply(C360ElectronicStage stage, C360ElectronicSetup setup, TestConfig? test)
     {
-        if (!C360ModelDefinition.UsesAnalogPlayback(stage) || test == null || !_override.TryGetValue(test.PlaybackOut, out var id)) return setup;
+        if (!C360ModelDefinition.UsesAnalogPlayback(stage) || test == null || !_override.TryGetValue(test.PlaybackOut, out var id)
+            || setup.AnalogPlaybackId == id && setup.LinePlaybackId == id) return setup;
         return setup with { AnalogPlaybackId = id, LinePlaybackId = id };
     }
     public void Confirm(string port, string endpoint) { if (endpoint.Length > 0) _confirmed[port] = endpoint; }
@@ -107,12 +113,12 @@ public sealed class C360NoSignalRetryBench(IC360ElectronicBench inner,
         bool analog = sync != null && port != null && C360ModelDefinition.UsesAnalogPlayback(stage);
         if (analog)
         {
-            // A port is proven only by a stage that heard its signal (IO009: FBX off howled, so the loop carries sound).
+            // A MIC result only confirms the endpoint when the known sweep stands out clearly.
             if (!C360SignalCheck.IsMissingAnalogSignal(stage, result))
             {
-                if (stage != C360ElectronicStage.MicFeedbackGain || result.FeedbackGain is { Off.Howled: true }) sync!.Confirm(port!, setup.PlaybackId(stage));
+                if (sync!.CanConfirm(port!, result)) sync.Confirm(port!, setup.PlaybackId(stage));
             }
-            else
+            else if (!sync!.Probed)
                 foreach (string alternative in sync!.Alternatives(port!))
                 {
                     token.ThrowIfCancellationRequested();
@@ -120,7 +126,7 @@ public sealed class C360NoSignalRetryBench(IC360ElectronicBench inner,
                     // A prepared setup is consumed by the first capture; CaptureAsync prepares the moved route again.
                     var moved = setup with { AnalogPlaybackId = alternative, LinePlaybackId = alternative };
                     var tried = await inner.CaptureAsync(stage, moved, token);
-                    if (C360SignalCheck.IsMissingAnalogSignal(stage, tried)) continue;
+                    if (C360SignalCheck.IsMissingAnalogSignal(stage, tried) || !sync.CanConfirm(port!, tried)) continue;
                     result = tried with { Summary = "TỰ ĐỒNG BỘ NGÕ SOUND CARD — " + sync.Adopt(port!, alternative) + ". " + tried.Summary };
                     break;
                 }
@@ -135,7 +141,7 @@ public sealed class C360NoSignalRetryBench(IC360ElectronicBench inner,
             result = await inner.CaptureAsync(stage, again, token);
             if (!C360SignalCheck.NeedsOperator(stage, result))
             {
-                if (analog) sync!.Confirm(port!, again.PlaybackId(stage));
+                if (analog && sync!.CanConfirm(port!, result)) sync.Confirm(port!, again.PlaybackId(stage));
                 result = result with { Summary = (stage == C360ElectronicStage.MicFeedbackGain
                     ? $"Đo được sau khi đặt mic gần loa hơn (lần thử lại {retry}; trước đó {C360SignalCheck.Describe(previous)}). "
                     : $"Có tín hiệu sau khi kiểm tra cáp (lần thử lại {retry}; trước đó {C360SignalCheck.Describe(previous)}). ") + result.Summary };

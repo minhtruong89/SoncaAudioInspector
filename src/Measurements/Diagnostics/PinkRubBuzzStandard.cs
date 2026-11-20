@@ -116,13 +116,13 @@ public sealed class PinkRubBuzzStandard
             bool near = limits.ReviewFraction > 0 && (dr > limits.RepeatMarginPct * (1 - limits.ReviewFraction) || dh > limits.HfMarginDb * (1 - limits.ReviewFraction));
             run.Verdict = fail ? "FAIL" : near ? "REVIEW" : "PASS";
             run.Message = (fail ? "RÈ VƯỢT CHO PHÉP · " : near ? "SÁT GIỚI HẠN, CẦN DUYỆT · " : "TRONG GIỚI HẠN · ")
-                + $"rè lặp lại {m.RepeatCoherencePct:0.0}% (chuẩn {standard.Metrics.RepeatCoherencePct:0.0}%, {dr:+0.0;-0.0} điểm / cho phép +{limits.RepeatMarginPct:0.#}) · "
+                + $"rè lặp lại {PinkRubBuzzMetrics.DisplayCoherence(m.RepeatCoherencePct)} (chuẩn {PinkRubBuzzMetrics.DisplayCoherence(standard.Metrics.RepeatCoherencePct)}, {dr:+0.0;-0.0} điểm / cho phép +{limits.RepeatMarginPct:0.#}) · "
                 + $"cao tần 4–12 kHz {dh:+0.0;-0.0} dB so với chuẩn (cho phép +{limits.HfMarginDb:0.#} dB).";
             return run;
         }
         run.Verdict = m.RepeatCoherencePct >= limits.AbsoluteFailPct ? "FAIL" : m.RepeatCoherencePct <= limits.AbsolutePassPct ? "PASS" : "REVIEW";
         run.Message = $"Chưa có line chuẩn rè: dùng ngưỡng tuyệt đối PASS ≤ {limits.AbsolutePassPct:0.#}%, FAIL ≥ {limits.AbsoluteFailPct:0.#}% · "
-            + $"rè lặp lại {m.RepeatCoherencePct:0.0}%. Nên lưu line chuẩn trên loa tốt cùng gá để so chính xác.";
+            + $"rè lặp lại {PinkRubBuzzMetrics.DisplayCoherence(m.RepeatCoherencePct)}. Nên lưu line chuẩn trên loa tốt cùng gá để so chính xác.";
         return run;
     }
 
@@ -135,7 +135,7 @@ public sealed class PinkRubBuzzStandard
         var standard = FromRun(run, source); standard.Save(directory);
         run.SavedAsStandard = true; run.StandardMetrics = standard.Metrics; run.StandardCreatedUtc = standard.CreatedUtc;
         run.DeltaRepeatPct = 0; run.DeltaHfDb = 0; run.Verdict = "PASS";
-        run.Message = $"ĐÃ LƯU LINE CHUẨN RÈ · rè lặp lại {run.Metrics.RepeatCoherencePct:0.0}% · cao tần 4–12 kHz {run.Metrics.HfDbFs:0.0} dBFS. "
+        run.Message = $"ĐÃ LƯU LINE CHUẨN RÈ · rè lặp lại {PinkRubBuzzMetrics.DisplayCoherence(run.Metrics.RepeatCoherencePct)} · cao tần 4–12 kHz {run.Metrics.HfDbFs:0.0} dBFS. "
             + "Chỉ lưu chuẩn trên loa tốt đã kiểm tra bằng tai.";
         return run;
     }

@@ -46,7 +46,16 @@ public sealed record C360Reference(string Key, DateTimeOffset CreatedUtc, Dictio
 
     public static C360Reference Create(string key, IReadOnlyList<C360ElectronicResult> runs, TestConfig test)
     {
-        if (runs.Count < 2 || runs.Any(r => r.Status != "PASS")) throw new InvalidOperationException("Cần hai lượt hợp lệ, đạt tiêu chí cấu hình trước khi lưu chuẩn.");
+        // Owner 2026-11-19 (A6): response LINE CHUẨN depends on capture validity and repeatability, never on THD threshold
+        // (THD still judges the product measurement in Compare).
+        bool responseStage = test.SpeakerStage is not ("MicEffects" or "MicFrequencyShift");
+        if (runs.Count < 2 || runs.Any(r => responseStage
+                ? r.Status is not ("PASS" or "FAIL") || r.Measurement == null || r.Measurement.IsClipped
+                    || string.Equals(r.Measurement.Validity, "INVALID", StringComparison.OrdinalIgnoreCase)
+                : r.Status != "PASS"))
+            throw new InvalidOperationException(responseStage
+                ? "Cần hai lượt thu hợp lệ (không clipping, có dữ liệu đáp tuyến) trước khi lưu chuẩn."
+                : "Cần hai lượt hợp lệ, đạt tiêu chí cấu hình trước khi lưu chuẩn.");
         foreach (var first in runs)
         foreach (var second in runs.SkipWhile(r => !ReferenceEquals(r, first)).Skip(1))
         {

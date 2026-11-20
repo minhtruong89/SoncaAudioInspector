@@ -47,7 +47,7 @@ public static class PinkRubBuzzConfiguredTest
     {
         PinkRubBuzzStandard.Compare(run, null, limits with { AbsolutePassPct = limits.AbsoluteFailPct, ReviewFraction = 0 });
         if (run.Verdict is "PASS" or "FAIL")
-            run.Message = $"Ngưỡng tuyệt đối (không dùng line chuẩn): PASS khi rè lặp lại < {limits.AbsoluteFailPct:0.#}% · đo {run.Metrics.RepeatCoherencePct:0.0}%.";
+            run.Message = $"Ngưỡng tuyệt đối (không dùng line chuẩn): PASS khi rè lặp lại < {limits.AbsoluteFailPct:0.#}% · đo {PinkRubBuzzMetrics.DisplayCoherence(run.Metrics.RepeatCoherencePct)}.";
         return run;
     }
     public static ConfiguredTestResult Analyze(TestConfig config, AdditionalTestCaptureData capture, AdditionalTestContext context)
@@ -58,7 +58,7 @@ public static class PinkRubBuzzConfiguredTest
             capture.Background?.AnalysisRmsLimitDbFs ?? -50);
         string key = PinkRubBuzzStimulus.Key(settings, context.AcquisitionKey + ":" + config.id + ":" + capture.SampleRate);
         var run = new PinkRubBuzzRun(settings, key, capture.ResultRoute, capture.SampleRate, metrics)
-            { Captures = capture.StepCaptures.ToArray(), Background = capture.BackgroundSamples, PlaybackSampleRate = context.PlaybackSampleRate };
+            { Captures = capture.StepCaptures.ToArray(), Background = capture.BackgroundSamples, PlaybackSampleRate = context.PlaybackSampleRate, CaptureMode = capture.CaptureMode };
         if (context.AbsoluteOnly) return new(DisplayName, JudgeAbsolute(run, config.PinkLimits).Verdict, run.Summary) { PinkRubBuzz = run };
         try
         {

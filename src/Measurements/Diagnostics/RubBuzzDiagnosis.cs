@@ -250,7 +250,7 @@ public static class RubBuzzDiagnosis
             if (limiterArtifacts) directions.Add(For(RubBuzzCause.DspLimiter));
             else if (cleanLimiter) directions.Add(Against(RubBuzzCause.DspLimiter));
             signs.Add(new("S9", "Ngưỡng kích, độ dốc, nén", "Mức: " + Values(rows.Select(r => r.StimulusRmsDbFs), "dBFS RMS")
-                + "; RC: " + Values(rows.Select(r => r.RepeatCoherencePct), "%")
+                + "; RC: " + string.Join(" → ", rows.Select(r => r.RepeatCoherencePct is double rc ? PinkRubBuzzMetrics.DisplayCoherence(rc) : "chưa tính"))
                 + "; HF loa: " + string.Join(" → ", rows.Select(r => r.SpeakerHfDbFs is double value ? F(value) : "dưới nền"))
                 + $" dBFS; độ dốc HF/bass {(slope.HasValue ? F(slope.Value, "0.00") : "chưa có")} dB/dB"
                 + "; tăng bass từng bước: " + Values(levels.Steps.Select(x => x.BassGainDb), "dB")
